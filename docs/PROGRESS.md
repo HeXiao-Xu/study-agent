@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 0（项目启动）
-- 最近完成：S0-5 后端最小可运行（/health 200 统一壳、404 错误壳、X-Trace-Id 透出、pytest 3/3）
-- 下一步：S0-6 前端最小可运行（路由/http 封装）
+- 最近完成：S0-6 前端最小可运行（/debug 页打通前后端全链路，浏览器人工验收通过）
+- 下一步：S0-7 冒烟脚本 + README
 - 已知阻塞：
   1. 方案附录 F 的待拍板项尚未与导师确认，尤其「学校对 AI 辅助编码的要求」（M0 前确认）
 
@@ -19,7 +19,7 @@
 - [x] S0-3 SCHEMA.md + API.md 契约文档
 - [x] S0-4 Postgres/Redis/MinIO 基础服务
 - [x] S0-5 后端最小可运行（配置/日志/异常/health）
-- [ ] S0-6 前端最小可运行（路由/http 封装）
+- [x] S0-6 前端最小可运行（路由/http 封装）
 - [ ] S0-7 冒烟脚本 + README
 
 ### 阶段 1：RAG 技术验证（M0）
@@ -116,4 +116,5 @@
 - 首次推送完成：main 已同步至 origin（GitHub）
 - S0-4 完成：deploy/docker-compose.dev.yml（pgvector:pg16 + redis:7-alpine + minio + mc 自动建桶，命名卷持久化，端口仅绑 127.0.0.1）；deploy/initdb/01-extensions.sql（首启自动 CREATE EXTENSION vector）；scripts/check_services.py（仅标准库）；deploy/README.md；.env.example。验收证据：check_services 3/3 通过（postgres 协议握手 / redis PING/PONG / minio health 200），pg_extension 含 vector，bucket study-agent 创建成功，postgres 与 redis healthcheck healthy。镜像来源：复用本机已有 pgvector/minio 镜像重标记，mc 经华为云 SWR 镜像拉取（Docker Hub 直连约 110KB/s、DaoCloud 502，经验已记入 deploy/README.md）
 - S0-5 完成：backend 首批代码——app/main.py（应用工厂 + CORS + TraceId 中间件 + /health）、core/{config,logging,exceptions,context,middleware}.py、schemas/common.py（统一响应壳 Envelope[T]）、tests/test_main.py。requirements.txt 固定版本（fastapi 0.143.1 / uvicorn 0.54.0 / pydantic 2.14.1 / pydantic-settings 2.16.0 / pytest 9.1.1 / httpx 0.28.1，华为云镜像安装；pytest+httpx 为用户确认的新增依赖，D-008）。验收实跑：GET /health → 200 统一壳；未知路由 → 404 {code:40400, message, trace_id, data:null}；X-Trace-Id 响应头必返且支持请求头续链（trace-demo-999 实测回显）；pytest 3 passed。错误码表与 trace_id 透出格式定稿至 docs/API.md §0/§13；.env.example/.env 新增 APP_NAME/ENV/LOG_LEVEL/CORS_ORIGINS/MINIO_ENDPOINT
+- S0-6 完成：web/ 前端工程（官方 create-vite vue-ts 模板：Vue 3.5.42 + Vite 8.3.0 + TS 6.0.2，package-lock 锁版本；web/.npmrc 走 npmmirror 国内源）。新增 element-plus（全局注册，按任务卡）/ pinia / vue-router / axios（均为 AGENTS 技术栈点名，无新依赖）。src/api/http.ts（baseURL 取 VITE_API_BASE、请求拦截注入 Bearer token、响应拦截统一错误提示与 401 跳 /login 占位）；src/stores/auth.ts（token + localStorage 持久化）；src/router/index.ts（/ 重定向 /debug，视图懒加载）；src/views/DebugView.vue（调 GET /health 展示统一壳）。跨域走后端 CORS、vite 刻意不配 proxy（任务卡坑：二选一）。web/.env.development/.env.production/.env.example 三件套，根 .gitignore 放行前端 env 文件（非机密）。环境修复：PowerShell 执行策略 CurrentUser=RemoteSigned（此前 npm.ps1 与 Activate.ps1 均被挡）。插曲：清理了 8000 端口上 --reload 模式的孤儿子进程（multiprocessing spawn，父进程已被误杀）。验收：npm run build 通过（vue-tsc 零类型错误；TS 6.0 弃用 baseUrl，paths 改为显式 ./ 相对写法；主 chunk 1MB/gzip 327KB 为 Element Plus 全局注册的已知代价）；CORS 实测响应头回 access-control-allow-origin: http://localhost:5173；用户浏览器打开 /debug 人工验收通过。收尾：前后端 dev 服务与 Docker 三件套已全部停止（端口清零），日常启动手册写入 README 快速开始
 - 关联 GitHub 远程仓库 https://github.com/HeXiao-Xu/study-agent.git（origin）；期间发现 .git 曾意外丢失（当时尚无任何提交，零损失），已重新 git init（main 分支）

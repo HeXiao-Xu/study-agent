@@ -12,6 +12,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# 前端 env 是非机密配置（构建需要，会被打进产物），放行入库
+!web/.env.development
+!web/.env.production
+!web/.env.example
 
 # ===== Node / 前端 =====
 node_modules/

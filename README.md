@@ -38,26 +38,47 @@
 - Node.js 18+（S0-6 起）
 - Docker Desktop（Postgres 16 + pgvector / Redis / MinIO，S0-4 起）
 
-## 快速开始（随 S0-4 ~ S0-7 逐步补全）
+## 快速开始
 
-```bash
-# 1. 基础服务（S0-4 交付）
+### 首次准备（只做一次）
+
+- Python venv：`py -3.11 -m venv .venv`，然后 `.venv\Scripts\Activate.ps1`，再
+  `pip install -i https://repo.huaweicloud.com/repository/pypi/simple -r backend/requirements.txt`
+- 前端依赖：`cd web` → `npm install`（项目已配 npmmirror 国内源）
+- 复制 `.env.example` 为 `.env`（默认开发值即可用）
+- 安装并打开 Docker Desktop（等左下角 **Engine running**）
+
+### 日常启动（每次开机后，按需三个终端）
+
+```powershell
+# ① 基础服务（数据库/缓存/文件存储）——先开 Docker Desktop 等引擎变绿
+cd E:\BiShe-AIStudy\study-agent
 docker compose -f deploy/docker-compose.dev.yml up -d
+python scripts\check_services.py        # 应输出 3/3 通过
 
-# 2. 后端（S0-5 交付）
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload          # 服务地址 http://127.0.0.1:8000/health
-python -m pytest                       # 冒烟测试
+# ② 后端（新开一个终端）
+cd E:\BiShe-AIStudy\study-agent\backend
+uvicorn app.main:app --reload           # 看到 "Application startup complete" 即成功
+# 交互式 API 文档：http://127.0.0.1:8000/docs
 
-# 3. 前端（S0-6 交付）
-cd web
-npm install
-npm run dev
-
-# 4. 环境自检（S0-7 交付）
-python scripts/smoke.py
+# ③ 前端（再开一个终端）
+cd E:\BiShe-AIStudy\study-agent\web
+npm run dev                             # 看到 "Local: http://localhost:5173/" 即成功
+# 验收页：http://localhost:5173/debug（显示后端 /health 结果）
 ```
+
+> `uvicorn` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
+> 普通 PowerShell 先跑 `.venv\Scripts\Activate.ps1` 再用。
+> 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）。
+
+### 收工
+
+- 后端、前端终端各按一次 `Ctrl+C`
+- 三件套：`docker compose -f deploy/docker-compose.dev.yml stop`（数据在命名卷，不会丢）
+
+### 环境自检（S0-7 交付）
+
+`python scripts/smoke.py`
 
 ## 开发必读（仓库的"记忆系统"，AI 协作开发的规矩）
 
