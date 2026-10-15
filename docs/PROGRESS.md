@@ -6,9 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 0（项目启动）
-- 最近完成：S0-1 仓库与工程骨架 / S0-2 AGENTS.md / S0-3 SCHEMA.md + API.md
+- 最近完成：S0-4 基础服务三件套（验收 3/3 通过；pgvector 扩展与 bucket 就绪）
 - 下一步：S0-5 后端最小可运行（配置/日志/异常/health）
-- 备注：S0-4 基础服务经用户决定顺延执行，最迟须在 S1-3（pgvector 入库）前完成
 - 已知阻塞：
   1. 方案附录 F 的待拍板项尚未与导师确认，尤其「学校对 AI 辅助编码的要求」（M0 前确认）
 
@@ -18,7 +17,7 @@
 - [x] S0-1 仓库与工程骨架
 - [x] S0-2 AGENTS.md 项目宪法
 - [x] S0-3 SCHEMA.md + API.md 契约文档
-- [ ] S0-4 Postgres/Redis/MinIO 基础服务（顺延：用户决定暂跳，最迟 S1-3 前完成）
+- [x] S0-4 Postgres/Redis/MinIO 基础服务
 - [ ] S0-5 后端最小可运行（配置/日志/异常/health）
 - [ ] S0-6 前端最小可运行（路由/http 封装）
 - [ ] S0-7 冒烟脚本 + README
@@ -112,5 +111,8 @@
 - Python 版本拍板：确定沿用 3.14（DECISIONS.md D-006，含风险与回退方案）；AGENTS.md、README.md 已同步，现有 .venv 无需重建
 - Python 版本改回 3.11：已安装 3.11.9（DECISIONS.md D-007 取代 D-006，官方安装包经华为云镜像下载）；AGENTS.md、README.md 已同步回 3.11；项目 .venv 待用 3.11.9 重建
 - venv 重建完成：`.venv` 已是 3.11.9（pyvenv.cfg 验证：home=Python311），D-007 已补记验证结果
-- S0-4（基础服务）用户决定暂时跳过，顺延执行
+- S0-4（基础服务）用户决定暂时跳过，顺延执行；随后改变决定，恢复执行
+- S0-4 前置环境检查：Docker 27.5.1 + Compose v2.32.4 已安装；端口 5432/6379/9000/9001 空闲；磁盘充足（C 113GB / E 224GB）；Docker 引擎未启动，待用户启动 Docker Desktop 后开始
+- 首次推送完成：main 已同步至 origin（GitHub）
+- S0-4 完成：deploy/docker-compose.dev.yml（pgvector:pg16 + redis:7-alpine + minio + mc 自动建桶，命名卷持久化，端口仅绑 127.0.0.1）；deploy/initdb/01-extensions.sql（首启自动 CREATE EXTENSION vector）；scripts/check_services.py（仅标准库）；deploy/README.md；.env.example。验收证据：check_services 3/3 通过（postgres 协议握手 / redis PING/PONG / minio health 200），pg_extension 含 vector，bucket study-agent 创建成功，postgres 与 redis healthcheck healthy。镜像来源：复用本机已有 pgvector/minio 镜像重标记，mc 经华为云 SWR 镜像拉取（Docker Hub 直连约 110KB/s、DaoCloud 502，经验已记入 deploy/README.md）
 - 关联 GitHub 远程仓库 https://github.com/HeXiao-Xu/study-agent.git（origin）；期间发现 .git 曾意外丢失（当时尚无任何提交，零损失），已重新 git init（main 分支）
