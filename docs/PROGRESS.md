@@ -8,8 +8,7 @@
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
 - 最近完成：S0-7 冒烟脚本与 README 完整化（阶段 0 收官）
 - 下一步：S1-1 PDF/文档解析为结构化文本
-- 已知阻塞：
-  1. 方案附录 F 的待拍板项尚未与导师确认，尤其「学校对 AI 辅助编码的要求」（M0 前确认）
+- 已知阻塞：无（方案附录 F 4 项待拍板已于 2026-10-15 全部落定，见 DECISIONS D-009~D-012）
 
 ## 任务清单
 
@@ -99,7 +98,6 @@
 |---|---|---|---|
 | 1 | SCHEMA.md 中 ⚠ 标记的推断类型/索引未复核 | 建表返工 | S2-1 建迁移前 |
 | 2 | API.md 存在 TODO 待定字段与待定接口 | 前后端并行开发受限 | 各对应任务定稿时 |
-| 3 | 方案附录 F 待与导师拍板项未确认 | 决策悬空 | M0 里程碑前 |
 
 ## 变更日志
 
@@ -119,3 +117,4 @@
 - S0-6 完成：web/ 前端工程（官方 create-vite vue-ts 模板：Vue 3.5.42 + Vite 8.3.0 + TS 6.0.2，package-lock 锁版本；web/.npmrc 走 npmmirror 国内源）。新增 element-plus（全局注册，按任务卡）/ pinia / vue-router / axios（均为 AGENTS 技术栈点名，无新依赖）。src/api/http.ts（baseURL 取 VITE_API_BASE、请求拦截注入 Bearer token、响应拦截统一错误提示与 401 跳 /login 占位）；src/stores/auth.ts（token + localStorage 持久化）；src/router/index.ts（/ 重定向 /debug，视图懒加载）；src/views/DebugView.vue（调 GET /health 展示统一壳）。跨域走后端 CORS、vite 刻意不配 proxy（任务卡坑：二选一）。web/.env.development/.env.production/.env.example 三件套，根 .gitignore 放行前端 env 文件（非机密）。环境修复：PowerShell 执行策略 CurrentUser=RemoteSigned（此前 npm.ps1 与 Activate.ps1 均被挡）。插曲：清理了 8000 端口上 --reload 模式的孤儿子进程（multiprocessing spawn，父进程已被误杀）。验收：npm run build 通过（vue-tsc 零类型错误；TS 6.0 弃用 baseUrl，paths 改为显式 ./ 相对写法；主 chunk 1MB/gzip 327KB 为 Element Plus 全局注册的已知代价）；CORS 实测响应头回 access-control-allow-origin: http://localhost:5173；用户浏览器打开 /debug 人工验收通过。收尾：前后端 dev 服务与 Docker 三件套已全部停止（端口清零），日常启动手册写入 README 快速开始
 - S0-7 完成：scripts/smoke.py（8 项检查：三件套连通[复用 check_services 不重复实现] / pgvector 扩展[docker exec psql，零数据库驱动依赖] / bucket[HTTP 403/404 匿名探测] / 后端 /health[校验统一壳语义，严于 curl] / 业务表[当前阶段无表属预期不判失败，REQUIRED_TABLES 清单 S2-1 起随迁移维护] / 前端 dev[可选组件，未启动记 SKIP 不判失败]；彩色清单、FAIL 附修复提示、失败退出码 1、自动读根 .env、Windows 旧控制台激活 ANSI）。README 新增「常见问题（Windows 特有）」8 条（全部为本机真实踩过的坑：执行策略/端口占用含 --reload 孤儿进程/WSL2/镜像加速/venv 激活/依赖丢失）并更新当前进度为阶段 0 完成。修复：前端探测 URL 必须用 localhost 主机名——vite/Node17+ 绑 IPv6 ::1（实测监听地址 ::1:5173），硬写 127.0.0.1 会误报未启动。验收：正向 8/8 全 PASS 退出码 0；反向（停后端）[6/8] FAIL 带原因与启动提示、退出码 1。里程碑：git tag m0-env-ready（阶段 0 收官）
 - 关联 GitHub 远程仓库 https://github.com/HeXiao-Xu/study-agent.git（origin）；期间发现 .git 曾意外丢失（当时尚无任何提交，零损失），已重新 git init（main 分支）
+- 附录 F 拍板落定（4 项，2026-10-15）：#3 仅本地部署（D-009，低于方案建议的「本地+局域网」档位）；#4 Agent 选做、M5 后（D-010，降级预案提前约定）；#5 自测偶尔使用（D-011——验证策略主体由「自用数据」转为 eval/ 评测集，评测建设升为关键路径）；#7 学校允许 AI 辅助编码、无附加要求（D-012，原「M0 前确认」阻塞解除）
