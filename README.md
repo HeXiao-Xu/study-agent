@@ -47,7 +47,8 @@ docker compose -f deploy/docker-compose.dev.yml up -d
 # 2. 后端（S0-5 交付）
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload          # 服务地址 http://127.0.0.1:8000/health
+python -m pytest                       # 冒烟测试
 
 # 3. 前端（S0-6 交付）
 cd web

@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 0（项目启动）
-- 最近完成：S0-4 基础服务三件套（验收 3/3 通过；pgvector 扩展与 bucket 就绪）
-- 下一步：S0-5 后端最小可运行（配置/日志/异常/health）
+- 最近完成：S0-5 后端最小可运行（/health 200 统一壳、404 错误壳、X-Trace-Id 透出、pytest 3/3）
+- 下一步：S0-6 前端最小可运行（路由/http 封装）
 - 已知阻塞：
   1. 方案附录 F 的待拍板项尚未与导师确认，尤其「学校对 AI 辅助编码的要求」（M0 前确认）
 
@@ -18,7 +18,7 @@
 - [x] S0-2 AGENTS.md 项目宪法
 - [x] S0-3 SCHEMA.md + API.md 契约文档
 - [x] S0-4 Postgres/Redis/MinIO 基础服务
-- [ ] S0-5 后端最小可运行（配置/日志/异常/health）
+- [x] S0-5 后端最小可运行（配置/日志/异常/health）
 - [ ] S0-6 前端最小可运行（路由/http 封装）
 - [ ] S0-7 冒烟脚本 + README
 
@@ -115,4 +115,5 @@
 - S0-4 前置环境检查：Docker 27.5.1 + Compose v2.32.4 已安装；端口 5432/6379/9000/9001 空闲；磁盘充足（C 113GB / E 224GB）；Docker 引擎未启动，待用户启动 Docker Desktop 后开始
 - 首次推送完成：main 已同步至 origin（GitHub）
 - S0-4 完成：deploy/docker-compose.dev.yml（pgvector:pg16 + redis:7-alpine + minio + mc 自动建桶，命名卷持久化，端口仅绑 127.0.0.1）；deploy/initdb/01-extensions.sql（首启自动 CREATE EXTENSION vector）；scripts/check_services.py（仅标准库）；deploy/README.md；.env.example。验收证据：check_services 3/3 通过（postgres 协议握手 / redis PING/PONG / minio health 200），pg_extension 含 vector，bucket study-agent 创建成功，postgres 与 redis healthcheck healthy。镜像来源：复用本机已有 pgvector/minio 镜像重标记，mc 经华为云 SWR 镜像拉取（Docker Hub 直连约 110KB/s、DaoCloud 502，经验已记入 deploy/README.md）
+- S0-5 完成：backend 首批代码——app/main.py（应用工厂 + CORS + TraceId 中间件 + /health）、core/{config,logging,exceptions,context,middleware}.py、schemas/common.py（统一响应壳 Envelope[T]）、tests/test_main.py。requirements.txt 固定版本（fastapi 0.143.1 / uvicorn 0.54.0 / pydantic 2.14.1 / pydantic-settings 2.16.0 / pytest 9.1.1 / httpx 0.28.1，华为云镜像安装；pytest+httpx 为用户确认的新增依赖，D-008）。验收实跑：GET /health → 200 统一壳；未知路由 → 404 {code:40400, message, trace_id, data:null}；X-Trace-Id 响应头必返且支持请求头续链（trace-demo-999 实测回显）；pytest 3 passed。错误码表与 trace_id 透出格式定稿至 docs/API.md §0/§13；.env.example/.env 新增 APP_NAME/ENV/LOG_LEVEL/CORS_ORIGINS/MINIO_ENDPOINT
 - 关联 GitHub 远程仓库 https://github.com/HeXiao-Xu/study-agent.git（origin）；期间发现 .git 曾意外丢失（当时尚无任何提交，零损失），已重新 git init（main 分支）

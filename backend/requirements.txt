@@ -1,0 +1,12 @@
+# S0-5 第一批依赖：固定版本号（论文环境可复现，实际安装版本 2026-10 冻结）
+# 安装：pip install -i https://repo.huaweicloud.com/repository/pypi/simple -r requirements.txt
+
+# --- 运行时 ---
+fastapi==0.143.1
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
+
+# --- 测试（AGENTS.md §7.2：新增功能必须配测试；TestClient 硬依赖 httpx）---
+pytest==9.1.1
+httpx==0.28.1

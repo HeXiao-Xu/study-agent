@@ -65,6 +65,16 @@
 - 验证（2026-10-15）：`.venv` 已用 3.11.9 重建完成（pyvenv.cfg：home = Python311，version = 3.11.9.final.0）
 - 影响：AGENTS.md §2 与 README 环境要求已同步回 3.11
 
+## D-008 引入 pytest + httpx 作为测试基础设施
+- 日期：2026-10-15（用户在 S0-5 执行计划确认时拍板）
+- 背景：AGENTS.md §7.2 要求"新增功能必须配测试"；FastAPI TestClient 硬依赖 httpx
+- 备选：① pytest + httpx ② 不配测试（违反 §7.2） ③ unittest + requests
+- 决策：pytest 9.1.1 + httpx 0.28.1（随 S0-5 第一批进入 requirements.txt）
+- 理由：pytest 是 Python 事实标准；TestClient 不用起服务就能测路由与中间件
+- 代价：—（仅开发/测试用途）
+- 验证：S0-5 冒烟测试 3/3 通过
+- 备注：starlette 发出 DeprecationWarning 提示未来 httpx → httpx2 迁移，暂不处理，观察后续版本再定
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |
