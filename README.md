@@ -78,7 +78,22 @@ npm run dev                             # 看到 "Local: http://localhost:5173/"
 
 ### 环境自检（S0-7 交付）
 
-`python scripts/smoke.py`
+```powershell
+python scripts\smoke.py    # 一条命令查三件套/扩展/桶/后端/前端；全 PASS = 环境就绪
+```
+
+## 常见问题（Windows 特有）
+
+| 症状 | 原因与解法 |
+|---|---|
+| PowerShell 报「无法加载 npm.ps1 …未进行数字签名」 | 执行策略挡了脚本，一次性修复：`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`（顺带解锁 `.venv` 激活脚本） |
+| 端口被占（5432/6379/9000/9001/8000/5173） | `netstat -ano \| findstr :8000` 找 PID → 任务管理器结束进程，或 `taskkill /PID <pid> /T /F`。注意：uvicorn `--reload` 杀主进程会留**孤儿子进程**继续占端口，必须按 PID 一并结束 |
+| `docker compose up` 报 `bind: address already in use` | 同上查占用；或改 `.env` 里对应 `*_PORT` 换端口 |
+| Docker Desktop 引擎起不来 / 提示 WSL2 更新 | 按提示装 WSL2 更新（一般要重启电脑一次）；仍不行：设置 → Troubleshoot → Restart |
+| 拉镜像极慢或超时 | Docker Hub 直连慢，用华为云镜像前缀拉取再重标记（见 [deploy/README.md](deploy/README.md)「镜像加速」） |
+| PyCharm 终端行首没有 `(.venv)`，`uvicorn`/`python` 报找不到 | 先跑 `.venv\Scripts\Activate.ps1`；并检查设置里解释器指向本项目 venv |
+| `ModuleNotFoundError: No module named 'fastapi'` | venv 没激活就装了依赖，或根本没装：激活后 `pip install -r backend/requirements.txt` |
+| git 提示 `LF will be replaced by CRLF` | 换行符警告，无害，忽略 |
 
 ## 开发必读（仓库的"记忆系统"，AI 协作开发的规矩）
 
@@ -92,4 +107,5 @@ npm run dev                             # 看到 "Local: http://localhost:5173/"
 
 ## 当前进度
 
-阶段 0（项目启动）进行中，详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
+阶段 0（项目启动）**已完成**，里程碑 `m0-env-ready`；当前进入阶段 1（RAG 技术验证，M0）。
+详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
