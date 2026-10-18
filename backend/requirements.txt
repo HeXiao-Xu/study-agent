@@ -15,3 +15,6 @@ httpx==0.28.1
 docling==2.140.0
 pymupdf==1.28.2
 python-docx==1.2.0
+
+# --- S1-2 切片（任务卡点名；cl100k_base 为 DeepSeek 无官方库时的通用近似）---
+tiktoken==0.14.0

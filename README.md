@@ -108,5 +108,5 @@ python scripts\smoke.py    # 一条命令查三件套/扩展/桶/后端/前端�
 
 ## 当前进度
 
-阶段 0（项目启动）**已完成**，里程碑 `m0-env-ready`；阶段 1（RAG 技术验证）进行中：S1-1 文档解析已完成。
+阶段 0（项目启动）**已完成**，里程碑 `m0-env-ready`；阶段 1（RAG 技术验证）进行中：S1-1 文档解析、S1-2 结构化切片器已完成。
 详见 [docs/PROGRESS.md](docs/PROGRESS.md)。

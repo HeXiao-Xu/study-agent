@@ -154,6 +154,7 @@ erDiagram
 | chunk_index | INTEGER | 否 | — | 块序号 | — |
 | content | TEXT | 否 | — | 块文本 | — |
 | token_count | INTEGER | 否 | — | token 数（上下文预算用） | — |
+| chunk_type | TEXT | 是 | 'note' | question/note/formula（切片器判定，S4 错题诊断按 question 过滤） | — |
 | heading_path | TEXT | 是 | — | 如"函数/单调性/例题2"（引用卡片显示） | — |
 | embedding | VECTOR(1024) | 否 | — | 语义向量 | HNSW(vector_cosine_ops, m=16, ef_construction=64) ✅ |
 | tsv | TSVECTOR | 是 | — | jieba 切词后写入（§9） | GIN ✅ |

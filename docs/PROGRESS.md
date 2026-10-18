@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-1 文档解析为结构化文本（Docling 主路径 + PyMuPDF 降级链 + docx；pytest 20/20）
-- 下一步：S1-2 结构化切片器 ★
+- 最近完成：S1-2 结构化切片器（两阶段管道 + 题号检测 + 300-600/800 尺寸规则 + 60-token 重叠；pytest 44/44）
+- 下一步：S1-3 Embedding 与 pgvector 入库
 - 已知阻塞：无
 
 ## 任务清单
@@ -23,7 +23,7 @@
 
 ### 阶段 1：RAG 技术验证（M0）
 - [x] S1-1 文档解析为结构化文本
-- [ ] S1-2 结构化切片器 ★
+- [x] S1-2 结构化切片器 ★
 - [ ] S1-3 Embedding 与 pgvector 入库
 - [ ] S1-4 混合检索 + RRF ★
 - [ ] S1-5 Rerank 接入
@@ -126,3 +126,10 @@
 - 网络坑与解法（已记 README FAQ 与 spec §9）：docling 模型下载 HF 直连超时 → hf-mirror 镜像又撞 Xet 块存储 401 → 需同时设 HF_ENDPOINT=https://hf-mirror.com 与 HF_HUB_DISABLE_XET=1；模型 342MB 已缓存本机离线可用；首跑 466.2s；安装约 15 分钟（华为云源），site-packages 总量 1404MB
 - 已知观察（S1-2 消化，见 D-013）：docling 结构模型对平级标题可能判成嵌套（笔记样张「二/三」挂「一」下）；heading_path 在切片器中定位为上下文链而非严格层级
 - 文档同步：DECISIONS D-013、AGENTS §9.6 ai 适配器锚点回填（pdf_docling.py）、spec §9 实测数字回填、README FAQ +docling 模型下载行、当前进度更新
+
+### 2026-10-19
+- S1-2 完成（按 §10 全流程：spec docs/spec/s1-2-chunker.md + plan docs/plan/s1-2-chunker.md，均经用户确认后实施）。交付：backend/app/ai/rag/chunker.py（Chunk/ChunkType 模型；两阶段管道 _build_units「题号吞并选项/大题标题边界/标题前置并入/表格公式不可切」+ _split_unit「300-800 尺寸切分、笔记 60-token 尾部重叠、题目无重叠」；门面 chunk_document；tiktoken cl100k_base 计数收敛单点）；backend/tests/test_chunker.py（24 条用例覆盖 5 规则+边界）；scripts/chunk_demo.py（解析→切片→逐块摘要 + ASCII token 直方图）；SCHEMA.md note_chunks 加 chunk_type 列（契约先行）；requirements +tiktoken==0.14.0；rag/ 目录 .gitkeep 已删
+- 验收证据：pytest 44/44（S1-1 20 + S1-2 24）；三份真实样张——试卷 23 块（question 17 = 17 题一题一块，题干+选项+小问聚齐；答题线已剔除）、笔记 6 块（含纯公式行正确标 formula；层级链完整）、教材页 9 块（例1/例2/练习题分别成块）；token 直方图主体 0–300、无 >800 块；用户亲眼验收通过
+- 实测抓修 5 个真问题（记录于 D-015 决策 4/5）：①纯数值选项行被 formula 密度规则截胡导致第 2 题丢选项 → 选项行豁免 ②纯答题线 `________` 假命中 formula 拆碎解答题 → 预处理丢弃 ③小问行 `（1）f(x)=…` 同类截胡 → 小问行豁免 ④教材章节号「3.2.1」被当题号 → 题号正则加数字排他 `(?!\d)` ⑤演示直方图末桶标签 bug（>1000000000 → >800）
+- 已知观察（不修）：docling 把「三、解答题（本题共 5 小题，共 90」折成两块且第二条误嵌套成标题层——D-013 已知现象延伸，解析器行为不在本卡范围
+- 文档同步：DECISIONS D-015、spec §4.5/§4.6 豁免与边界回填、spec §4.1 章节号保护、spec §7 tiktoken 实测回填、PROGRESS
