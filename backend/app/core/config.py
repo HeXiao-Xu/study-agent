@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/core/config.py 向上 3 级 = 仓库根
@@ -51,6 +51,31 @@ class Settings(BaseSettings):
     # --- LLM（S1 起使用；铁律：Key 只能出现在 .env 与本配置）---
     llm_api_key: str = Field(default="", repr=False)  # repr=False：防止 Key 意外打进日志
     llm_base_url: str = ""
+
+    # --- Embedding（S1-3；厂商 API，禁止本地大模型依赖）---
+    embedding_provider: Literal["dashscope", "openai_compat", "local"] = "dashscope"
+    # 两个字段分开收，空值回退：用户常只填标准名 DASHSCOPE_API_KEY
+    embedding_api_key: str = Field(default="", repr=False)
+    dashscope_api_key: str = Field(default="", repr=False)
+    embedding_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    embedding_model: str = "text-embedding-v4"
+    embedding_dim: int = 1024
+    embedding_batch_size: int = 10  # DashScope v4 单次最多 10 行
+    embedding_timeout_seconds: float = 60.0
+    embedding_max_retries: int = 4
+    # 元/百万 token（0.0005 元/千 token）；只用于估算展示，不写死调用逻辑
+    embedding_price_per_million: float = 0.5
+
+    @model_validator(mode="after")
+    def _fallback_dashscope_key(self) -> "Settings":
+        """EMBEDDING_API_KEY 为空时回退 DASHSCOPE_API_KEY。
+
+        为什么不用 AliasChoices：.env 里 EMBEDDING_API_KEY= 是空字符串也算「已设置」，
+        会导致用户只填标准名时反而取到空 Key。
+        """
+        if not self.embedding_api_key:
+            self.embedding_api_key = self.dashscope_api_key
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

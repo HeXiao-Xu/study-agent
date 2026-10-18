@@ -147,6 +147,19 @@
 - 已知观察（不修）：docling 把「三、解答题（本题共 5 小题，共 90」折成两块且第二条误嵌套成标题层——D-013 已知现象③的延伸，S1-2 不改解析器行为
 - 验证：pytest 44/44（S1-1 20 + S1-2 24）；三份真实样张：试卷 23 块（question 17 = 17 题，一题一块；题干+选项+小问+解析全聚齐）、笔记 6 块（层级链完整）、教材页 9 块（例1/例2/练习题各成块），直方图主体 0–300 token 无 >800 块（详见 PROGRESS 2026-10-19）
 
+## D-016 S1-3 Embedding 与入库实现决策（spec §4/§5 归档）
+
+- 日期：2026-10-19（S1-3 实现验收后归档；spec 见 docs/spec/s1-3-embedding.md）
+- 决策 1（DashScope text-embedding-v4 + 1024 维）：中文数学文本表现好、OpenAI 兼容、按量便宜（0.0005 元/千 token）；实测输出 1024 与 SCHEMA 一致，迁移按 1024 硬编码
+- 决策 2（批大小 10 而非任务卡 32）：厂商硬限制「text-embedding-v4 单次最多 10 行、单行 ≤8192 token」；批大小做成配置（EMBEDDING_BATCH_SIZE），代码不写死
+- 决策 3（只建 note_chunks、暂不加 FK）：notes/users/files 属 S2-1；S1-3 用合成 note_id/user_id 完成真实入库验收，S2-1 补外键
+- 决策 4（调用日志先结构化、S3-7 入库）：本卡迁移范围不含 llm_call_logs；每次 HTTP 批次落 scene/model/tokens/latency/trace_id，S3-7 建表后切换。临时偏离 AGENTS §5，已获用户确认
+- 决策 5（jieba 应用层分词 + to_tsvector('simple')）：与 SCHEMA §9 一致，不用 pg_jieba、不用 bigram；查询侧复用同一 tokenize 函数
+- 决策 6（高中数学领域词典）：jieba 默认把「单调性」切成「单调/性」，任务卡验收 SQL `函数 & 单调性` 会查不到；新增 `app/utils/math_dict.txt`（45 个高频词，freq=100000）用 jieba 标准 userdict 机制加载。属于词典调优，不改分词算法
+- 决策 7（同步 Embedding 客户端）：任务卡接口为 `encode(list[str])`；CLI/Worker 同步最直接，HTTP 超时与重试可控；后续 API 层需要异步时再包线程池
+- 已知观察（环境）：Windows 下 Alembic 首次连接 psycopg 曾出现无响应挂起（多次重试后自行恢复）；env.py 已给 `engine_from_config` 加 `connect_args={"connect_timeout": 5}`，避免迁移命令无限等待
+- 验证：pytest 78/78；真实三样张入库 23+6+9=38 块、维度 1024、首轮 1169/588/706 tokens、首轮估算花费合计 ¥0.001231；全文 `函数 & 单调性` 命中 3 行；note 101 幂等复跑后仍 23 块；HNSW/GIN 索引与唯一约束已核对（详见 PROGRESS 2026-10-19）
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

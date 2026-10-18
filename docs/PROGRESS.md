@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-2 结构化切片器（两阶段管道 + 题号检测 + 300-600/800 尺寸规则 + 60-token 重叠；pytest 44/44）
-- 下一步：S1-3 Embedding 与 pgvector 入库
+- 最近完成：S1-3 Embedding 与 pgvector 入库（DashScope text-embedding-v4 / 1024 维 / 38 块真实入库 / HNSW + GIN；pytest 78/78）
+- 下一步：S1-4 混合检索 + RRF 融合 ★
 - 已知阻塞：无
 
 ## 任务清单
@@ -24,7 +24,7 @@
 ### 阶段 1：RAG 技术验证（M0）
 - [x] S1-1 文档解析为结构化文本
 - [x] S1-2 结构化切片器 ★
-- [ ] S1-3 Embedding 与 pgvector 入库
+- [x] S1-3 Embedding 与 pgvector 入库
 - [ ] S1-4 混合检索 + RRF ★
 - [ ] S1-5 Rerank 接入
 - [ ] S1-6 带引用回答 + 拒答 ★
@@ -133,3 +133,9 @@
 - 实测抓修 5 个真问题（记录于 D-015 决策 4/5）：①纯数值选项行被 formula 密度规则截胡导致第 2 题丢选项 → 选项行豁免 ②纯答题线 `________` 假命中 formula 拆碎解答题 → 预处理丢弃 ③小问行 `（1）f(x)=…` 同类截胡 → 小问行豁免 ④教材章节号「3.2.1」被当题号 → 题号正则加数字排他 `(?!\d)` ⑤演示直方图末桶标签 bug（>1000000000 → >800）
 - 已知观察（不修）：docling 把「三、解答题（本题共 5 小题，共 90」折成两块且第二条误嵌套成标题层——D-013 已知现象延伸，解析器行为不在本卡范围
 - 文档同步：DECISIONS D-015、spec §4.5/§4.6 豁免与边界回填、spec §4.1 章节号保护、spec §7 tiktoken 实测回填、PROGRESS
+- S1-3 完成（按 §10 全流程：spec docs/spec/s1-3-embedding.md + plan docs/plan/s1-3-embedding.md，均经用户确认后实施）。交付：backend/app/ai/embedding/（base 契约 + openai_compat 批量/重试/维度校验 + local 占位 + 门面）、backend/app/utils/zh_tokenizer.py + math_dict.txt（jieba 领域词典）、backend/app/models/note_chunk.py、backend/app/core/db.py、backend/app/services/indexing.py、backend/alembic/（首个迁移 0001_s1_3）、backend/tests/{test_config,test_embedding_client,test_zh_tokenizer,test_note_chunk_model,test_indexing}.py、scripts/index_demo.py；requirements +SQLAlchemy 2.1.5 / alembic 1.20.0 / psycopg[binary] 3.3.6 / jieba 0.42.1 / pgvector 0.5.1；.env.example +Embedding 配置
+- 验收证据：pytest 78/78（S1-1 20 + S1-2 24 + S1-3 34）；真实维度探测 `model=text-embedding-v4 维度=1024`；三份样张入库试卷 23 块（question 17）/ 笔记 6 块 / 教材页 9 块（question 5），合计 38 块；首轮 token 1169/588/706，首轮估算花费合计 ¥0.001231；`SELECT count(*)`=38；`tsv @@ to_tsquery('simple','函数 & 单调性')` 命中 3 行（note 102/103）；note 101 幂等复跑后仍 23 块、总数仍 38；向量距离冒烟返回 0.0000/0.3247/0.4063
+- 迁移与索引：`alembic upgrade head` 通过；`\d note_chunks` 确认 `embedding vector(1024)`、`tsv tsvector`、`uq_note_chunks_note_chunk_index`；`ix_note_chunks_embedding_hnsw`（hnsw, vector_cosine_ops, m=16, ef_construction=64）、`ix_note_chunks_tsv_gin`（gin）、`ix_note_chunks_user_id`（btree）齐全
+- 实测抓修 2 个真问题（记录于 D-016）：①jieba 默认把「单调性」切成「单调/性」，任务卡验收 SQL 会 0 命中 → 新增高中数学领域 userdict（45 词，freq=100000），不改分词算法；②Windows 下 Alembic 首次 psycopg 连接偶发无响应挂起 → env.py 加 `connect_timeout=5`，避免迁移命令无限等待
+- 已确认偏离（D-016）：批大小 32→10（厂商 v4 单次最多 10 行）；llm_call_logs 先结构化日志、S3-7 建表后切换；只建 note_chunks 不加 FK（S2-1 补）；同步 Embedding 客户端；jieba 词典调优
+- 文档同步：DECISIONS D-016、SCHEMA §0 维度定稿 + §4.3 FK 延后说明、spec §6/§10/§11/§15 实测回填、AGENTS §9.6 Embedding 锚点、PROGRESS

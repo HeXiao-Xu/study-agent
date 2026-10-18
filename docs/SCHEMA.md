@@ -16,7 +16,7 @@
 - 时间：统一 `TIMESTAMPTZ`；`created_at` 默认 `now()`
 - 软删除：`deleted_at`，检索时统一过滤（方案 5.3）
 - 数组字段（方案中 `xxx[]` 写法）：`TEXT[]` / `BIGINT[]`（⚠ TEXT[] vs JSONB 在 S2-1 定）
-- 向量维度：统一 `VECTOR(1024)`（⚠ 与最终选定的 Embedding API 维度一致，S1-3 定稿）
+- 向量维度：统一 `VECTOR(1024)`（✅ S1-3 定稿：DashScope text-embedding-v4 实测输出 1024）
 - JSON 字段：统一 `JSONB`
 - 金额/权重/分数：`NUMERIC`
 
@@ -161,6 +161,8 @@ erDiagram
 | source_file_id | BIGINT | 是 | — | 来源文件 | — |
 | page_no | INTEGER | 是 | — | 页码（引用定位） | — |
 | bbox_json | JSONB | 是 | — | 原文位置框（引用高亮） | — |
+
+> S1-3 建表时 notes/users/files 尚未建，note_id/user_id/source_file_id 暂不加外键；S2-1 建齐后补。
 
 ### 4.4 note_kps
 
