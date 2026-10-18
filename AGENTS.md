@@ -27,6 +27,7 @@ backend/app/{api,models,schemas,services,ai,core,tasks,utils}
 backend/app/ai/{llm,embedding,rerank,rag,parse,ocr,prompts,agents}
 web/src/{api,components,views,stores,router,utils,types}
 docs/{PROGRESS.md,API.md,SCHEMA.md,DECISIONS.md}
+docs/{spec,plan}/    # 功能设计 spec 与实现 plan（流程见 §10）
 eval/{datasets,configs,results}
 
 ## 4. 编码规范
@@ -67,3 +68,55 @@ eval/{datasets,configs,results}
 - 项目方案见 docs/个性化学习智能体-毕业设计完整方案.md
 - 实施步骤与任务卡见 docs/AI协作开发实施计划.md（任务编号 S0-1 ~ S7-6 均出自该文件）
 - 若发现文档与代码不一致，先报告，不要自行决定改哪边。
+
+## 9. 功能编码细则（S1 起写正式功能代码时逐条自检）
+
+### 9.1 动笔前
+- 先读任务卡与对应契约（接口→docs/API.md，数据→docs/SCHEMA.md）；发现契约冲突停下报告（§8），不自行裁决
+- 契约先行：新接口先补 API.md、新表先补 SCHEMA.md，再写代码
+- 新代码先对「一致性锚点」（§9.6）找样，再动手
+- 功能实现走 §10 的 spec→plan 流程
+
+### 9.2 后端（FastAPI + Pydantic v2 + SQLAlchemy 2.0）
+- 路由函数 ≤30 行是常态：参数校验 → service 调用 → 统一壳组装；超了说明该挪 service
+- 出入参一律 Pydantic 模型（schemas/）；路由与 service 之间禁止传裸 dict
+- service 一个用例一个事务；失败回滚后抛带上下文异常，禁止吞异常返回 None
+- 时间统一 UTC 存储、ISO-8601 输出；分数/金额用整数存储，不用 float（浮点误差）
+- 业务错误一律抛 AppError 子类（S0-5 体系），禁止路由里手拼错误 JSON 或裸 HTTPException
+- 配置只从 core/config.py 的 Settings 读；其他模块禁止直读 os.environ
+- 外部 HTTP 调用超时必设、失败必处理
+
+### 9.3 AI 层（阶段 1 的高压线）
+- ai/ 之外禁止 import openai/httpx 客户端；业务层只 import ai/ 的适配器
+- 每次调用落 llm_call_logs：scene/model/tokens/cost/latency/trace_id
+- 结构化输出：Pydantic 校验 + 最多 2 次重试；仍失败抛专用异常，禁止返回半解析结果
+- 代码里禁止出现超过 3 行的 prompt 字符串（存 ai/prompts/ 或 prompt_templates 表）
+- 适配器可替换：Docling/PyMuPDF、DeepSeek/Qwen、Embedding 厂商都要能配置切换
+
+### 9.4 测试
+- 命名：tests/test_<模块>.py，用例 test_<被测函数>_<场景>_<预期>
+- LLM/网络等外部依赖一律 mock（喂固定 JSON）；测试套件禁止任何真实外部调用
+- service 公共函数至少 2 条用例：1 条 happy path + 1 条失败路径（权限/不存在/非法输入择一）
+- 测试数据"明显假、结构真"（如"测试用户_1"，字段类型符合 SCHEMA.md）
+- pytest 全绿是提交前提；确需跳过用例必须写明原因并经用户确认
+
+### 9.5 前端（阶段 2 起）
+- API 调用只经 src/api/ 封装（S0-6 http.ts 模式）；组件里禁止直接 import axios
+- http.ts 已统一弹错，组件只写"成功渲染 + 局部状态"，不重复 try-catch 弹窗
+- 跨组件状态进 Pinia；props 单向数据流
+- 前端校验规则与后端 Pydantic 保持一致（从 API.md 抄，不各自发明）
+
+### 9.6 一致性锚点（每个正式模块落地后回填，防代码风格漂移）
+- 后端路由样例：（待 S2 首个正式路由后回填）
+- ai 适配器样例：（待 S1-1 落地后回填）
+- 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
+
+## 10. 任务执行协议（功能先 spec 后 plan，再写码）
+1. 读任务卡 + 契约 → 走 superpowers 流程：brainstorming 澄清需求与设计 → **spec** 落 `docs/spec/<任务号>-<主题>.md`（如 s1-1-doc-parse.md）；writing-plans → **plan** 落 `docs/plan/<任务号>-<主题>.md`（分步、每步带验证命令）；spec 与 plan 都经用户确认后才写码
+2. 严格按 plan 实现；要偏离 plan 必须先说明原因并获用户同意
+3. 规模适配（避免仪式拖垮小活）：小修/bugfix 不开 spec/plan，聊天里短设计 + 确认即可；功能级任务卡一律全流程
+4. 写完 → 真实验证（pytest/curl/界面路径）→ 贴实测输出，禁止"应该没问题"
+5. 文档同步：PROGRESS 必更；动接口补 API.md、动表补 SCHEMA.md、动配置补 .env.example、动依赖补 requirements/package.json
+6. Conventional Commits 提交（含任务号，如 feat(s1-2)）；用户负责 git push
+7. 验收不过或做不完：如实报告，禁止粉饰进度、禁止假数据（§6）
+8. spec/plan 与 API.md/SCHEMA.md 冲突时契约文档优先；发现不一致先报告（§8）
