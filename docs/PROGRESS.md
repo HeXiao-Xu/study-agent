@@ -6,9 +6,9 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S0-7 冒烟脚本与 README 完整化（阶段 0 收官）
-- 下一步：S1-1 PDF/文档解析为结构化文本
-- 已知阻塞：无（方案附录 F 4 项待拍板已于 2026-10-15 全部落定，见 DECISIONS D-009~D-012）
+- 最近完成：S1-1 文档解析为结构化文本（Docling 主路径 + PyMuPDF 降级链 + docx；pytest 20/20）
+- 下一步：S1-2 结构化切片器 ★
+- 已知阻塞：无
 
 ## 任务清单
 
@@ -22,7 +22,7 @@
 - [x] S0-7 冒烟脚本 + README
 
 ### 阶段 1：RAG 技术验证（M0）
-- [ ] S1-1 文档解析为结构化文本
+- [x] S1-1 文档解析为结构化文本
 - [ ] S1-2 结构化切片器 ★
 - [ ] S1-3 Embedding 与 pgvector 入库
 - [ ] S1-4 混合检索 + RRF ★
@@ -118,3 +118,11 @@
 - S0-7 完成：scripts/smoke.py（8 项检查：三件套连通[复用 check_services 不重复实现] / pgvector 扩展[docker exec psql，零数据库驱动依赖] / bucket[HTTP 403/404 匿名探测] / 后端 /health[校验统一壳语义，严于 curl] / 业务表[当前阶段无表属预期不判失败，REQUIRED_TABLES 清单 S2-1 起随迁移维护] / 前端 dev[可选组件，未启动记 SKIP 不判失败]；彩色清单、FAIL 附修复提示、失败退出码 1、自动读根 .env、Windows 旧控制台激活 ANSI）。README 新增「常见问题（Windows 特有）」8 条（全部为本机真实踩过的坑：执行策略/端口占用含 --reload 孤儿进程/WSL2/镜像加速/venv 激活/依赖丢失）并更新当前进度为阶段 0 完成。修复：前端探测 URL 必须用 localhost 主机名——vite/Node17+ 绑 IPv6 ::1（实测监听地址 ::1:5173），硬写 127.0.0.1 会误报未启动。验收：正向 8/8 全 PASS 退出码 0；反向（停后端）[6/8] FAIL 带原因与启动提示、退出码 1。里程碑：git tag m0-env-ready（阶段 0 收官）
 - 关联 GitHub 远程仓库 https://github.com/HeXiao-Xu/study-agent.git（origin）；期间发现 .git 曾意外丢失（当时尚无任何提交，零损失），已重新 git init（main 分支）
 - 附录 F 拍板落定（4 项，2026-10-15）：#3 仅本地部署（D-009，低于方案建议的「本地+局域网」档位）；#4 Agent 选做、M5 后（D-010，降级预案提前约定）；#5 自测偶尔使用（D-011——验证策略主体由「自用数据」转为 eval/ 评测集，评测建设升为关键路径）；#7 学校允许 AI 辅助编码、无附加要求（D-012，原「M0 前确认」阻塞解除）
+- AGENTS.md 扩充 §9 功能编码细则（含 §9.6 一致性锚点机制）与 §10 任务执行协议（spec→plan 双确认流程，功能卡一律全流程）；docs/{spec,plan}/ 目录约定入 §3
+
+### 2026-10-18
+- S1-1 完成（按 §10 全流程：spec docs/spec/s1-1-doc-parse.md + plan docs/plan/s1-1-doc-parse.md，均经用户确认后实施）。交付：backend/app/ai/parse/ 六件套（__init__ 门面集中降级决策 / models 统一结构 ParsedBlock/ParsedDocument / base 可替换契约 DocumentParser / pdf_docling 结构化映射 / pdf_pymupdf 兜底+is_scanned 采样+控制符清洗 / docx_parser 中英文 Heading 样式与表格转 Markdown）；scripts/parse_demo.py（CLI：--limit / --force-pymupdf）；Settings + .env(.example) 增 PARSE_FORCE_PYMUPDF；requirements 钉版 docling 2.140.0 / pymupdf 1.28.2 / python-docx 1.2.0；parse/ 目录 .gitkeep 已删
+- 验收证据：pytest 20/20（含 docling mock 影射、降级链、扫描版提前返回、中英 Heading、表格成块、控制符清洗）；三份真实样张（笔记/试卷/教材页）程序化核对 37 项断言 36 过——唯一失败项（教材页 ⊆ 丢失）经 docling 与 PyMuPDF 双提取器交叉验证证明为样张 PDF 自身 ToUnicode 缺陷（reportlab+宋体把 ⊆ 写成 \x00），非解析器问题，已记 D-013 已知观察②；试卷 2 页页码正确分流，教材页页眉页脚被 docling 正确滤除（PyMuPDF 兜底路径漏入，对比鲜明）
+- 网络坑与解法（已记 README FAQ 与 spec §9）：docling 模型下载 HF 直连超时 → hf-mirror 镜像又撞 Xet 块存储 401 → 需同时设 HF_ENDPOINT=https://hf-mirror.com 与 HF_HUB_DISABLE_XET=1；模型 342MB 已缓存本机离线可用；首跑 466.2s；安装约 15 分钟（华为云源），site-packages 总量 1404MB
+- 已知观察（S1-2 消化，见 D-013）：docling 结构模型对平级标题可能判成嵌套（笔记样张「二/三」挂「一」下）；heading_path 在切片器中定位为上下文链而非严格层级
+- 文档同步：DECISIONS D-013、AGENTS §9.6 ai 适配器锚点回填（pdf_docling.py）、spec §9 实测数字回填、README FAQ +docling 模型下载行、当前进度更新

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     minio_root_password: str = "study123456"
     minio_bucket: str = "study-agent"
 
+    # --- 解析（S1-1）---
+    # True=跳过 Docling 走 PyMuPDF 快速路径（spec 设计决策 6：显式开关而非自动猜）
+    parse_force_pymupdf: bool = False
+
     # --- LLM（S1 起使用；铁律：Key 只能出现在 .env 与本配置）---
     llm_api_key: str = Field(default="", repr=False)  # repr=False：防止 Key 意外打进日志
     llm_base_url: str = ""

@@ -112,6 +112,17 @@
 - 验证：—（非技术决策）
 - 备注：原「M0 前确认」阻塞解除
 
+## D-013 S1-1 解析层实现决策（spec §4 归档）
+
+- 日期：2026-10-18（S1-1 实现验收后归档；spec 见 docs/spec/s1-1-doc-parse.md）
+- 决策 1（Docling 消费结构化对象而非 Markdown 导出）：统一结构需要每块页码（prov），Markdown 序列化会丢页码。实测 docling 2.140：`iterate_items()` 出 `(item, level)` 元组、`prov` 含 `page_no`、噪声 label 有 `page_header/page_footer` 等
+- 决策 2（PyMuPDF 兜底 heading_path 恒空）：用字号/加粗猜标题属任务卡禁止的启发式，兜底诚实降级（有页码有文本无层级）。实测对比同一教材页：docling 20 块带层级且滤掉页眉页脚；PyMuPDF 33 块无层级且页眉页脚漏入
+- 决策 3（docx page_no=None）：Word 分页由渲染器决定，文件内不存在分页信息，标 None 不造假数（任务卡类型写 int，偏离已在 spec 记录）
+- 决策 4（parse_force_pymupdf 显式开关）：.env 配置 + CLI 参数双层，降级可审计可复现
+- 已知观察（不修，S1-2 消化）：① docling 结构模型对平级标题可能判成嵌套（样张笔记「二/三」挂到「一」下；修正需字号启发式，禁止；heading_path 在切片器中定位为上下文链）② 样张 ⊆ 丢失经 docling/PyMuPDF 双提取器交叉验证为 PDF 自身 ToUnicode 缺陷（文本层为 \x00），解析器无责；PyMuPDF 兜底路径已加控制符清洗
+- 模型下载（换机必读）：HF 直连超时 → 设 `HF_ENDPOINT=https://hf-mirror.com` → 撞 Xet 块存储 401 → **加 `HF_HUB_DISABLE_XET=1`**；模型 342MB 已缓存本机，之后离线可跑
+- 验证：pytest 20/20；三份样张 37 项断言 36 过 + 1 项证明为样张自身缺陷（详见 PROGRESS 2026-10-18）
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

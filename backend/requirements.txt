@@ -10,3 +10,8 @@ pydantic-settings==2.16.0
 # --- 测试（AGENTS.md §7.2：新增功能必须配测试；TestClient 硬依赖 httpx）---
 pytest==9.1.1
 httpx==0.28.1
+
+# --- S1-1 文档解析（docling 为重依赖；装不上时删下行 + .env 设 PARSE_FORCE_PYMUPDF=true 走兜底形态，见 docs/spec/s1-1-doc-parse.md §9）---
+docling==2.140.0
+pymupdf==1.28.2
+python-docx==1.2.0

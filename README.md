@@ -94,6 +94,7 @@ python scripts\smoke.py    # 一条命令查三件套/扩展/桶/后端/前端�
 | PyCharm 终端行首没有 `(.venv)`，`uvicorn`/`python` 报找不到 | 先跑 `.venv\Scripts\Activate.ps1`；并检查设置里解释器指向本项目 venv |
 | `ModuleNotFoundError: No module named 'fastapi'` | venv 没激活就装了依赖，或根本没装：激活后 `pip install -r backend/requirements.txt` |
 | git 提示 `LF will be replaced by CRLF` | 换行符警告，无害，忽略 |
+| docling 首次解析卡住或超时（模型下载） | HuggingFace 直连不通，且镜像后还有 Xet 块存储坑：先设 `$env:HF_ENDPOINT='https://hf-mirror.com'; $env:HF_HUB_DISABLE_XET='1'`（**两个都要**）再跑；模型 342MB 只下载一次，之后离线可用（已缓存本机） |
 
 ## 开发必读（仓库的"记忆系统"，AI 协作开发的规矩）
 
@@ -107,5 +108,5 @@ python scripts\smoke.py    # 一条命令查三件套/扩展/桶/后端/前端�
 
 ## 当前进度
 
-阶段 0（项目启动）**已完成**，里程碑 `m0-env-ready`；当前进入阶段 1（RAG 技术验证，M0）。
+阶段 0（项目启动）**已完成**，里程碑 `m0-env-ready`；阶段 1（RAG 技术验证）进行中：S1-1 文档解析已完成。
 详见 [docs/PROGRESS.md](docs/PROGRESS.md)。
