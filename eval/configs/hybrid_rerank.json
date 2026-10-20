@@ -1,0 +1,8 @@
+{
+  "name": "hybrid_rerank",
+  "retrieval": "hybrid_rerank",
+  "top_k": 20,
+  "top_n": 5,
+  "rerank_candidates": 30,
+  "rerank_top_k": 6
+}

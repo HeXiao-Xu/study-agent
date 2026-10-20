@@ -114,6 +114,7 @@ eval/{datasets,configs,results}
 - ai Rerank 适配器样例：backend/app/ai/rerank/client.py（契约 + DashScope 适配器 + 本地占位 + 门面；批量、3,600 token 截断、30s 超时、2 次重试、费用估算；失败由 retriever 回退）
 - ai LLM 适配器样例：backend/app/ai/llm/openai_compat.py（OpenAI 兼容 `/chat/completions`；httpx；超时/重试/usage/费用；错误不带响应正文；门面 `get_llm_client()`）
 - RAG 回答器样例：backend/app/ai/rag/answerer.py（阈值拒答 → 上下文 → LLM → 引用校验 → 一次重试；日志只记计数/耗时/费用，不记正文）
+- 评测运行器样例：eval/run.py + eval/qa_eval.py（纯函数指标与 CLI 分离；三配置只比检索，回答指标只在生产配置；数据/配置错误退出 2，外部调用失败 4；结果只存 ID/计数，不存正文/Key）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）

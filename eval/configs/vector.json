@@ -1,0 +1,6 @@
+{
+  "name": "vector",
+  "retrieval": "vector",
+  "top_k": 20,
+  "top_n": 5
+}

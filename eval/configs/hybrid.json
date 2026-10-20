@@ -1,0 +1,6 @@
+{
+  "name": "hybrid",
+  "retrieval": "hybrid",
+  "top_k": 20,
+  "top_n": 5
+}

@@ -1,0 +1,30 @@
+{"id":"q001","question":"函数的定义域怎么求？","scope":"函数","gold_chunk_ids":[25],"should_refuse":false}
+{"id":"q002","question":"函数单调性的定义是什么？","scope":"函数","gold_chunk_ids":[31,26],"should_refuse":false}
+{"id":"q003","question":"如何用定义证明函数在区间上单调递增？","scope":"函数","gold_chunk_ids":[33,26,31],"should_refuse":false}
+{"id":"q004","question":"奇函数和偶函数有什么性质？","scope":"函数","gold_chunk_ids":[27,45,46,49,53],"should_refuse":false}
+{"id":"q005","question":"二次函数在闭区间上的最值怎么求？","scope":"函数","gold_chunk_ids":[34,38,60],"should_refuse":false}
+{"id":"q006","question":"分段函数 f(f(-1)) 怎么求？","scope":"函数","gold_chunk_ids":[51],"should_refuse":false}
+{"id":"q007","question":"函数 f(x)=x+1/x 在 (1,+∞) 上的单调性如何证明？","scope":"函数","gold_chunk_ids":[58,33,26],"should_refuse":false}
+{"id":"q008","question":"已知奇函数在 x≥0 时的解析式，怎么求 x<0 的解析式？","scope":"函数","gold_chunk_ids":[27,28,29],"should_refuse":false}
+{"id":"q009","question":"函数图象关于原点对称说明什么？","scope":"函数","gold_chunk_ids":[46,27,49],"should_refuse":false}
+{"id":"q010","question":"商品定价最大利润问题怎么建模？","scope":"函数","gold_chunk_ids":[61],"should_refuse":false}
+{"id":"q011","question":"指数函数的定义域和值域是什么？","scope":"指对函数","gold_chunk_ids":[63],"should_refuse":false}
+{"id":"q012","question":"对数函数的定义域和值域是什么？","scope":"指对函数","gold_chunk_ids":[65],"should_refuse":false}
+{"id":"q013","question":"指数式 a^b=N 和对数式怎么互化？","scope":"指对函数","gold_chunk_ids":[67],"should_refuse":false}
+{"id":"q014","question":"y=log_0.5(x^2-2x-3) 的单调区间怎么求？","scope":"指对函数","gold_chunk_ids":[68,65,26],"should_refuse":false}
+{"id":"q015","question":"导数大于 0 说明函数在区间上什么性质？","scope":"导数","gold_chunk_ids":[70],"should_refuse":false}
+{"id":"q016","question":"函数 f(x)=x^3-3x 的单调区间是什么？","scope":"导数","gold_chunk_ids":[71],"should_refuse":false}
+{"id":"q017","question":"函数 f(x)=x ln x 的极小值是多少？","scope":"导数","gold_chunk_ids":[73],"should_refuse":false}
+{"id":"q018","question":"等差数列 a_1=2，d=3，a_10 等于多少？","scope":"数列","gold_chunk_ids":[83],"should_refuse":false}
+{"id":"q019","question":"等比数列 a_1=1，q=2，前 5 项和 S_5 是多少？","scope":"数列","gold_chunk_ids":[84],"should_refuse":false}
+{"id":"q020","question":"错位相减法的口诀是什么？","scope":"数列","gold_chunk_ids":[106],"should_refuse":false}
+{"id":"q021","question":"今天北京天气怎么样？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q022","question":"怎么用 Python 写一个网页爬虫？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q023","question":"《红楼梦》的作者是谁？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q024","question":"出国留学需要准备哪些材料？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q025","question":"今天股市行情怎么样？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q026","question":"如何做番茄炒蛋？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q027","question":"世界杯冠军是谁？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q028","question":"电脑蓝屏怎么修？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q029","question":"怎样提高英语听力？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}
+{"id":"q030","question":"汽车轮胎多久换一次？","scope":"无关","gold_chunk_ids":[],"should_refuse":true}

@@ -1,0 +1,751 @@
+{
+  "dataset": "qa_set",
+  "config": "hybrid_rerank",
+  "user_id": 1,
+  "generated_at": "2026-10-20T16:25:22.584840+00:00",
+  "case_count": 30,
+  "answerable_count": 20,
+  "refusal_count": 10,
+  "answer_skipped": false,
+  "retrieval": {
+    "hit_at_5": 1.0,
+    "mrr_at_5": 0.9375,
+    "avg_latency_ms": 439.6333333333333
+  },
+  "answer": {
+    "citation_precision": 0.8266666666666665,
+    "citation_hit_rate": 1.0,
+    "refusal_accuracy": 1.0,
+    "confusion": {
+      "tp": 10,
+      "fp": 0,
+      "fn": 0,
+      "tn": 20
+    },
+    "avg_total_tokens": 945.4666666666667,
+    "avg_latency_ms": 6242.766666666666,
+    "total_cost_yuan": 0.0317224,
+    "llm_calls": 24,
+    "citation_retry_count": 2,
+    "answered_count": 20
+  },
+  "cases": [
+    {
+      "id": "q001",
+      "question": "函数的定义域怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        25
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 673,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          25,
+          66,
+          57,
+          43,
+          65
+        ],
+        "citation_precision": 0.2,
+        "citation_hit": true,
+        "total_tokens": 1865,
+        "latency_ms": 18184,
+        "cost_yuan": 0.00244
+      }
+    },
+    {
+      "id": "q002",
+      "question": "函数单调性的定义是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        31,
+        26
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 479,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          31,
+          26
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1220,
+        "latency_ms": 6391,
+        "cost_yuan": 0.0012796
+      }
+    },
+    {
+      "id": "q003",
+      "question": "如何用定义证明函数在区间上单调递增？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        33,
+        26,
+        31
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 502,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          58,
+          26,
+          31
+        ],
+        "citation_precision": 0.6666666666666666,
+        "citation_hit": true,
+        "total_tokens": 1862,
+        "latency_ms": 15902,
+        "cost_yuan": 0.0023188
+      }
+    },
+    {
+      "id": "q004",
+      "question": "奇函数和偶函数有什么性质？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        27,
+        45,
+        46,
+        49,
+        53
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 4,
+      "retrieval_latency_ms": 597,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          59,
+          29,
+          49,
+          53
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 1341,
+        "latency_ms": 12126,
+        "cost_yuan": 0.0016872
+      }
+    },
+    {
+      "id": "q005",
+      "question": "二次函数在闭区间上的最值怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        34,
+        38,
+        60
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 593,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          34,
+          38,
+          69
+        ],
+        "citation_precision": 0.6666666666666666,
+        "citation_hit": true,
+        "total_tokens": 1611,
+        "latency_ms": 17224,
+        "cost_yuan": 0.002184
+      }
+    },
+    {
+      "id": "q006",
+      "question": "分段函数 f(f(-1)) 怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        51
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 508,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          51
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1065,
+        "latency_ms": 5775,
+        "cost_yuan": 0.0011316
+      }
+    },
+    {
+      "id": "q007",
+      "question": "函数 f(x)=x+1/x 在 (1,+∞) 上的单调性如何证明？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        58,
+        33,
+        26
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 562,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          58,
+          70,
+          71,
+          26
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 1679,
+        "latency_ms": 17519,
+        "cost_yuan": 0.0022624
+      }
+    },
+    {
+      "id": "q008",
+      "question": "已知奇函数在 x≥0 时的解析式，怎么求 x<0 的解析式？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        27,
+        28,
+        29
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 512,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          27,
+          29,
+          28
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1405,
+        "latency_ms": 10916,
+        "cost_yuan": 0.001676
+      }
+    },
+    {
+      "id": "q009",
+      "question": "函数图象关于原点对称说明什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        46,
+        27,
+        49
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 515,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          46
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1018,
+        "latency_ms": 5585,
+        "cost_yuan": 0.0010616
+      }
+    },
+    {
+      "id": "q010",
+      "question": "商品定价最大利润问题怎么建模？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        61
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 536,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          61,
+          77
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 1588,
+        "latency_ms": 18522,
+        "cost_yuan": 0.0022268
+      }
+    },
+    {
+      "id": "q011",
+      "question": "指数函数的定义域和值域是什么？",
+      "scope": "指对函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        63
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 577,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          63
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 977,
+        "latency_ms": 2041,
+        "cost_yuan": 0.000856
+      }
+    },
+    {
+      "id": "q012",
+      "question": "对数函数的定义域和值域是什么？",
+      "scope": "指对函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        65
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 333,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          65
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1179,
+        "latency_ms": 2182,
+        "cost_yuan": 0.001014
+      }
+    },
+    {
+      "id": "q013",
+      "question": "指数式 a^b=N 和对数式怎么互化？",
+      "scope": "指对函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        67
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 325,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          67
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1103,
+        "latency_ms": 3219,
+        "cost_yuan": 0.0010252
+      }
+    },
+    {
+      "id": "q014",
+      "question": "y=log_0.5(x^2-2x-3) 的单调区间怎么求？",
+      "scope": "指对函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        68,
+        65,
+        26
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 355,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          68,
+          65
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1557,
+        "latency_ms": 12193,
+        "cost_yuan": 0.0018684
+      }
+    },
+    {
+      "id": "q015",
+      "question": "导数大于 0 说明函数在区间上什么性质？",
+      "scope": "导数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        70
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 499,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          70
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1023,
+        "latency_ms": 3030,
+        "cost_yuan": 0.0009468
+      }
+    },
+    {
+      "id": "q016",
+      "question": "函数 f(x)=x^3-3x 的单调区间是什么？",
+      "scope": "导数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        71
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 380,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          71,
+          70
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 1166,
+        "latency_ms": 7861,
+        "cost_yuan": 0.0013228
+      }
+    },
+    {
+      "id": "q017",
+      "question": "函数 f(x)=x ln x 的极小值是多少？",
+      "scope": "导数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        73
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 527,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          73
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1446,
+        "latency_ms": 12275,
+        "cost_yuan": 0.0017772
+      }
+    },
+    {
+      "id": "q018",
+      "question": "等差数列 a_1=2，d=3，a_10 等于多少？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        83
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 561,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          83
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 941,
+        "latency_ms": 3930,
+        "cost_yuan": 0.0008968
+      }
+    },
+    {
+      "id": "q019",
+      "question": "等比数列 a_1=1，q=2，前 5 项和 S_5 是多少？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        84
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 356,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          84
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 976,
+        "latency_ms": 5004,
+        "cost_yuan": 0.0010112
+      }
+    },
+    {
+      "id": "q020",
+      "question": "错位相减法的口诀是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        106
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 406,
+      "answer": {
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          106
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 830,
+        "latency_ms": 1383,
+        "cost_yuan": 0.0006975999999999999
+      }
+    },
+    {
+      "id": "q021",
+      "question": "今天北京天气怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 331,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 332,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q022",
+      "question": "怎么用 Python 写一个网页爬虫？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 354,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 336,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q023",
+      "question": "《红楼梦》的作者是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 376,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 329,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q024",
+      "question": "出国留学需要准备哪些材料？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 317,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 282,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q025",
+      "question": "今天股市行情怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 335,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 362,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q026",
+      "question": "如何做番茄炒蛋？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 340,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "citation_invalid",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 1277,
+        "latency_ms": 1481,
+        "cost_yuan": 0.001036
+      }
+    },
+    {
+      "id": "q027",
+      "question": "世界杯冠军是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 338,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 315,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q028",
+      "question": "电脑蓝屏怎么修？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 344,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 373,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q029",
+      "question": "怎样提高英语听力？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 331,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "citation_invalid",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 1235,
+        "latency_ms": 1859,
+        "cost_yuan": 0.0010024
+      }
+    },
+    {
+      "id": "q030",
+      "question": "汽车轮胎多久换一次？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 327,
+      "answer": {
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 352,
+        "cost_yuan": 0.0
+      }
+    }
+  ]
+}
