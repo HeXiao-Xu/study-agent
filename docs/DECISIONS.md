@@ -173,6 +173,18 @@
 - 已知不足（不粉饰）：hybrid 仅比纯向量 MRR 高 0.033，未达任务卡“明显更好”；Q6 分段函数从纯向量第 1 掉到混合第 3（全文 OR 的 `f`/`1` 噪声块被抬高）；38 块使 hit@5 饱和。S1-5 用 rerank/查询停用词再评估，本卡不事后调参。
 - 备注：评测输出中的学校名已脱敏为“某中学”，不改变排名/分数；无 API/SCHEMA/新依赖改动。
 
+## D-018 S1-5 Rerank 接入决策（spec §5/§7/§15 归档）
+
+- 日期：2026-10-20（S1-5 实现验收后归档；spec 见 docs/spec/s1-5-rerank.md）
+- 决策 1（默认模型 qwen3-rerank）：DashScope 新一代文本重排，中文数学短文本可用；原计划的 gte-rerank-v2 已公告 2026-05-30 下线，不把新功能建在下线模型上。北京区价格 0.5 元/百万 token，单条 query/document 上限 4,000 token、单请求最多 500 条、总 token 上限 120,000。
+- 决策 2（RRF 全量保留，top30→top6）：`retrieve_hybrid()` 仍返回完整 RRF 列表，S1-4 行为不变；新入口 `retrieve_hybrid_reranked()` 只在展示层取 top30 送重排、返回 top6。`fused` 不截断，避免重排失败时丢掉 S1-4 的完整结果。
+- 决策 3（3,600 token 截断）：query 与每条 document 都用 tiktoken `cl100k_base` 截到 3,600；30×3,600+3,600=111,600 < 120,000，留 7% 余量吸收 tokenizer 差异。不沿用 512 的旧假设。
+- 决策 4（30s 超时 + 2 次重试 + 失败降级）：429/500/502/503/504 与网络错误重试，4xx 不重试；重试耗尽抛 `RerankError`，由 retriever 回退 `fused[:6]`，`RerankInfo.fallback=True` 并打 `rerank_fallback` 日志。只捕获 `RerankError`，其他异常不吞。
+- 决策 5（同步客户端、无新依赖）：复用已有 httpx/tiktoken；批量一次请求发全部候选，不逐条调用；`LocalRerankClient` 只占位、抛错，不生成假分数。Rerank 结果只在内存 `rerank_score`，不写 SCHEMA、不做拒答阈值。
+- 验证：pytest 124/124（S1-5 新增 31，含 10 条执行中补的边界回归：Windows 控制台 UTF-8、响应顶层非对象、usage.total_tokens 异常、index 越界、429 Retry-After、4xx 不回显正文、tiktoken 加载失败可降级、非 RerankError 不吞、门面构造失败回退、返回条数不足）；75 块 / 6 note 真实四路：vector 10/10 MRR 0.900、fulltext 9/10 MRR 0.720、hybrid 10/10 MRR 0.920、rerank 10/10 MRR 0.950；fallback 0/10、平均 194ms、10 问总费用 ¥0.015630；用户人工判断 7/10 更相关（Q1/2/3/5/6/7/10），Q4/Q9 更差，Q8 持平。
+- 已知不足（不粉饰）：75 块偏小、hit@5 饱和，MRR 仅提升 0.030；Q4 奇偶性/Q9 原点对称的 top5 混入笔记/试卷封面；104–106 为合成样张，论文效果数据需用真实材料重跑。Windows 下 stdout 默认 GBK，样张 `✗` 曾使评测在打印阶段中断，已加 `_configure_stdio()` 强制 UTF-8。
+- 备注：评测输出中的真实校名/姓名已替换为“某中学/某老师”，不影响排名与分数；无 API/SCHEMA/新依赖改动。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

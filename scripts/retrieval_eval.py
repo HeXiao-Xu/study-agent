@@ -1,4 +1,4 @@
-"""S1-4 评测：10 个真实问题，纯向量 / 纯全文 / 混合三路 top5 对照（spec §10）。
+"""S1-5 评测：10 个固定问题，纯向量 / 纯全文 / 混合 / 混合+Rerank 四路 top5 对照。
 
 用法（仓库根目录）：
     python scripts/retrieval_eval.py [--user-id 1] [--top-k 20] [--debug]
@@ -18,7 +18,11 @@ from sqlalchemy.exc import OperationalError  # noqa: E402
 
 from app.ai.embedding import get_embedding_client  # noqa: E402
 from app.ai.embedding.errors import EmbeddingError  # noqa: E402
-from app.ai.rag.retriever import RetrievalResult, retrieve_hybrid  # noqa: E402
+from app.ai.rag.retriever import (  # noqa: E402
+    RerankInfo,
+    RetrievalResult,
+    retrieve_hybrid_reranked,
+)
 from app.core.context import set_trace_id  # noqa: E402
 from app.core.db import new_session  # noqa: E402
 
@@ -50,6 +54,13 @@ def _print_hits(title: str, hits: list, *, limit: int, kind: str) -> None:
             score = f"d={hit.vector_distance:.4f}" if hit.vector_distance is not None else "d=-"
         elif kind == "fulltext":
             score = f"ts={hit.fulltext_score:.4f}" if hit.fulltext_score is not None else "ts=-"
+        elif kind == "rerank":
+            rerank = f"{hit.rerank_score:.4f}" if hit.rerank_score is not None else "-"
+            score = (
+                f"rerank={rerank} "
+                f"rrf={hit.rrf_score:.5f} "
+                f"v={hit.vector_rank or '-'} f={hit.fulltext_rank or '-'}"
+            )
         else:
             score = (
                 f"rrf={hit.rrf_score:.5f} "
@@ -71,19 +82,37 @@ def _first_hit_rank(hits: list, keywords: list[str], *, limit: int = 5) -> int:
     return 0
 
 
-def _print_summary(ranks: dict[str, list[int]]) -> None:
+def _print_summary(
+    ranks: dict[str, list[int]], rerank_infos: list[RerankInfo | None]
+) -> None:
     total = len(QUESTIONS)
     print("=" * 78)
     print(f"汇总（{total} 问，hit@5 / MRR@5）")
-    for name in ("vector", "fulltext", "hybrid"):
+    for name in ("vector", "fulltext", "hybrid", "rerank"):
         values = ranks[name]
         hits = sum(1 for rank in values if rank)
         mrr = sum(1 / rank for rank in values if rank) / total
         print(f"  {name:9s} hit@5={hits}/{total}  MRR@5={mrr:.3f}")
+    fallback = sum(1 for info in rerank_infos if info is not None and info.fallback)
+    used = [info for info in rerank_infos if info is not None]
+    avg_latency = sum(info.latency_ms for info in used) / len(used) if used else 0
+    total_cost = sum(info.cost_yuan for info in used)
+    print(
+        f"  rerank fallback={fallback}/{total}  "
+        f"avg_latency={avg_latency:.0f}ms  total_cost=¥{total_cost:.6f}"
+    )
+
+
+def _configure_stdio() -> None:
+    """Windows 控制台默认 GBK；样张里有 ✗/✓，不转 UTF-8 会在 print 时崩。"""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="S1-4 混合检索三路对照评测")
+    _configure_stdio()
+    parser = argparse.ArgumentParser(description="S1-5 混合检索 + Rerank 四路对照评测")
     parser.add_argument("--user-id", type=int, default=1, help="用户 ID（默认 1）")
     parser.add_argument("--top-k", type=int, default=20, help="每路候选数（默认 20）")
     parser.add_argument("--debug", action="store_true", help="打印每路完整 top_k 与 RRF 明细")
@@ -93,13 +122,19 @@ def main() -> int:
 
     set_trace_id("retrieval-eval-" + uuid.uuid4().hex[:12])
     limit = args.top_k if args.debug else 5
-    ranks: dict[str, list[int]] = {"vector": [], "fulltext": [], "hybrid": []}
+    ranks: dict[str, list[int]] = {
+        "vector": [],
+        "fulltext": [],
+        "hybrid": [],
+        "rerank": [],
+    }
+    rerank_infos: list[RerankInfo | None] = []
 
     try:
         client = get_embedding_client()
         with new_session() as session:
             for index, (question, keywords) in enumerate(QUESTIONS, start=1):
-                result: RetrievalResult = retrieve_hybrid(
+                result: RetrievalResult = retrieve_hybrid_reranked(
                     session,
                     question,
                     user_id=args.user_id,
@@ -109,18 +144,41 @@ def main() -> int:
                 vector_rank = _first_hit_rank(result.vector, keywords)
                 fulltext_rank = _first_hit_rank(result.fulltext, keywords)
                 hybrid_rank = _first_hit_rank(result.fused, keywords)
+                rerank_rank = _first_hit_rank(result.reranked, keywords)
                 ranks["vector"].append(vector_rank)
                 ranks["fulltext"].append(fulltext_rank)
                 ranks["hybrid"].append(hybrid_rank)
+                ranks["rerank"].append(rerank_rank)
+                rerank_infos.append(result.rerank_info)
 
                 print(f"\n[{index}/{len(QUESTIONS)}] {question}")
                 print(f"  tsquery: {result.tsquery or '（空）'}")
                 _print_hits("纯向量 top5", result.vector, limit=limit, kind="vector")
                 _print_hits("纯全文 top5", result.fulltext, limit=limit, kind="fulltext")
                 _print_hits("混合 top5", result.fused, limit=limit, kind="hybrid")
+                _print_hits("混合+Rerank top5", result.reranked, limit=limit, kind="rerank")
+                info = result.rerank_info
+                if info is None:
+                    print("  rerank: 无候选，未调用")
+                else:
+                    print(
+                        f"  rerank: model={info.model} fallback={'是' if info.fallback else '否'} "
+                        f"candidates={info.candidates} top_k={info.top_k} "
+                        f"tokens={info.tokens} latency={info.latency_ms}ms "
+                        f"cost=¥{info.cost_yuan:.6f}"
+                    )
+                    if info.error:
+                        print(f"  rerank_error: {info.error}")
+                total_ms = result.elapsed_ms + (info.latency_ms if info else 0)
+                print(
+                    f"  耗时: retrieval={result.elapsed_ms}ms "
+                    f"vector={result.vector_ms}ms fulltext={result.fulltext_ms}ms "
+                    f"rerank={info.latency_ms if info else 0}ms total={total_ms}ms"
+                )
                 print(
                     f"  命中: vector={vector_rank or '-'} "
-                    f"fulltext={fulltext_rank or '-'} hybrid={hybrid_rank or '-'}"
+                    f"fulltext={fulltext_rank or '-'} hybrid={hybrid_rank or '-'} "
+                    f"rerank={rerank_rank or '-'}"
                 )
     except OperationalError:
         print(
@@ -133,7 +191,7 @@ def main() -> int:
         print(f"Embedding 调用失败：{exc}", file=sys.stderr)
         return 2
 
-    _print_summary(ranks)
+    _print_summary(ranks, rerank_infos)
     return 0
 
 

@@ -110,7 +110,8 @@ eval/{datasets,configs,results}
 - 后端路由样例：（待 S2 首个正式路由后回填）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
-- RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名）
+- RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）
+- ai Rerank 适配器样例：backend/app/ai/rerank/client.py（契约 + DashScope 适配器 + 本地占位 + 门面；批量、3,600 token 截断、30s 超时、2 次重试、费用估算；失败由 retriever 回退）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）

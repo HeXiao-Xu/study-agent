@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-4 混合检索 + RRF 融合（向量 + OR 全文 / user_id 下推 / 10 问 hybrid hit@5 10/10、MRR 0.933；pytest 93/93）
-- 下一步：S1-5 Rerank 接入
+- 最近完成：S1-5 Rerank 接入（qwen3-rerank / RRF top30→top6 / 失败回退；75 块 6 note 四路评测 rerank hit@5 10/10、MRR 0.950、fallback 0/10；人工 7/10 更相关；pytest 124/124）
+- 下一步：S1-6 带引用回答 + 拒答 ★
 - 已知阻塞：无
 
 ## 任务清单
@@ -26,7 +26,7 @@
 - [x] S1-2 结构化切片器 ★
 - [x] S1-3 Embedding 与 pgvector 入库
 - [x] S1-4 混合检索 + RRF ★
-- [ ] S1-5 Rerank 接入
+- [x] S1-5 Rerank 接入
 - [ ] S1-6 带引用回答 + 拒答 ★
 - [ ] S1-7 自测用例与效果抽查 20–30 条 ★
 
@@ -147,3 +147,10 @@
 - 环境修复：Windows localhost 先解析 ::1、Docker 仅发布 IPv4，psycopg 无超时卡死；DATABASE_URL 改 127.0.0.1 + engine connect_timeout=5，test_db.py 守卫；S1-3 验收 SQL 保持 `&`，S1-4 新增 OR 查询
 - 偏离（已记录 D-017）：subject_id/kp_ids 延后 S2-1（传参抛 RetrievalFilterUnavailable）；两路串行（同一 Session 非线程安全，38 块可忽略）；无 rerank/API/SCHEMA/新依赖
 - 文档同步：DECISIONS D-017、spec §18 实测回填、AGENTS §9.6 retriever 锚点、PROGRESS
+- S1-5 完成（按 §10 全流程：spec docs/spec/s1-5-rerank.md + plan docs/plan/s1-5-rerank.md，均经用户确认后实施）。交付：backend/app/ai/rerank/{client.py,__init__.py}（RerankClient 契约 + DashScope qwen3-rerank + Local 占位 + lru_cache 门面；批量/3600 token 截断/30s 超时/2 次重试/费用估算）、backend/app/core/config.py +10 个 RERANK_* 配置与 Key 回退、retriever 新增 `rerank_fused()` 与 `retrieve_hybrid_reranked()`（RRF 全量保留，top30→top6；失败回退 fused[:6]）、scripts/retrieval_eval.py 四路评测、backend/tests/{test_rerank,test_retriever,test_config,test_eval_script}.py
+- 语料扩展：新增 3 份合成样张（指数/对数函数笔记 7 块、导数教材页 10 块、三角/数列试卷 20 块），语料从 38 块 / 3 note 扩到 **75 块 / 6 note**（101–106）；新增 104–106 明确为合成样张，不是真实学生数据
+- 验收证据：pytest **124/124**（S1-1 20 + S1-2 24 + S1-3 34 + S1-4 15 + S1-5 31；多出的 10 条是执行中补的边界回归：Windows 控制台 UTF-8、响应顶层非对象、usage.total_tokens 异常、index 越界、429 Retry-After、4xx 不回显正文、tiktoken 加载失败可降级、非 RerankError 不吞、门面构造失败回退、返回条数不足）。真实四路 10 问：vector hit@5=10/10 MRR 0.900；fulltext 9/10 MRR 0.720；hybrid 10/10 MRR 0.920；rerank 10/10 MRR 0.950；rerank fallback=0/10，平均 194ms，10 问总费用 ¥0.015630
+- 人工验收（用户确认）：7/10 更相关（Q1 定义域、Q2 单调性定义、Q3 证明、Q5 二次最值、Q6 分段 f(f(-1))、Q7 x+1/x 证明、Q10 利润建模），2/10 更差（Q4 奇偶性、Q9 原点对称，封面/错题本噪声进入 top5），1/10 持平（Q8 奇函数解析式）；刚好达到 ≥7/10 验收线，不调问题/关键词
+- 实测抓修：Windows 下 stdout 默认 GBK，样张中的 `✗` 触发 `UnicodeEncodeError`，评测在打印 Q1 时中断；在 eval 脚本加 `_configure_stdio()` 强制 UTF-8 + `errors="replace"`，并补 `test_eval_script.py` 回归。属输出层修复，不影响检索/Rerank 结果
+- 已知不足（不粉饰）：75 块仍小且 hit@5 已饱和，rerank 的 MRR 仅比 hybrid 高 0.030；Q4/Q9 关键词仍命中但 top5 噪声变多；104–106 为合成样张，论文数据需用真实材料重跑。无 API/SCHEMA/新依赖改动
+- 文档同步：DECISIONS D-018、spec §15 实测回填、AGENTS §9.6 Rerank 锚点、PROGRESS；评测输出中的真实校名/姓名已替换为“某中学/某老师”

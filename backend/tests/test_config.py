@@ -43,3 +43,34 @@ def test_embedding_key_embedding_env_wins_when_both_set(monkeypatch) -> None:
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-dashscope")
     s = Settings(_env_file=None)
     assert s.embedding_api_key == "sk-test-explicit"
+
+
+def test_rerank_defaults(monkeypatch) -> None:
+    for name in ("RERANK_API_KEY", "DASHSCOPE_API_KEY", "RERANK_PROVIDER"):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings(_env_file=None)
+    assert s.rerank_provider == "dashscope"
+    assert s.rerank_model == "qwen3-rerank"
+    assert s.rerank_base_url == "https://dashscope.aliyuncs.com/api/v1"
+    assert s.rerank_timeout_seconds == 30.0
+    assert s.rerank_max_retries == 2
+    assert s.rerank_max_doc_tokens == 3600
+    assert s.rerank_candidates == 30
+    assert s.rerank_top_k == 6
+    assert s.rerank_price_per_million == 0.5
+
+
+def test_rerank_key_falls_back_to_dashscope(monkeypatch) -> None:
+    monkeypatch.setenv("RERANK_API_KEY", "")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-rerank-fallback")
+    s = Settings(_env_file=None)
+    assert s.rerank_api_key == "sk-test-rerank-fallback"
+    assert "sk-test-rerank-fallback" not in repr(s)
+
+
+def test_rerank_key_explicit_wins_and_repr_hides(monkeypatch) -> None:
+    monkeypatch.setenv("RERANK_API_KEY", "sk-test-rerank-explicit")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-dashscope")
+    s = Settings(_env_file=None)
+    assert s.rerank_api_key == "sk-test-rerank-explicit"
+    assert "sk-test-rerank-explicit" not in repr(s)
