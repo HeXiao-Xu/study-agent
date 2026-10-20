@@ -185,6 +185,18 @@
 - 已知不足（不粉饰）：75 块偏小、hit@5 饱和，MRR 仅提升 0.030；Q4 奇偶性/Q9 原点对称的 top5 混入笔记/试卷封面；104–106 为合成样张，论文效果数据需用真实材料重跑。Windows 下 stdout 默认 GBK，样张 `✗` 曾使评测在打印阶段中断，已加 `_configure_stdio()` 强制 UTF-8。
 - 备注：评测输出中的真实校名/姓名已替换为“某中学/某老师”，不影响排名与分数；无 API/SCHEMA/新依赖改动。
 
+## D-019 S1-6 带引用回答与拒答实现决策（spec §4/§7/§15 归档）
+
+- 日期：2026-10-20（S1-6 实现验收后归档；spec 见 docs/spec/s1-6-answer.md）
+- 决策 1（LLM 选型）：DashScope compatible-mode + `qwen-plus`；沿用 httpx 手写 OpenAI 兼容适配器，不引入 `openai` SDK。原因：项目已有 httpx/Key 回退模式，手写适配器对超时、重试、错误体、费用统计可控；用户已确认。
+- 决策 2（Prompt/上下文）：Prompt 存 `ai/prompts/qa_v1.md`，Jinja2 `StrictUndefined` 渲染；上下文按 rerank 分排序、`chunk_id` 去重、4,000 token 预算截断；每条编号 `[n]` 并带 `note_id/source_file_id/page_no/heading_path`。
+- 决策 3（引用校验）：非拒答答案必须至少一个引用，所有 `[n]` 必须在 1..本次上下文条数；非法/缺失重试一次（带上次回答+纠正指令），仍非法拒答 `citation_invalid`，不返回不可溯源答案。
+- 决策 4（τ=0.45）：原计划 0.35 实测无法分开（应答题 top1 最低 0.4586，应拒题最高 0.4347，“天气”0.3780）；经用户确认改为 0.45。10+5 小样本暂定，完整 20+10 留 S1-7；τ 仍是配置项。
+- 决策 5（rerank 回退）：`rerank_info.fallback=True` 或全部 score 为 None 时跳过 τ，继续用 RRF top6，`degraded=True`；不把 rerank 网络失败误判为“资料里没有”。
+- 决策 6（语料/引用展示）：note 107 是为任务卡验收问题补的合成数列样张（8 块，全库 83 块/7 note），不是真实学生数据；S2 建表前不显示标题/文件名，只显示现有字段。
+- 验证：pytest 160/160；真实 qwen-plus 错位相减回答带 4 条引用、`llm_calls=1`；天气问题 `refused=是`、`llm_calls=0`；证据见 eval/results/s1-6-qa-demo.txt 与 s1-6-refusal-calibration.txt。
+- 已知不足（不粉饰）：τ 与应答题最低分只差 0.0086，间隔窄；引用校验只查编号存在性，不判断语义支撑；83 块仍小；无 API/SCHEMA/迁移改动。校准输出中的校名用通用正则脱敏为“某学校”，不在脚本里维护真实校名名单。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

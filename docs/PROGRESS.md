@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-5 Rerank 接入（qwen3-rerank / RRF top30→top6 / 失败回退；75 块 6 note 四路评测 rerank hit@5 10/10、MRR 0.950、fallback 0/10；人工 7/10 更相关；pytest 124/124）
-- 下一步：S1-6 带引用回答 + 拒答 ★
+- 最近完成：S1-6 带引用回答 + 拒答（qwen-plus / 4,000 token 上下文 / 引用校验重试 / τ 0.45；真实 CLI 见 eval/results/s1-6-qa-demo.txt；pytest 160/160）
+- 下一步：S1-7 自测用例与效果抽查 20–30 条 ★
 - 已知阻塞：无
 
 ## 任务清单
@@ -27,7 +27,7 @@
 - [x] S1-3 Embedding 与 pgvector 入库
 - [x] S1-4 混合检索 + RRF ★
 - [x] S1-5 Rerank 接入
-- [ ] S1-6 带引用回答 + 拒答 ★
+- [x] S1-6 带引用回答 + 拒答 ★
 - [ ] S1-7 自测用例与效果抽查 20–30 条 ★
 
 ### 阶段 2：基础框架（M1）
@@ -154,3 +154,12 @@
 - 实测抓修：Windows 下 stdout 默认 GBK，样张中的 `✗` 触发 `UnicodeEncodeError`，评测在打印 Q1 时中断；在 eval 脚本加 `_configure_stdio()` 强制 UTF-8 + `errors="replace"`，并补 `test_eval_script.py` 回归。属输出层修复，不影响检索/Rerank 结果
 - 已知不足（不粉饰）：75 块仍小且 hit@5 已饱和，rerank 的 MRR 仅比 hybrid 高 0.030；Q4/Q9 关键词仍命中但 top5 噪声变多；104–106 为合成样张，论文数据需用真实材料重跑。无 API/SCHEMA/新依赖改动
 - 文档同步：DECISIONS D-018、spec §15 实测回填、AGENTS §9.6 Rerank 锚点、PROGRESS；评测输出中的真实校名/姓名已替换为“某中学/某老师”
+
+### 2026-10-20（S1-6）
+- S1-6 完成（按 §10 全流程：spec docs/spec/s1-6-answer.md + plan docs/plan/s1-6-answer.md，均经用户确认后实施）。交付：backend/app/ai/llm/（base/errors/openai_compat/门面；DashScope compatible-mode + qwen-plus，httpx，超时/重试/usage/费用，错误不回显正文）、backend/app/ai/rag/prompt_builder.py（去重/按 rerank 排序/4,000 token 截断/编号/引用元数据）、backend/app/ai/rag/answerer.py（τ 拒答/引用校验/一次重试/拒答统计）、backend/app/ai/prompts/qa_v1.md（附录 C1，Jinja2）、scripts/ask.py（单问+交互）、scripts/calibrate_refusal.py（10+5 题，不调 LLM）；Settings/.env.example/requirements（jinja2 3.1.6）；`setup_logging` 增加 stderr 流
+- 语料：新增 note 107 合成样张《高中数学笔记：数列求和（错位相减法）》，8 块；全库 **83 块 / 7 note**；`错位相减` 命中 5 行。note 107 不是真实学生数据
+- 验收证据：pytest **160 passed, 1 warning**（基线 124 + 新增 36）；真实 qwen-plus 两个 CLI：错位相减问题 `refused=否`、4 条引用全部 note 107、llm_calls=1、prompt/completion=945/356、latency 9361ms、cost ¥0.001468；天气问题 `refused=是`、reason=low_score、llm_calls=0。证据：eval/results/s1-6-qa-demo.txt
+- 阈值校准：0.35 实测无法分开（应答题 top1 最低 0.4586，应拒题最高 0.4347，“天气”0.3780），经用户确认改为 **τ=0.45**；这是 10+5 小样本暂定值，完整 20+10 留 S1-7 复核。证据：eval/results/s1-6-refusal-calibration.txt
+- 实测抓修：`index_demo.py` 在 GBK 控制台打印 `¥` 时抛 UnicodeEncodeError（数据已入库）；S1-6 的 ask/calibrate 增加 `_configure_stdio()` 强制 UTF-8；`calibrate_refusal.py` 补 argparse，避免 `--help` 误跑真实检索；校准输出中的校名用通用正则替换为“某学校”
+- 已知限制/风险：引用无标题/文件名（S2 补）；τ=0.45 与应答题最低 0.4586 只差 0.0086，间隔窄；引用校验只查编号存在性，不判断语义支撑；无 API/SCHEMA/迁移改动
+- 文档同步：DECISIONS D-019、spec §15 实测回填、AGENTS §9.6 LLM/Answerer 锚点、PROGRESS；未提交 DOCX 样张与 .env

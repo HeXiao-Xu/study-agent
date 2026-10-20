@@ -387,3 +387,22 @@ def test_rerank_fused_factory_error_falls_back(monkeypatch) -> None:
     assert info is not None
     assert info.fallback is True
     assert info.model == "unavailable"
+
+
+def test_to_chunk_includes_source_file_id() -> None:
+    from types import SimpleNamespace
+
+    from app.ai.rag.retriever import _to_chunk
+
+    row = SimpleNamespace(
+        id=7,
+        note_id=101,
+        chunk_index=0,
+        content="函数定义域",
+        heading_path="函数/定义域",
+        page_no=2,
+        chunk_type="note",
+        source_file_id=12,
+    )
+    result = _to_chunk(row)
+    assert result.source_file_id == 12

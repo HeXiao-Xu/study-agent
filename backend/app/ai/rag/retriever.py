@@ -38,6 +38,7 @@ class RetrievalFilterUnavailable(ValueError):
 class RetrievedChunk(BaseModel):
     chunk_id: int
     note_id: int
+    source_file_id: int | None = None
     chunk_index: int
     content: str
     heading_path: str | None = None
@@ -127,6 +128,7 @@ def _to_chunk(
     return RetrievedChunk(
         chunk_id=chunk.id,
         note_id=chunk.note_id,
+        source_file_id=chunk.source_file_id,
         chunk_index=chunk.chunk_index,
         content=chunk.content,
         heading_path=chunk.heading_path,

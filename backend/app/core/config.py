@@ -48,9 +48,17 @@ class Settings(BaseSettings):
     # True=跳过 Docling 走 PyMuPDF 快速路径（spec 设计决策 6：显式开关而非自动猜）
     parse_force_pymupdf: bool = False
 
-    # --- LLM（S1 起使用；铁律：Key 只能出现在 .env 与本配置）---
+    # --- LLM（S1-6；厂商 API，OpenAI 兼容接口）---
     llm_api_key: str = Field(default="", repr=False)  # repr=False：防止 Key 意外打进日志
-    llm_base_url: str = ""
+    llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_model: str = "qwen-plus"
+    llm_timeout_seconds: float = 60.0
+    llm_max_retries: int = 2
+    llm_temperature: float = 0.3
+    llm_max_output_tokens: int = 1200
+    # 元/百万 token；北京区 qwen-plus 列表价，只用于估算展示
+    llm_price_input_per_million: float = 0.8
+    llm_price_output_per_million: float = 2.0
 
     # --- Embedding（S1-3；厂商 API，禁止本地大模型依赖）---
     embedding_provider: Literal["dashscope", "openai_compat", "local"] = "dashscope"
@@ -78,17 +86,22 @@ class Settings(BaseSettings):
     rerank_top_k: int = 6
     rerank_price_per_million: float = 0.5
 
+    # --- QA（S1-6）---
+    qa_context_max_tokens: int = 4000
+    qa_refuse_threshold: float = 0.45
+    qa_citation_max_retries: int = 1
+
     @model_validator(mode="after")
     def _fallback_dashscope_key(self) -> "Settings":
-        """EMBEDDING_API_KEY / RERANK_API_KEY 为空时回退 DASHSCOPE_API_KEY。
-
-        为什么不用 AliasChoices：.env 里 EMBEDDING_API_KEY= 是空字符串也算「已设置」，
-        会导致用户只填标准名时反而取到空 Key。
-        """
+        """空值回退：.env 里显式写 `KEY=` 也算已设置，不能依赖默认值。"""
         if not self.embedding_api_key:
             self.embedding_api_key = self.dashscope_api_key
         if not self.rerank_api_key:
             self.rerank_api_key = self.dashscope_api_key
+        if not self.llm_api_key:
+            self.llm_api_key = self.dashscope_api_key
+        if not self.llm_base_url:
+            self.llm_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         return self
 
     @property

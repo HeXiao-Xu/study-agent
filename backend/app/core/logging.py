@@ -11,6 +11,7 @@ import json
 import logging
 import sys
 from datetime import UTC, datetime
+from typing import TextIO
 
 from app.core.context import get_trace_id
 
@@ -44,9 +45,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def setup_logging(level: str = "INFO") -> None:
-    """进程入口调用一次；接管 root 与 uvicorn 的 handler，保证全进程统一 JSON 流。"""
-    handler = logging.StreamHandler(sys.stdout)
+def setup_logging(level: str = "INFO", *, stream: TextIO | None = None) -> None:
+    """进程入口调用一次；CLI 传 stderr，避免 JSON 日志混进答案 stdout。"""
+    handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(JsonFormatter())
     root = logging.getLogger()
     root.handlers = [handler]

@@ -112,6 +112,8 @@ eval/{datasets,configs,results}
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）
 - ai Rerank 适配器样例：backend/app/ai/rerank/client.py（契约 + DashScope 适配器 + 本地占位 + 门面；批量、3,600 token 截断、30s 超时、2 次重试、费用估算；失败由 retriever 回退）
+- ai LLM 适配器样例：backend/app/ai/llm/openai_compat.py（OpenAI 兼容 `/chat/completions`；httpx；超时/重试/usage/费用；错误不带响应正文；门面 `get_llm_client()`）
+- RAG 回答器样例：backend/app/ai/rag/answerer.py（阈值拒答 → 上下文 → LLM → 引用校验 → 一次重试；日志只记计数/耗时/费用，不记正文）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）

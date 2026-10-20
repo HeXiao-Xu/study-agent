@@ -74,3 +74,57 @@ def test_rerank_key_explicit_wins_and_repr_hides(monkeypatch) -> None:
     s = Settings(_env_file=None)
     assert s.rerank_api_key == "sk-test-rerank-explicit"
     assert "sk-test-rerank-explicit" not in repr(s)
+
+
+def test_llm_defaults(monkeypatch) -> None:
+    for name in (
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_TIMEOUT_SECONDS",
+        "LLM_MAX_RETRIES",
+        "LLM_TEMPERATURE",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "LLM_PRICE_INPUT_PER_MILLION",
+        "LLM_PRICE_OUTPUT_PER_MILLION",
+        "QA_CONTEXT_MAX_TOKENS",
+        "QA_REFUSE_THRESHOLD",
+        "QA_CITATION_MAX_RETRIES",
+        "DASHSCOPE_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings(_env_file=None)
+    assert s.llm_model == "qwen-plus"
+    assert s.llm_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert s.llm_timeout_seconds == 60.0
+    assert s.llm_max_retries == 2
+    assert s.llm_temperature == 0.3
+    assert s.llm_max_output_tokens == 1200
+    assert s.llm_price_input_per_million == 0.8
+    assert s.llm_price_output_per_million == 2.0
+    assert s.qa_context_max_tokens == 4000
+    assert s.qa_refuse_threshold == 0.45
+    assert s.qa_citation_max_retries == 1
+
+
+def test_llm_key_falls_back_to_dashscope(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-llm-fallback")
+    s = Settings(_env_file=None)
+    assert s.llm_api_key == "sk-test-llm-fallback"
+    assert "sk-test-llm-fallback" not in repr(s)
+
+
+def test_llm_base_url_empty_falls_back(monkeypatch) -> None:
+    """真实 .env 里 LLM_BASE_URL= 是空字符串，不能把配置覆盖成空 URL。"""
+    monkeypatch.setenv("LLM_BASE_URL", "")
+    s = Settings(_env_file=None)
+    assert s.llm_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def test_llm_key_explicit_wins_and_repr_hides(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "sk-test-llm-explicit")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-dashscope")
+    s = Settings(_env_file=None)
+    assert s.llm_api_key == "sk-test-llm-explicit"
+    assert "sk-test-llm-explicit" not in repr(s)
