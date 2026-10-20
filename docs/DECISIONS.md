@@ -160,6 +160,19 @@
 - 已知观察（环境）：Windows 下 Alembic 首次连接 psycopg 曾出现无响应挂起（多次重试后自行恢复）；env.py 已给 `engine_from_config` 加 `connect_args={"connect_timeout": 5}`，避免迁移命令无限等待
 - 验证：pytest 78/78；真实三样张入库 23+6+9=38 块、维度 1024、首轮 1169/588/706 tokens、首轮估算花费合计 ¥0.001231；全文 `函数 & 单调性` 命中 3 行；note 101 幂等复跑后仍 23 块；HNSW/GIN 索引与唯一约束已核对（详见 PROGRESS 2026-10-19）
 
+## D-017 S1-4 混合检索与 RRF 实现决策（spec §8/§10/§14 归档）
+
+- 日期：2026-10-20（S1-4 实现验收后归档；spec 见 docs/spec/s1-4-retrieval.md）
+- 决策 1（RRF 只认排名）：`score = Σ 1/(60 + rank_i)`，按 `chunk_id` 去重；不把 cosine distance 与 `ts_rank_cd` 归一化相加（量纲不同，单路高分可能绑架结果）。公式、重叠示例与“rank 不是 score”的反例写入 spec §8 与 `test_retriever.py`。
+- 决策 2（全文 OR 语义）：S1-3 的 `build_tsquery()` 保持 `&`（验收 SQL 不变）；S1-4 新增 `build_tsquery_or()`，token 去重后 ` | ` 连接，`ts_rank_cd` 排序。自然问句用 AND 实测 10/10 零命中，OR 才有召回。
+- 决策 3（subject_id/kp_ids 延后）：`note_chunks` 无这两列，`notes`/`note_kps` 属 S2-1；S1-4 只下推 `user_id`，传入 subject/kp 时抛 `RetrievalFilterUnavailable`，不静默忽略。
+- 决策 4（两路串行）：任务卡“并行”理解为两路都执行；同一 SQLAlchemy `Session` 非线程安全，38 块下串行延迟可忽略，S1-5/S3 再考虑多连接并发。
+- 决策 5（无新依赖）：复用 SQLAlchemy/pgvector/jieba/Pydantic；不引入 rerank/整体框架。
+- 决策 6（Windows IPv6 修复）：`localhost` 先解析 `::1`，Docker 只发布 IPv4，psycopg 无超时会卡死；`DATABASE_URL` 改 `127.0.0.1` + engine `connect_timeout=5`，`test_db.py` 守卫。
+- 验证：pytest 93/93（S1-4 新增 15）；真实 38 块；10 问 vector hit@5=10/10 MRR=0.900、fulltext=9/10 MRR=0.725、hybrid=10/10 MRR=0.933；`--user-id 999` 三路 0/10；RRF 抽查 Q1 `v=1 f=1 → 2/61≈0.03279`、Q3 `v=1 f=5 → 1/61+1/65≈0.03178`。
+- 已知不足（不粉饰）：hybrid 仅比纯向量 MRR 高 0.033，未达任务卡“明显更好”；Q6 分段函数从纯向量第 1 掉到混合第 3（全文 OR 的 `f`/`1` 噪声块被抬高）；38 块使 hit@5 饱和。S1-5 用 rerank/查询停用词再评估，本卡不事后调参。
+- 备注：评测输出中的学校名已脱敏为“某中学”，不改变排名/分数；无 API/SCHEMA/新依赖改动。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

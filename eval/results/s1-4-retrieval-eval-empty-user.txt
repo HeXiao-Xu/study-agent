@@ -1,0 +1,109 @@
+Building prefix dict from the default dictionary ...
+Loading model from cache C:\Users\HEXIAO\AppData\Local\Temp\dsh-win-bash-45188-0d7c15ec\jieba.cache
+Loading model cost 0.432 seconds.
+Prefix dict has been built successfully.
+
+[1/10] 函数的定义域怎么求？
+  tsquery: 函数 | 的 | 定义域 | 怎么 | 求
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[2/10] 函数单调性的定义是什么？
+  tsquery: 函数 | 单调性 | 的 | 定义 | 是 | 什么
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[3/10] 如何用定义证明函数在区间上单调递增？
+  tsquery: 如何 | 用 | 定义 | 证明 | 函数 | 在 | 区间 | 上 | 单调递增
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[4/10] 奇函数和偶函数有什么性质？
+  tsquery: 奇函数 | 和 | 偶函数 | 有 | 什么 | 性质
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[5/10] 二次函数在闭区间上的最值怎么求？
+  tsquery: 二次函数 | 在 | 闭 | 区间 | 上 | 的 | 最值 | 怎么 | 求
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[6/10] 分段函数 f(f(-1)) 怎么求？
+  tsquery: 分段 | 函数 | f | 1 | 怎么 | 求
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[7/10] 函数 f(x)=x+1/x 在 (1,+∞) 上的单调性如何证明？
+  tsquery: 函数 | f | x | 1 | 在 | 上 | 的 | 单调性 | 如何 | 证明
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[8/10] 已知奇函数在 x≥0 时的解析式，怎么求 x<0 的解析式？
+  tsquery: 已知 | 奇函数 | 在 | x | 0 | 时 | 的 | 解析 | 式 | 怎么 | 求
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[9/10] 函数图象关于原点对称说明什么？
+  tsquery: 函数 | 图象 | 关于 | 原点 | 对称 | 说明 | 什么
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+
+[10/10] 商品定价最大利润问题怎么建模？
+  tsquery: 商品 | 定价 | 最大 | 利润 | 问题 | 怎么 | 建模
+  纯向量 top5
+    （无命中）
+  纯全文 top5
+    （无命中）
+  混合 top5
+    （无命中）
+  命中: vector=- fulltext=- hybrid=-
+==============================================================================
+汇总（10 问，hit@5 / MRR@5）
+  vector    hit@5=0/10  MRR@5=0.000
+  fulltext  hit@5=0/10  MRR@5=0.000
+  hybrid    hit@5=0/10  MRR@5=0.000

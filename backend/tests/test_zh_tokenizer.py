@@ -1,7 +1,7 @@
 """S1-3 中文分词工具测试：jieba 切词与 tsquery 安全（spec §6/§10）。"""
 from __future__ import annotations
 
-from app.utils.zh_tokenizer import build_tsquery, join_for_tsv, tokenize_zh
+from app.utils.zh_tokenizer import build_tsquery, build_tsquery_or, join_for_tsv, tokenize_zh
 
 
 def test_tokenize_zh_splits_chinese_words() -> None:
@@ -49,3 +49,17 @@ def test_build_tsquery_is_safe_and_ands_tokens() -> None:
         if unsafe != "&":
             assert unsafe not in query
     assert build_tsquery("") == ""
+
+
+def test_build_tsquery_or_dedupes_and_uses_or() -> None:
+    query = build_tsquery_or("函数的定义域，函数的定义域")
+    assert "|" in query
+    assert "&" not in query
+    parts = [part.strip() for part in query.split("|")]
+    assert len(parts) == len(set(parts))
+    assert parts.count("函数") == 1
+    assert parts.count("定义域") == 1
+
+
+def test_build_tsquery_or_empty() -> None:
+    assert build_tsquery_or("  ，。！？ ") == ""

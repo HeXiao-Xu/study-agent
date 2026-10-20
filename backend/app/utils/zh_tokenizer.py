@@ -39,3 +39,12 @@ def join_for_tsv(text: str) -> str:
 def build_tsquery(text: str) -> str:
     """查询侧：token 用 & 连接；空文本返回空串，调用方跳过全文查询。"""
     return " & ".join(tokenize_zh(text))
+
+
+def build_tsquery_or(text: str) -> str:
+    """查询侧：token 去重后 | 连接；用于自然问句全文检索（S1-4）。
+
+    为什么用 OR：自然问句含“的/在/上/怎么”等词，AND 会要求所有词同块出现，
+    实测 10 个问题全部 0 命中；OR 先召回，再由 ts_rank_cd 按覆盖密度排序。
+    """
+    return " | ".join(dict.fromkeys(tokenize_zh(text)))

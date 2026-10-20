@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     # --- 数据三件套（S0-4；database/redis 自 S1-3、minio 自 S2-6 起实际连接）---
-    database_url: str = "postgresql+psycopg://study:study123@localhost:5432/study_agent"
+    database_url: str = "postgresql+psycopg://study:study123@127.0.0.1:5432/study_agent"
     redis_url: str = "redis://localhost:6379/0"
     minio_endpoint: str = "localhost:9000"
     minio_root_user: str = "study"

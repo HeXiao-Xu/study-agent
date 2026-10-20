@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-3 Embedding 与 pgvector 入库（DashScope text-embedding-v4 / 1024 维 / 38 块真实入库 / HNSW + GIN；pytest 78/78）
-- 下一步：S1-4 混合检索 + RRF 融合 ★
+- 最近完成：S1-4 混合检索 + RRF 融合（向量 + OR 全文 / user_id 下推 / 10 问 hybrid hit@5 10/10、MRR 0.933；pytest 93/93）
+- 下一步：S1-5 Rerank 接入
 - 已知阻塞：无
 
 ## 任务清单
@@ -25,7 +25,7 @@
 - [x] S1-1 文档解析为结构化文本
 - [x] S1-2 结构化切片器 ★
 - [x] S1-3 Embedding 与 pgvector 入库
-- [ ] S1-4 混合检索 + RRF ★
+- [x] S1-4 混合检索 + RRF ★
 - [ ] S1-5 Rerank 接入
 - [ ] S1-6 带引用回答 + 拒答 ★
 - [ ] S1-7 自测用例与效果抽查 20–30 条 ★
@@ -139,3 +139,11 @@
 - 实测抓修 2 个真问题（记录于 D-016）：①jieba 默认把「单调性」切成「单调/性」，任务卡验收 SQL 会 0 命中 → 新增高中数学领域 userdict（45 词，freq=100000），不改分词算法；②Windows 下 Alembic 首次 psycopg 连接偶发无响应挂起 → env.py 加 `connect_timeout=5`，避免迁移命令无限等待
 - 已确认偏离（D-016）：批大小 32→10（厂商 v4 单次最多 10 行）；llm_call_logs 先结构化日志、S3-7 建表后切换；只建 note_chunks 不加 FK（S2-1 补）；同步 Embedding 客户端；jieba 词典调优
 - 文档同步：DECISIONS D-016、SCHEMA §0 维度定稿 + §4.3 FK 延后说明、spec §6/§10/§11/§15 实测回填、AGENTS §9.6 Embedding 锚点、PROGRESS
+
+### 2026-10-20
+- S1-4 完成（按 §10 全流程：spec docs/spec/s1-4-retrieval.md + plan docs/plan/s1-4-retrieval.md，均经用户确认后实施）。交付：backend/app/ai/rag/retriever.py（向量/全文/RRF/ user_id 下推/维度校验/结构化日志）、backend/app/utils/zh_tokenizer.py +`build_tsquery_or`、backend/tests/{test_retriever,test_db}.py + test_zh_tokenizer 追加、scripts/retrieval_eval.py（10 问三路 top5 + hit@5/MRR@5）；eval/results/s1-4-retrieval-eval.txt 与 empty-user 对照（学校名已脱敏为“某中学”）
+- 验收证据：pytest 93/93（S1-1 20 + S1-2 24 + S1-3 34 + S1-4 15）；真实 38 块；10 问 vector 10/10 MRR 0.900、fulltext 9/10 MRR 0.725、hybrid 10/10 MRR 0.933；`--user-id 999` 三路 0/10；RRF 抽查 Q1 `note=102 chunk=1` v=1 f=1 → 2/61≈0.03279、Q3 `note=101 chunk=19` v=1 f=5 → 1/61+1/65≈0.03178
+- 已知不足（不粉饰）：hybrid 仅比纯向量 MRR 高 0.033，未达任务卡“明显更好”；Q6 分段函数从纯向量第 1 掉到混合第 3（全文 OR 把 `f`/`1` 噪声块抬升）；38 块使 hit@5 饱和。S1-5 用 rerank/查询停用词再评估，本卡不事后调参
+- 环境修复：Windows localhost 先解析 ::1、Docker 仅发布 IPv4，psycopg 无超时卡死；DATABASE_URL 改 127.0.0.1 + engine connect_timeout=5，test_db.py 守卫；S1-3 验收 SQL 保持 `&`，S1-4 新增 OR 查询
+- 偏离（已记录 D-017）：subject_id/kp_ids 延后 S2-1（传参抛 RetrievalFilterUnavailable）；两路串行（同一 Session 非线程安全，38 块可忽略）；无 rerank/API/SCHEMA/新依赖
+- 文档同步：DECISIONS D-017、spec §18 实测回填、AGENTS §9.6 retriever 锚点、PROGRESS

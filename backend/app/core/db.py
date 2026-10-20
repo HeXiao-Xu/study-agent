@@ -19,7 +19,14 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         # hide_parameters=True：异常信息里不出现连接参数（含密码）
-        _engine = create_engine(get_settings().database_url, pool_pre_ping=True, hide_parameters=True)
+        # connect_timeout：Windows 下 localhost 先解析 ::1，而 Docker 只发布 IPv4，
+        # 无超时会卡死在 IPv6 的 wait_conn；5 秒后让 psycopg 回退 IPv4。
+        _engine = create_engine(
+            get_settings().database_url,
+            pool_pre_ping=True,
+            hide_parameters=True,
+            connect_args={"connect_timeout": 5},
+        )
     return _engine
 
 
