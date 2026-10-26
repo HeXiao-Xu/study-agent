@@ -39,7 +39,14 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 # S2-1 起随迁移维护：核心业务表名；非空时缺任何一张判 FAIL（提示先执行迁移）
-REQUIRED_TABLES: list[str] = []
+REQUIRED_TABLES: list[str] = [
+    "users",
+    "user_relations",
+    "subjects",
+    "knowledge_points",
+    "knowledge_edges",
+    "note_chunks",
+]
 
 # Windows 旧式控制台需先激活 ANSI 转义（空命令，无副作用）
 if os.name == "nt":
