@@ -1,8 +1,9 @@
-"""异步任务包（S2-7）：注册表、执行器、ARQ 队列与 Worker 入口。
+"""异步任务包（S2-7/S2-8）：注册表、执行器、ARQ 队列与 Worker 入口。
 
 这里显式导入内置任务模块：注册表靠 import 副作用填充，
-worker/runner 只 import 本包时也必须能看到 demo.sleep。
+worker/runner 只 import 本包时也必须能看到全部内置任务。
 """
-from app.tasks import demo as _demo  # noqa: F401  注册内置任务
+from app.tasks import demo as _demo  # noqa: F401  注册 demo.sleep
+from app.tasks import parse_document as _parse_document  # noqa: F401  注册 parse.document
 
-__all__ = ["_demo"]
+__all__ = ["_demo", "_parse_document"]
