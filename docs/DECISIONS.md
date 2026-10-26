@@ -243,6 +243,19 @@
 - 验证：pytest **260/260**（基线 237 + 新增 23：单元 13 + 接口 10）；硬验收用例 `test_permissions_api.py::test_b_cannot_read_a_notes_returns_403` PASSED（403 + 40300 +「无权访问该资源」）；其余覆盖本人 200、已绑定家长/老师 200、未绑定家长/老师 403、admin 读学生数据 403、admin 读管理接口 200、学生读管理接口 403、无 token 401、未绑定家长访问不存在学生仍 403（不泄露）。
 - 已知不足（不粉饰）：本卡**无 curl 证据**（无生产接口），以 pytest 为验收证据；无家长-学生绑定管理接口（目前只能 SQL 或后续卡建）；无越权审计日志；每个受保护请求多一次 `user_relations` 查询（走 `uq_user_relations_teacher_student`，未加缓存）。
 
+## D-024 S2-4 通用分页与白名单排序决策（spec §2.3/§8 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-4-pagination.md，plan 见 docs/plan/s2-4-pagination.md）
+- 决策 1（库选型）：引入 `fastapi-pagination==0.16.1`。任务卡与 API.md 均点名该库；`pip --dry-run` 实测只新增 1 个包，与 FastAPI 0.143.1 / Pydantic 2.14.1 / SQLAlchemy 2.1.5 无冲突。它的价值在 count 查询会剥掉 ORDER BY、limit/offset 由库生成，避免复杂 select 的 count 写错。
+- 决策 2（形状适配）：库原生 `Page` 是 `{items,total,page,size,pages}`，与任务卡 `{items,total,page,page_size}` 不一致。做法是只用库执行查询，结果转成自建 `PageData[T]`，再套 `Envelope`；`size`/`pages` 不暴露给前端。
+- 决策 3（参数上限）：`page` ≥ 1，`page_size` 1–100（默认 20）。上限防一次拉全库；越界由 FastAPI Query 校验 → `422/42200`。超过末页返回空 items、total 不变，不报错。
+- 决策 4（排序白名单）：`apply_sort` 只接受 `{字段名: 列对象}` 映射里的字段，从结构上杜绝 `order_by(f"...{用户输入}")`；非法字段报 `422/42200` 并列出可选字段；`order` 只允许 asc/desc。
+- 决策 5（默认排序）：通用件不猜资源语义，`default_sort` 由各接口传入，全局默认方向 `desc`；没有默认排序的接口会拿到原语句，由调用方自己保证稳定排序（避免分页漂移）。
+- 决策 6（筛选）：只用各接口显式 query 参数，不做通用 filter DSL（任务卡要求，也便于索引审查）。
+- 决策 7（测试）：分页逻辑用 SQLite 内存库真执行（`StaticPool` + `check_same_thread=False`，让 TestClient 线程与夹具共用同一内存库）；不连 PostgreSQL、不发网络请求。SQLite 只验证分页语义，不替代 PostgreSQL 执行计划。
+- 验证：pytest **280/280**（基线 260 + 新增 20：单元 12 + 接口 8），`1 warning` 为既有 StarletteDeprecatedWarning。
+- 已知不足（不粉饰）：本卡无生产列表接口，**没有 curl 证据**（笔记 S2-5、错题/题目 S4 接入时补）；`total` 依赖 count，大表深分页会变慢，量大后改 keyset/cursor；无多字段排序、无 `pages`/`links`、无 `page_size` 自定义上限；排序白名单需各接口手工维护（漏写只是不支持，不会注入）。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

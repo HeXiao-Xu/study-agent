@@ -20,7 +20,8 @@
 - 数据隔离（S2-3 定稿）：访问他人学生数据失败统一 `403/40300`「无权访问该资源」，不区分“无权限”与“不存在”；服务层查询必须显式 `WHERE <model>.user_id = <已授权学生>`，禁止只校验角色就返回数据；token 内 `role` 不作为权限来源（以数据库为准）
 - 统一响应：`{code, message, trace_id, data}`（成功 `code=0`；错误结构与码表见 §13，S0-5 已落地）
 - trace_id 透出：响应头 `X-Trace-Id` 一律返回；请求头可传 `X-Trace-Id` 续链（S0-5 定稿）
-- 分页：列表接口统一分页参数（fastapi-pagination，S2-4 交付）
+- 分页（S2-4 定稿）：所有列表接口统一 query `page`（默认 1，≥1）+ `page_size`（默认 20，1–100）；响应 `data = {items, total, page, page_size}`；越界/非整数 → `422/42200`；超过末页返回空 `items`，`total` 不变
+- 排序（S2-4 定稿）：`sort_by`（字段白名单，各接口在文档中列出）+ `order`（`asc`/`desc`，默认 `desc`）；非白名单字段 → `422/42200`「不支持的排序字段：xxx（可选：...）」；筛选一律显式 query 参数，不使用通用 filter DSL
 - SSE 与异步任务接口的轮询/推送约定：TODO（S3-5 / S2-7 定）
 
 ## 1. 认证（S2-2 定稿）

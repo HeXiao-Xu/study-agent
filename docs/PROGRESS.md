@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-3 RBAC 与数据隔离（`require_role` / `require_student_access` / `ensure_student_access`；admin 不绕过；硬验收「B 访问 A 的笔记 → 403」通过；pytest 260/260）
-- 下一步：S2-4 通用分页/排序/筛选（`{items, total, page, page_size}` 基类）
+- 最近完成：S2-4 通用分页与白名单排序（`PageData[T]` + `page_params` / `sort_params` / `paginate_query` / `apply_sort`；fastapi-pagination 0.16.1；pytest 280/280）
+- 下一步：S2-5 笔记 CRUD（首个真实列表接口，必须复用 S2-4 分页件并补 curl 证据）
 - 已知阻塞：无
 
 ## 任务清单
@@ -34,7 +34,7 @@
 - [x] S2-1 数据模型与迁移（第一批）
 - [x] S2-2 认证 JWT
 - [x] S2-3 RBAC 与数据隔离
-- [ ] S2-4 通用分页/排序/筛选
+- [x] S2-4 通用分页/排序/筛选
 - [ ] S2-5 笔记表与 CRUD API
 - [ ] S2-6 文件上传 + MinIO + 去重
 - [ ] S2-7 异步任务框架
@@ -103,6 +103,8 @@
 | 5 | 无家长-学生绑定管理接口（S2-3 只做「已绑定则放行」判断） | 绑定只能靠 SQL/后续卡，家长看不到学生数据 | S2-5 起按需补接口 |
 | 6 | 无越权审计日志（S2-3 遗留） | 越权尝试只返回 403，无落库记录 | S3-7 之后随 `audit_logs`/`llm_call_logs` 一起 |
 | 7 | 权限判定未缓存：每个受保护请求多一次 `user_relations` 查询 | 量小可接受；高并发时是额外 RTT | 有性能需求时再加缓存 |
+| 8 | 分页 `total` 依赖 count，深分页 offset 也随页码线性变慢（S2-4 遗留） | 数据量上万后列表接口延迟上升 | 有真实数据量后改 keyset/cursor 分页 |
+| 9 | 分页只支持单字段排序，无 `pages`/`links`（S2-4 遗留） | 前端需自行算总页数；复杂排序要前端二次处理 | 需求出现时再扩 |
 
 ## 变更日志
 
@@ -202,3 +204,10 @@
 - 验收证据：pytest **260 passed, 1 warning**（基线 237 + 新增 23）；硬验收用例 `tests/test_permissions_api.py::test_b_cannot_read_a_notes_returns_403` PASSED（HTTP 403 + code 40300 +「无权访问该资源」）；正向 A 读自己 200、已绑定家长/老师 200；反向 未绑定家长/老师 403、admin 读学生数据 403、学生读管理接口 403、无 token 401、未绑定家长访问不存在学生仍 403
 - 已知事项（不粉饰）：本卡无 curl 证据（无生产接口）；无绑定管理接口（遗留 5）；无越权审计日志（遗留 6）；权限判定未缓存（遗留 7）
 - 文档同步：API.md（§0 角色与数据范围矩阵 + 隔离规则）、AGENTS.md（§9.2 学生数据接口约定、§9.6 权限锚点）、DECISIONS D-023、PROGRESS；无 API 端点/SCHEMA/依赖变更
+
+### 2026-10-26（S2-4）
+- S2-4 完成（按 §10 全流程：spec docs/spec/s2-4-pagination.md + plan docs/plan/s2-4-pagination.md，均经用户确认）。交付：backend/app/schemas/common.py 新增 `PageData[T]`（`{items,total,page,page_size}`）、backend/app/utils/pagination.py（`PageParams` / `SortParams` / `page_params` / `sort_params` / `paginate_query` / `apply_sort`）、backend/tests/test_pagination.py（12 条）、backend/tests/test_pagination_api.py（8 条）
+- 拍板（D-024，2026-10-26 用户确认）：引入 `fastapi-pagination==0.16.1`（只新增 1 包、无版本冲突）；响应固定 4 字段 + query `page`/`page_size`，库的 `size`/`pages` 不泄露；`page_size` 上限 100；排序白名单映射防注入；默认排序由各接口传 `default_sort`；筛选只用显式参数；测试用 SQLite 内存库真执行
+- 验收证据：pytest **280 passed, 1 warning**（基线 260 + 新增 20）：分页 12 条（默认参数、第 1/2 页、超末页空列表、出参模型转换、升降序、非法字段/方向、无默认排序不改写语句、默认排序生效）；接口 8 条（`data` 恰为 4 键且无 pages/size、第 2 页 id 正确、page=0 与 page_size=101 → 422/42200、未知排序字段 422/42200、order 非法 422/42200、按 name 升序、total 跨页稳定）
+- 已知事项（不粉饰）：本卡无生产列表接口，**没有 curl 证据**，复用验收在 S2-5（笔记列表）与 S4（错题/题目列表）补；深分页 count/offset 成本（遗留 8）；单字段排序、无 pages/links（遗留 9）
+- 文档同步：API.md（§0 分页/排序两行定稿）、AGENTS.md（§9.2 列表接口约定、§9.6 分页锚点）、DECISIONS D-024、PROGRESS、requirements.txt；无 API 端点/SCHEMA 变更
