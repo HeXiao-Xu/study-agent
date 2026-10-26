@@ -135,7 +135,13 @@ def parse_document_task(session: Session, payload: dict[str, Any]) -> dict[str, 
         raise
     finally:
         if tmp_path is not None:
-            tmp_path.unlink(missing_ok=True)
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError as cleanup_exc:  # Windows 上解析器可能仍持有句柄
+                logger.warning(
+                    "file_parse_tmp_cleanup_failed",
+                    extra={"file_id": file_id, "error": str(cleanup_exc)},
+                )
 
 
 def _mark_parsing(session: Session, file: File) -> None:

@@ -323,6 +323,21 @@ def test_parse_removes_temporary_file(monkeypatch: pytest.MonkeyPatch) -> None:
     assert all(not path.exists() for path in created)
 
 
+def test_parse_cleanup_failure_does_not_mask_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session, _, _ = _patched(monkeypatch, parse_error=RuntimeError("bad pdf"))
+
+    def failing_unlink(self, missing_ok=False):  # noqa: ANN001
+        raise OSError("locked")
+
+    monkeypatch.setattr(Path, "unlink", failing_unlink)
+    with pytest.raises(RuntimeError, match="bad pdf"):
+        parse_document_task(session, {"file_id": 9})  # type: ignore[arg-type]
+    assert session.file is not None
+    assert "RuntimeError" in (session.file.error_msg or "")
+
+
 def test_parse_task_name_matches_registry() -> None:
     from app.tasks.registry import get_handler
 
