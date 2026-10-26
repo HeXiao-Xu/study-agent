@@ -1,6 +1,7 @@
 """S2-6 文件接口：TestClient + 依赖覆盖，不连库不连 MinIO。"""
 from __future__ import annotations
 
+import base64
 import hashlib
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -23,6 +24,10 @@ from app.tasks.queue import get_task_queue
 
 _PDF_BYTES = b"%PDF-1.4\n"
 _DIGEST = hashlib.sha256(_PDF_BYTES).hexdigest()
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+_PNG_DIGEST = hashlib.sha256(_PNG_BYTES).hexdigest()
 
 
 class FakeSession:
@@ -87,6 +92,9 @@ class FakeStorage:
 
     def delete(self, key: str) -> None:
         self.objects.pop(key, None)
+
+    def download_to(self, key: str, target) -> None:  # noqa: ANN001
+        target.write(self.objects[key])
 
 
 def _user(
@@ -290,3 +298,89 @@ def test_parse_status_returns_progress_and_error(client: TestClient) -> None:
     data = resp.json()["data"]
     assert data["parse_progress"] == 50
     assert data["error_msg"] == "RuntimeError: bad pdf"
+
+
+def _png_payload() -> dict[str, tuple[str, BytesIO, str]]:
+    return {"file": ("图.png", BytesIO(_PNG_BYTES), "image/png")}
+
+
+def _image_record(*, owner_id: int = 1) -> File:
+    record = File(
+        user_id=owner_id,
+        filename="图.png",
+        mime="image/png",
+        size=len(_PNG_BYTES),
+        storage_path=f"uploads/{owner_id}/{_PNG_DIGEST[:2]}/{_PNG_DIGEST}.png",
+        sha256=_PNG_DIGEST,
+        parse_status="done",
+        parse_progress=100,
+        error_msg=None,
+    )
+    record.id = 12
+    record.created_at = datetime.now(timezone.utc)
+    return record
+
+
+def test_upload_inline_image_skips_parse(client: TestClient) -> None:
+    user = _user()
+    session = FakeSession(user=user)
+    queue = _wire(session)
+    resp = client.post(
+        "/api/v1/files?parse=false", files=_png_payload(), headers=_headers(user)
+    )
+    assert resp.status_code == 201
+    assert resp.json()["data"]["parse_status"] == "done"
+    assert queue.calls == []
+    record = session.added[0]
+    assert isinstance(record, File)
+    assert record.parse_progress == 100
+    assert record.parse_finished_at is not None
+
+
+def test_upload_inline_image_rejects_non_image(client: TestClient) -> None:
+    user = _user()
+    _wire(FakeSession(user=user))
+    resp = client.post(
+        "/api/v1/files?parse=false", files=_file_payload(), headers=_headers(user)
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == 42200
+
+
+def test_get_image_returns_bytes_and_headers(client: TestClient) -> None:
+    user = _user()
+    record = _image_record()
+    storage = FakeStorage()
+    storage.objects[record.storage_path] = _PNG_BYTES
+    _wire(FakeSession(user=user, record=record), storage)
+    resp = client.get("/api/v1/files/12/image", headers=_headers(user))
+    assert resp.status_code == 200
+    assert resp.content == _PNG_BYTES
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.headers["etag"] == f'"{_PNG_DIGEST}"'
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["cache-control"] == "private, max-age=300"
+
+
+def test_get_image_other_user_returns_403(client: TestClient) -> None:
+    user = _user(2, username="student_b")
+    _wire(FakeSession(user=user, record=_image_record(owner_id=1), relation=None))
+    resp = client.get("/api/v1/files/12/image", headers=_headers(user))
+    assert resp.status_code == 403
+    assert resp.json()["code"] == 40300
+
+
+def test_get_image_non_image_returns_422(client: TestClient) -> None:
+    user = _user()
+    _wire(FakeSession(user=user, record=_record()))
+    resp = client.get("/api/v1/files/11/image", headers=_headers(user))
+    assert resp.status_code == 422
+    assert resp.json()["code"] == 42200
+
+
+def test_get_image_missing_returns_404(client: TestClient) -> None:
+    user = _user()
+    _wire(FakeSession(user=user, record=None))
+    resp = client.get("/api/v1/files/99/image", headers=_headers(user))
+    assert resp.status_code == 404
+    assert resp.json()["code"] == 40400

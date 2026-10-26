@@ -118,7 +118,10 @@
 ### POST /api/v1/files
 - 权限：`student`（其他角色 403/40300）
 - 类型：同步上传返回 + 后台异步解析（S2-8 起：上传成功后自动入队 `parse.document`）
-- 请求：`multipart/form-data`，字段名 `file`
+- 请求：`multipart/form-data`，字段名 `file`；可选 query `parse`（默认 `true`）。
+  `parse=false` 仅用于编辑器图片：只接受 `image/*`，新记录直接 `parse_status=done`、
+  `parse_progress=100`、`parse_finished_at=now`，不入队解析；非图片返回 `422/42200`。
+  去重命中返回已有记录且不改其解析状态。
 - 成功：`Envelope[FileUploadOut]`
   - 首次：**201**，`deduped=false`
   - 同用户同内容重复上传：**200**，`deduped=true`，返回已有 `id`（不再写对象存储）
@@ -133,6 +136,15 @@
   - `422/42200`：扩展名不在白名单 / 文件内容与类型不符 / 文件名为空
   - `403/40300`：非 student
   - `500/50000`：「文件存储不可用」（MinIO 异常，不泄露 endpoint）
+
+### GET /api/v1/files/{file_id}/image
+- 权限：本人，或已绑定该学生的 parent/teacher（admin 不绕过）
+- 类型：同步，返回二进制
+- 出参：图片字节；`Content-Type` 为记录 MIME，带 `ETag=sha256`、
+  `Cache-Control: private, max-age=300`、`X-Content-Type-Options: nosniff`
+- 错误：`404/40400` 文件不存在；`403/40300` 无权访问；`422/42200` 不是图片文件；
+  `500/50000` 文件存储不可用
+- 备注：内联展示用；首版一次性读入内存
 
 ### GET /api/v1/files/{file_id}/parse-status
 - 权限：本人或已绑定该学生的 parent/teacher（admin 不绕过）

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 import tempfile
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -91,11 +92,18 @@ def _build_key(user_id: int, sha256: str, ext: str) -> str:
 
 
 def upload_file(
-    session: Session, *, owner: User, upload: UploadFile, storage: ObjectStorage
+    session: Session,
+    *,
+    owner: User,
+    upload: UploadFile,
+    storage: ObjectStorage,
+    parse: bool = True,
 ) -> tuple[File, bool]:
     """流式读完 → 查重 → 写对象 → 写库；返回 (记录, 是否复用已有记录)。"""
     filename = sanitize_filename(upload.filename)
     ext, mime = detect_type(filename)
+    if not parse and not mime.startswith("image/"):
+        raise InvalidParamError("该文件不是图片")
     limit = get_settings().upload_max_size_mb * 1024 * 1024
 
     digest = hashlib.sha256()
@@ -141,7 +149,9 @@ def upload_file(
             size=size,
             storage_path=key,
             sha256=sha256,
-            parse_status="pending",
+            parse_status="done" if not parse else "pending",
+            parse_progress=100 if not parse else 0,
+            parse_finished_at=datetime.now(timezone.utc) if not parse else None,
         )
         session.add(record)
         try:
@@ -172,4 +182,12 @@ def get_file_status(session: Session, *, file_id: int, viewer: User) -> File:
         raise NotFoundError("文件不存在")
     if record.user_id != viewer.id:
         ensure_student_access(session, viewer, record.user_id)
+    return record
+
+
+def read_image(session: Session, *, file_id: int, viewer: User) -> File:
+    """取图前统一做权限与 MIME 校验；非图片不返回字节。"""
+    record = get_file_status(session, file_id=file_id, viewer=viewer)
+    if not record.mime.startswith("image/"):
+        raise InvalidParamError("不是图片文件")
     return record

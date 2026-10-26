@@ -1,7 +1,10 @@
 """S2-6 文件上传与解析状态（API.md §3）。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from io import BytesIO
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -29,6 +32,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 def upload_file(
     response: Response,
     file: UploadFile | None = File(default=None, description="待上传文件"),
+    parse: bool = Query(True, description="是否入队文档解析；编辑器图片传 false"),
     current_user: User = Depends(require_role("student")),
     session: Session = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
@@ -37,10 +41,13 @@ def upload_file(
     if file is None or not file.filename:
         raise AppError("请求缺少 file 字段", code=40000, http_status=400)
     record, deduped = file_service.upload_file(
-        session, owner=current_user, upload=file, storage=storage
+        session, owner=current_user, upload=file, storage=storage, parse=parse
     )
     # done/parsing 的去重命中不重复入队；pending（新文件）与 failed（重试）补入队
-    if record.parse_status in {ParseStatus.PENDING.value, ParseStatus.FAILED.value}:
+    if parse and record.parse_status in {
+        ParseStatus.PENDING.value,
+        ParseStatus.FAILED.value,
+    }:
         task_service.create_task(
             session,
             owner=current_user,
@@ -67,3 +74,31 @@ def get_parse_status(
 ) -> Envelope[FileStatusOut]:
     record = file_service.get_file_status(session, file_id=file_id, viewer=current_user)
     return Envelope(trace_id=get_trace_id(), data=FileStatusOut.model_validate(record))
+
+
+@router.get(
+    "/{file_id}/image",
+    response_class=Response,
+    summary="读取图片（内联展示）",
+)
+def get_image(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+) -> Response:
+    record = file_service.read_image(session, file_id=file_id, viewer=current_user)
+    buffer = BytesIO()
+    storage.download_to(record.storage_path, buffer)
+    return Response(
+        content=buffer.getvalue(),
+        media_type=record.mime,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "Content-Disposition": (
+                "inline; filename*=UTF-8''" + quote(record.filename, safe="")
+            ),
+            "ETag": f'"{record.sha256}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
