@@ -12,6 +12,13 @@ const http: AxiosInstance = axios.create({
   timeout: 15_000,
 })
 
+function redirectToLogin(): void {
+  const current = router.currentRoute.value
+  useAuthStore().clearSession()
+  if (current.path === '/login') return
+  void router.push({ path: '/login', query: { redirect: current.fullPath } })
+}
+
 /** 后端统一响应壳（与 docs/API.md §0 保持一致） */
 export interface ApiEnvelope<T> {
   code: number
@@ -36,9 +43,7 @@ http.interceptors.response.use(
     // HTTP 200 但业务失败：统一弹提示；调用方拿 reject 自行决定是否细粒度处理
     if (body && typeof body.code === 'number' && body.code !== 0) {
       if (body.code === 40100) {
-        useAuthStore().clearToken()
-        // 登录页 S2-2 交付；先占位跳转，避免死循环停留在需登录页面
-        void router.push('/login')
+        redirectToLogin()
       }
       ElMessage.error(body.message)
       return Promise.reject(new Error(body.message))
@@ -49,8 +54,7 @@ http.interceptors.response.use(
     // 网络/HTTP 层错误：后端 4xx/5xx 同样是统一壳，优先读壳里的 message
     const message = error.response?.data?.message ?? '网络异常，请稍后重试'
     if (error.response?.status === 401) {
-      useAuthStore().clearToken()
-      void router.push('/login')
+      redirectToLogin()
     }
     ElMessage.error(message)
     return Promise.reject(error)

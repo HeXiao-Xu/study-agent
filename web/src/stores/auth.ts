@@ -1,24 +1,44 @@
 /**
- * 最小 auth store（S0-6）：token 的唯一前端持有处。
- * 登录/刷新/登出逻辑 S2-2 交付；本阶段只负责持久化与清理，供 http.ts 注入。
+ * 登录态唯一持有处：token 持久化，user 只存内存并在刷新后由 /auth/me 回填。
  */
 import { defineStore } from 'pinia'
 
+import type { UserOut } from '@/types/auth'
+
 const TOKEN_KEY = 'study-agent-token'
+
+const ROLE_LABELS: Record<UserOut['role'], string> = {
+  student: '学生',
+  teacher: '教师',
+  parent: '家长',
+  admin: '管理员',
+}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    // 从 localStorage 恢复，页面刷新不掉登录态
     token: localStorage.getItem(TOKEN_KEY) ?? '',
+    user: null as UserOut | null,
+    loading: false,
   }),
+  getters: {
+    isLoggedIn: (state) => Boolean(state.token),
+    roleLabel: (state) => (state.user ? ROLE_LABELS[state.user.role] : ''),
+  },
   actions: {
-    setToken(token: string) {
+    setSession(token: string, user: UserOut | null) {
       this.token = token
+      this.user = user
       localStorage.setItem(TOKEN_KEY, token)
     },
-    clearToken() {
+    clearSession() {
       this.token = ''
+      this.user = null
       localStorage.removeItem(TOKEN_KEY)
+    },
+    async fetchMe() {
+      // 动态导入避免 http → store → api → http 的静态模块环
+      const { getMe } = await import('@/api/auth')
+      this.user = await getMe()
     },
   },
 })
