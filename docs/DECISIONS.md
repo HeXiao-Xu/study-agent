@@ -231,6 +231,18 @@
 - 验证：pytest **237/237**（新增 31：配置 4 + 安全原语 10 + 服务 6 + 接口 11）；真实 curl：注册 201（`id=4`、`username=test_user_1`、无 `password_hash`）、重复注册 409/40900、`role=admin` 422/42200、登录 token 长度 164、`/auth/me` 200、无 token/错密码/未知用户/过期 token/乱码 token 均 401 且文案符合预期；DB 中 `password_hash` 前缀 `$argon2id$v=19$m=655`；测试用户已删除，`users` 计数 0。
 - 已知不足（不粉饰）：无 refresh/登出/吊销与登录限流（暴力破解防护留给部署层或 S3-7 之后）；Argon2id 单次登录约 270ms（含 DB 与网络，本机 curl 实测 0.269–0.277s），是有意付出的安全成本；无邮箱/手机号验证与找回密码（SCHEMA 无 email 字段）。
 
+## D-023 S2-3 RBAC 与数据隔离实现决策（spec §2.3/§7 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-3-rbac.md，plan 见 docs/plan/s2-3-rbac.md）
+- 决策 1（验收载体 = 依赖 + pytest，不新增生产接口）：任务卡要求「A 学生的笔记 B 访问返回 403」，但笔记接口要 S2-5 才有、`/admin/usage` 依赖的 `llm_call_logs` 表未建，本卡没有任何可打的真实学生数据端点。因此生产代码只交付 `core/permissions.py`，用测试内临时 FastAPI 应用挂 `/students/{student_id}/notes` 验证；真实 curl 证据推迟到 S2-5 笔记接口落地时补。用户 2026-10-26 确认。
+- 决策 2（admin 不绕过）：`require_student_access` 只认「本人」或「已绑定 parent/teacher」；管理员看学生数据必须走 `require_role("admin")` 的专用管理接口。若在此放行 admin，任何普通学生数据接口都会变成管理员的隐式全量读口子，违反最小权限。
+- 决策 3（查看方角色限 parent/teacher）：`user_relations.teacher_id` 语义是「查看方」（SCHEMA §2.2），只有 parent/teacher 角色才查绑定关系；学生即使因脏数据出现在 `teacher_id` 也不放行。
+- 决策 4（403 不泄露存在性）：越权统一 `403/40300`「无权访问该资源」，「无权限」与「目标不存在」不可区分；404 只留给已授权后的资源缺失。
+- 决策 5（依赖而非装饰器）：`require_role` 写成依赖工厂（角色名在工厂阶段校验，拼错立即 `ValueError`）；`require_student_access` 直接作依赖用，`student_id` 由路径注入；service 层用 `ensure_student_access`。装饰器会隐藏参数与返回类型，也不利于 `dependency_overrides`。
+- 决策 6（DB 为权威）：角色与绑定关系一律从数据库读（`get_current_user` 回表 + `user_relations` 查询），token 内 `role` 不参与判定；服务层查询必须显式 `WHERE <model>.user_id = <已授权学生>`，该规则写入 API.md §0 与 AGENTS §9.2。
+- 验证：pytest **260/260**（基线 237 + 新增 23：单元 13 + 接口 10）；硬验收用例 `test_permissions_api.py::test_b_cannot_read_a_notes_returns_403` PASSED（403 + 40300 +「无权访问该资源」）；其余覆盖本人 200、已绑定家长/老师 200、未绑定家长/老师 403、admin 读学生数据 403、admin 读管理接口 200、学生读管理接口 403、无 token 401、未绑定家长访问不存在学生仍 403（不泄露）。
+- 已知不足（不粉饰）：本卡**无 curl 证据**（无生产接口），以 pytest 为验收证据；无家长-学生绑定管理接口（目前只能 SQL 或后续卡建）；无越权审计日志；每个受保护请求多一次 `user_relations` 查询（走 `uq_user_relations_teacher_student`，未加缓存）。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

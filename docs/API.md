@@ -8,7 +8,16 @@
 
 - Base path：`/api/v1`；另有 `GET /health`（无前缀，S0-5 交付）
 - 命名：路径与字段一律 `snake_case`（与数据库一致，**定死**）
-- 认证：Bearer JWT（S2-2 交付）：请求头 `Authorization: Bearer <token>`；载荷 `{sub, role, iat, exp}`，HS256，默认 24h 过期；无 refresh/登出（见 §12）。未特别标注的接口权限默认 `student`，且只能访问自己的数据；⚠ RBAC 细则 S2-3 定稿
+- 认证：Bearer JWT（S2-2 交付）：请求头 `Authorization: Bearer <token>`；载荷 `{sub, role, iat, exp}`，HS256，默认 24h 过期；无 refresh/登出（见 §12）。未特别标注的接口权限默认 `student`，且只能访问自己的数据；RBAC 与数据隔离见下
+- 角色与数据范围（S2-3 定稿）：
+
+| 角色 | 数据范围 | 说明 |
+|---|---|---|
+| student | 仅本人 | 学生数据接口隐式 `WHERE user_id = 当前用户` |
+| parent / teacher | 本人 + 已绑定学生 | 绑定关系在 `user_relations`（`teacher_id`=查看方）；跨学生访问必须过 `require_student_access` / `ensure_student_access` |
+| admin | 仅专用管理接口 | 通过 `require_role("admin")` 判定；**不继承**学生数据权限 |
+
+- 数据隔离（S2-3 定稿）：访问他人学生数据失败统一 `403/40300`「无权访问该资源」，不区分“无权限”与“不存在”；服务层查询必须显式 `WHERE <model>.user_id = <已授权学生>`，禁止只校验角色就返回数据；token 内 `role` 不作为权限来源（以数据库为准）
 - 统一响应：`{code, message, trace_id, data}`（成功 `code=0`；错误结构与码表见 §13，S0-5 已落地）
 - trace_id 透出：响应头 `X-Trace-Id` 一律返回；请求头可传 `X-Trace-Id` 续链（S0-5 定稿）
 - 分页：列表接口统一分页参数（fastapi-pagination，S2-4 交付）

@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-2 认证（注册 / 登录 / `/auth/me` / `get_current_user`；Argon2id + HS256 JWT；pytest 237/237；curl 全链路实测通过）
-- 下一步：S2-3 RBAC 与数据隔离（在 `get_current_user` 上叠角色与家长-学生关系校验）
+- 最近完成：S2-3 RBAC 与数据隔离（`require_role` / `require_student_access` / `ensure_student_access`；admin 不绕过；硬验收「B 访问 A 的笔记 → 403」通过；pytest 260/260）
+- 下一步：S2-4 通用分页/排序/筛选（`{items, total, page, page_size}` 基类）
 - 已知阻塞：无
 
 ## 任务清单
@@ -33,7 +33,7 @@
 ### 阶段 2：基础框架（M1）
 - [x] S2-1 数据模型与迁移（第一批）
 - [x] S2-2 认证 JWT
-- [ ] S2-3 RBAC 与数据隔离
+- [x] S2-3 RBAC 与数据隔离
 - [ ] S2-4 通用分页/排序/筛选
 - [ ] S2-5 笔记表与 CRUD API
 - [ ] S2-6 文件上传 + MinIO + 去重
@@ -100,6 +100,9 @@
 | 2 | API.md 存在 TODO 待定字段与待定接口 | 前后端并行开发受限 | 各对应任务定稿时 |
 | 3 | 无 refresh / 登出 / token 吊销，无登录限流（S2-2 遗留） | 令牌到期前无法主动失效；暴力破解防护缺失 | 部署层或 S3-7 之后 |
 | 4 | `users` 表仍无业务数据（注册已可用，等待 S2-3/S2-11 真实使用） | 家长-学生关系与权限演示缺素材 | S2-3 起按需创建 |
+| 5 | 无家长-学生绑定管理接口（S2-3 只做「已绑定则放行」判断） | 绑定只能靠 SQL/后续卡，家长看不到学生数据 | S2-5 起按需补接口 |
+| 6 | 无越权审计日志（S2-3 遗留） | 越权尝试只返回 403，无落库记录 | S3-7 之后随 `audit_logs`/`llm_call_logs` 一起 |
+| 7 | 权限判定未缓存：每个受保护请求多一次 `user_relations` 查询 | 量小可接受；高并发时是额外 RTT | 有性能需求时再加缓存 |
 
 ## 变更日志
 
@@ -192,3 +195,10 @@
 - 数据库核验：`password_hash` 前缀 `$argon2id$v=19$m=655`；验收后删除测试账号，`users` 计数 0
 - 已知事项（不粉饰）：无 refresh/登出/吊销与登录限流（见遗留 3）；Argon2id 单次登录约 270ms；用户名大小写归一为小写（`Alice`=`alice`）；token 内 role 不作为权限来源，S2-3 必须基于回表用户判断
 - 文档同步：API.md（§0 Bearer 约定、§1 三条接口定稿、§12 TODO 更新、§13 增 40900）、AGENTS.md（§9.6 路由 + 认证锚点）、DECISIONS D-022、PROGRESS、.env.example（AUTH_*）、requirements.txt
+
+### 2026-10-26（S2-3）
+- S2-3 完成（按 §10 全流程：spec docs/spec/s2-3-rbac.md + plan docs/plan/s2-3-rbac.md，均经用户确认）。交付：backend/app/core/permissions.py（`require_role` / `require_student_access` / `ensure_student_access` / `can_access_student` / `has_student_relation`）、backend/tests/test_permissions.py（13 条）、backend/tests/test_permissions_api.py（10 条，含硬验收）
+- 拍板（D-023，2026-10-26 用户确认）：验收载体 = 依赖 + pytest，**不新增生产接口**（本卡没有可打的真实学生数据端点，curl 证据留 S2-5）；**admin 不绕过**学生数据权限，管理端只走 `require_role("admin")`；查看方限 parent/teacher；越权统一 403/40300「无权访问该资源」不泄露存在性；依赖而非装饰器；角色与绑定关系以数据库为准
+- 验收证据：pytest **260 passed, 1 warning**（基线 237 + 新增 23）；硬验收用例 `tests/test_permissions_api.py::test_b_cannot_read_a_notes_returns_403` PASSED（HTTP 403 + code 40300 +「无权访问该资源」）；正向 A 读自己 200、已绑定家长/老师 200；反向 未绑定家长/老师 403、admin 读学生数据 403、学生读管理接口 403、无 token 401、未绑定家长访问不存在学生仍 403
+- 已知事项（不粉饰）：本卡无 curl 证据（无生产接口）；无绑定管理接口（遗留 5）；无越权审计日志（遗留 6）；权限判定未缓存（遗留 7）
+- 文档同步：API.md（§0 角色与数据范围矩阵 + 隔离规则）、AGENTS.md（§9.2 学生数据接口约定、§9.6 权限锚点）、DECISIONS D-023、PROGRESS；无 API 端点/SCHEMA/依赖变更
