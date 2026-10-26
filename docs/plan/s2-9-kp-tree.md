@@ -1632,7 +1632,7 @@ Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_kp_api.py -
 Expected: `10 passed`
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest -q`
-Expected: `461 passed, 1 warning`（425 + 36）
+Expected: `462 passed, 1 warning`（425 + 37）
 
 - [ ] **Step 5: 提交**
 
@@ -1745,7 +1745,7 @@ docker exec study-agent-postgres psql -U study -d study_agent -c \
 cd backend && ../.venv/Scripts/python.exe -m pytest -q
 ```
 
-Expected：表清空；`461 passed, 1 warning`
+Expected：表清空；`462 passed, 1 warning`
 
 ---
 
@@ -1790,6 +1790,20 @@ git commit -m "docs(s2-9): 知识点树契约、决策与进度同步"
 
 - 覆盖 spec：读/写接口（Task 4）、树查询与校验（Task 1）、导入模式与引用保护（Task 2）、种子与 CLI（Task 3）、真实验收（Task 5）、文档（Task 6）。
 - 类型一致：`KpCreate/KpUpdate`、`flat.parent_code`、`SyncPlan.skipped`、`ImportResult.stats/skipped` 在各 task 间一致。
-- 测试数：12 + 11 + 3 + 10 = 36（较 spec 的 32 多 4：种子 3 + has_children 1）→ 全量 425 + 36 = 461。
+- 测试数：12 + 12 + 3 + 10 = 37（较 spec 初稿的 32 多 5：种子 3 + has_children 1 + 引用映射 1）→ 全量 425 + 37 = 462。
 
 > 执行时以实际 pytest 输出为准回填数字。
+
+---
+
+## 执行记录（2026-10-26）
+
+- 提交：`942fa45` feat(s2-9) 服务与校验、`ffdbc3b` feat(s2-9) 导入计划与落库、`39cd18c` feat(s2-9) 种子与 CLI、`52e4868` feat(s2-9) 接口、`daad0e5` fix(s2-9) 引用保护按 code 匹配、docs(s2-9) 契约/决策/进度（本提交）。
+- pytest：**462 passed, 1 warning**（环境既有 StarletteDeprecationWarning）。
+- 实施偏差：
+  1. `test_update_kp_move_keeps_subtree_within_four_levels` 初稿用 level-1 目标（不超深），改为 level-3 目标才真正触发 5 级；已同步 plan。
+  2. `flatten_tree` 初版对空 children 也做深度检查，导致 4 层叶子在 level 5 空列表报错；改为空列表直接 return。
+  3. 导入 CLI 直接执行时 `app` 不在 `sys.path`；补 `ROOT = parents[1]` 插入。
+  4. `import_tree` 首版把引用 id 与 code 混用，真实 overwrite 删被引用节点触发 FK；改 `referenced_codes_for` 映射 + 单测。
+  5. Task 3 CLI 原先先返回 `ImportStats` 再重构 `ImportResult`；实施时直接按 `ImportResult` 一次落地。
+- 真实验收数字：append created=108、二次 unchanged=108、tree total=108、student 读 200/写 403、teacher 建 201/移动 200、删根 409、引用删 409、清引用 204、overwrite deleted=1 skipped=1（referenced）、补回 created=1；清理后各表 0。

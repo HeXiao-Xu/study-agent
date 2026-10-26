@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-8 文档解析 Worker（上传自动入队 `parse.document`；`files` 四列迁移 0005；复用 parse/chunk/index；文档笔记 + chunks；状态机 pending→parsing→done/failed + 进度 + error_msg；pytest 425/425；真实 PDF/损坏 PDF/md/png 全流程实测）
-- 下一步：S2-9 知识点树 CRUD + 导入脚本（`api/v1/kp.py`、`scripts/import_kp_tree.py`、种子数据）
+- 最近完成：S2-9 知识点树 CRUD + 导入脚本（5 个 `/kp` 接口、一次查询组树、level 推导/移动防环、删除三段保护、append/overwrite + dry-run、108 节点高中数学种子；pytest 462/462；真实导入/幂等/权限/引用保护/overwrite 全流程实测）
+- 下一步：S2-10 知识点对齐与待确认队列（`kp_align_service.py`、`/kp/align/confirm`）
 - 已知阻塞：无
 
 ## 任务清单
@@ -39,8 +39,7 @@
 - [x] S2-6 文件上传 + MinIO + 去重
 - [x] S2-7 异步任务框架
 - [x] S2-8 文档解析 Worker
-- [ ] S2-8 文档解析 Worker
-- [ ] S2-9 知识点树 CRUD + 导入
+- [x] S2-9 知识点树 CRUD + 导入
 - [ ] S2-10 知识点对齐与待确认队列
 - [ ] S2-11 前端登录/布局/路由守卫
 - [ ] S2-12 前端笔记列表与编辑器
@@ -123,8 +122,16 @@
 | 24 | 文档笔记与上传文件无删除联动（S2-8 遗留） | 删笔记不删文件；删文件无接口 | 文件管理接口一起补 |
 | 25 | 解析重试会让文件状态短暂在 failed/parsing 抖动（S2-8 遗留） | 前端可能闪一次失败提示 | 前端按 task 终态判定或加“重试中”标记 |
 | 26 | `parse_progress` 是阶段值，不是页级；Docling 首轮约 3 分钟（S2-8 遗留） | 用户看不到细粒度进度，首轮体感慢 | 需要时加页级回调/预热 |
+| 27 | 高中数学种子树是 AI 草稿，考点归属与 `exam_weight` 未经教研校对（S2-9 遗留） | 对齐/组卷权重可能偏差 | 用户人工校对 `backend/data/kp_math.json` 后 overwrite |
+| 28 | 知识点无拖拽/批量排序，`order_no` 无唯一约束（S2-9 遗留） | 前端调整顺序需逐节点 PATCH；同序按 id 兜底 | S2-14 前端树管理时按需补批量接口 |
+| 29 | 导入 overwrite 直接改库，无自动备份/并发锁；append 假设完整树（S2-9 遗留） | 误删只能靠备份；并发导入第二个报唯一冲突；部分树会重置 level | 覆盖前 `pg_dump`；批量导入串行执行 |
 
 ## 变更日志
+
+### 2026-10-26（S2-9）
+- S2-9 完成（spec `docs/spec/s2-9-kp-tree.md` + plan `docs/plan/s2-9-kp-tree.md`，用户确认后实施）。交付：`app/schemas/kp.py`、`app/services/kp_service.py`（一次查询内存组树、level 推导、移动防环/子树高度、删除三段保护）、`app/services/kp_import.py`（`load_tree_file`/`flatten_tree`/纯函数 `plan_sync`/`import_tree`/`referenced_codes_for`）、`app/api/v1/kp.py` 5 接口、`scripts/import_kp_tree.py`（append/overwrite/dry-run/退出码）、`data/kp_math.json`（108 节点 4 层 11 模块）；`api/router.py` 挂载。
+- 验收证据：pytest 462/462；真实 CLI append created=108、level 1/11/68/28、二跑 unchanged=108；tree total=108；student 读 200 / 匿名 401 / student 写 403；teacher 建叶子 201(level4)、PATCH 移动 200(level2)、删根 409、引用删 409、清引用 204；overwrite 修复引用 id→code 映射后 deleted=1、被引用节点 skip 并打印原因；清理后各表 0。
+- 文档同步：API.md §4 定稿、SCHEMA.md §3.1 注记、AGENTS §9.2/§9.6、DECISIONS D-029、PROGRESS 27–29/日志、实施计划勾选。
 
 ### 2026-10-15
 - S0-1 完成：monorepo 骨架（backend/web/docs/deploy/scripts/eval，含 backend/app 分层与 eval 子目录）；.gitignore；README.md；删除 PyCharm 欢迎脚本 main.py / test_main.http；.idea 移出版本控制

@@ -322,6 +322,26 @@
 - 验证：pytest **425/425**（基线 401 + 新增 24：文本支路 2 + 任务 18 + 接口 4）。真实 PDF + Worker + MinIO + Postgres + 真实 Embedding：英文/中文样张 `parsing(10) → parsing(50) → done(100)`（Docling 首轮 182s、次轮 90s）；`files.parse_result_json={"pages":2,"blocks":4,"chunks":2,"parser":"docling","tokens":85,...}`；`notes` 一条 `source_file_id=4`、`content_md` 含「单调性/例题」；`note_chunks` 2 条与统计一致；重复上传同一 PDF → 200 `deduped=true`、任务数/chunks 不变；损坏 PDF → `failed`、`error_msg="FileDataError: Failed to open file ..."`、attempts=3；`.md` → `done` 且 chunks=1（真实 Embedding 9 tokens）；`.png` → `failed` +「图片解析暂未支持（待 OCR）」；Worker 日志 `file_parse_started/file_parse_done/file_parse_failed` 只含 file_id/chunks/tokens/error；清理后五张表计数 0。
 - 已知不足（不粉饰）：解析+embedding 共用一个 300s job timeout，超大 PDF 可能超时且不能分页续跑；图片/扫描件依赖 OCR 卡；文档笔记会出现在笔记列表，文件无删除接口，笔记与文件可能不同步；重试期间文件状态会在 failed/parsing 间短暂抖动；`parse_progress` 是阶段值而非页级；`parse_result_json` 不含正文，笔记被删后只能重新上传（done 不会重解析）；Docling 首轮加载模型 3 分钟级；ARQ 自带控制台日志含 `↻`，Windows GBK 终端会打印 `UnicodeEncodeError`（不影响任务，JSON 日志正常）。
 
+## D-029 知识点树 CRUD 与导入（S2-9）
+
+- 背景：S2-1 已建 `subjects`/`knowledge_points`/`knowledge_edges`，S2-5 建 `note_kps`，但表为空；S2-9 要交付树读/写接口、导入脚本与种子树。spec 见 `docs/spec/s2-9-kp-tree.md`。
+- 决策 1（读权限）：`GET /kp/subjects`、`GET /kp/tree` 登录即可（API.md 原写 student，放宽为登录用户，学生仍可读）；写接口 `require_role("admin", "teacher")`。
+- 决策 2（学科入参）：沿用 API.md §4 的 `?subject=math`（学科 code），避免前端先换取 subject_id；出参同时带 `subject.id`。
+- 决策 3（组树）：同 subject 全量一次查询（`level, order_no, id`）后内存 `id→node` 组树，禁止按节点递归查库。
+- 决策 4（level）：只由父节点推导（根 1、最深 4），创建不接受客户端传 level；父节点必须同 subject。
+- 决策 5（移动）：PATCH `parent_id` 时校验非自身/非后代（防环）、目标同 subject、移动后子树高度 ≤4；成功后 BFS 重算全部后代 level。
+- 决策 6（code）：创建后不可改；`(subject_id, code)` 冲突先查后捕获 `IntegrityError`，统一 409「知识点编码已存在」。
+- 决策 7（删除）：物理删除，业务层三段保护——子节点、`note_kps`、`knowledge_edges`；任一命中 409 并给可读 message，不级联。
+- 决策 8（导入模式）：`append` 只按 code upsert；`overwrite` 同步删除文件缺失项。删除按 level 降序；仍有保留子节点或被引用 → 保留并计入 skipped，打印 `skip code=… reason=…`。
+- 决策 9（导入引用保护）：先把 `note_kps`/`knowledge_edges` 的 kp_id 映射成 code 再参与计划——首轮实现按 id 与 code 直接比较导致被引用节点仍进入删除集，真实 overwrite 触发 FK 失败（`fk_note_kps_kp_id`），已修复并补 `referenced_codes_for` 单测（commit daad0e5）。
+- 决策 10（导入落库）：先按 level 升序建新节点（父先子后，flush 拿 id），再更新、再删除；`--dry-run` 只算计划不落库；数据错误退出 2、DB 错误退出 1。
+- 决策 11（subject 自举）：导入脚本按文件 `subject.code` 查 `subjects`，不存在则创建（`math`/`高中数学`/`高中`），S2-9 无需手工造学科。
+- 决策 12（种子）：`backend/data/kp_math.json` 108 节点、4 层、11 个二级模块，`code` 形如 `MATH-FUNC-01-01`，`exam_weight` 0.5–1.0 为经验值非考纲；AI 草稿需用户人工校对（本卡交付草稿，不改考纲）。
+- 决策 13（接口范围）：不做单点详情、批量移动、拖拽排序、subject 删除、`knowledge_edges` CRUD、embedding 写入；这些留给 S2-10/S2-14/S4-5。
+- 决策 14（测试）：`plan_sync`/`flatten_tree` 纯函数单测；service/API 用 FakeSession 按 SQL 文本分派实体，不连库。
+- 验证：pytest **462/462**（基线 425 + 新增 37：service 12 + import 12 + seed 3 + API 10）。真实 Postgres + uvicorn + CLI：append `created=108`，`subjects=1`、level 分布 1/11/68/28；二次 append `created=0 unchanged=108`；tree 接口 total=108；student 读 200、匿名 401、student 写 403/40300；teacher 建叶子 201（level=4）、PATCH 移到根下 200（level=2）、删根 409「存在子知识点」、有 `note_kps` 引用删 409「已被笔记引用」、清引用后 204；overwrite `--dry-run` `deleted=2 skipped=0`（修复前）→ 修复后 `deleted=1 skipped=1`，正式执行 deleted=1、被引用节点保留且打印 `skip code=MATH-COUNT-02-02 reason=referenced`，库内 107；再 append 补回 `created=1`；清理后 kp/subjects/notes/users 均 0。
+- 已知不足（不粉饰）：种子树是 AI 草稿，需人工校对考点归属与权重；无拖拽/批量排序，`order_no` 冲突不做唯一约束（按 `order_no,id` 稳定排序）；overwrite 直接改库、无自动备份与并发锁（唯一约束兜底，第二个导入会报 409）；append 假设文件是完整树（部分树会把节点 level/parent 按文件重置）；删除物理且无回收站；导入不做跨 subject 批量。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

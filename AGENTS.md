@@ -90,6 +90,7 @@ eval/{datasets,configs,results}
 - 列表接口（S2-4）：统一用 `page_params` / `sort_params` / `paginate_query` / `apply_sort`（utils/pagination.py）；禁止手写 `limit/offset`、禁止字符串拼接 `order_by`；排序字段必须来自白名单映射
 - 文件上传（S2-6）：必须分块流式读写（禁止 `await file.read()` 全量入内存）；先校验扩展名 + 文件头 magic，再落库；对象键内容寻址、原始文件名只做展示；同用户 `sha256` 去重靠唯一约束，冲突复用赢家；MinIO 异常统一 `StorageUnavailableError`（500/50000，不泄露 endpoint）；上传成功后按 `parse_status ∈ {pending, failed}` 入队 `parse.document`，`done/parsing` 去重命中不重复入队
 - 异步任务（S2-7）：提交必须走 `task_service.create_task`（先写 `async_tasks` 再入队，入队失败置 `failed`）；处理函数是同步 `(Session, payload)`，**不得自行 commit**，由 `tasks/runner.py` 统一提交/回滚；重试只由 runner 决策（3 次、2s/4s 退避）；ARQ `enqueue_job` 不接受 `_max_tries`/`_job_timeout`（配在 `WorkerSettings`）；Redis 一律 `127.0.0.1`（Windows IPv6 坑）
+- 知识点树（S2-9）：树查询必须一次 SQL 查完同 subject 全部节点再内存组树（禁止 N+1 递归）；`level` 只由父节点推导（根 1、最深 4），移动节点先校验环与子树高度并 BFS 重算后代 level；`code` 创建后不可改；删除保护顺序 子节点 → `note_kps` → `knowledge_edges`（409，不级联）；导入 `append` 只 upsert、`overwrite` 同步删除缺失项，被引用或仍有保留子节点的节点 skip 并打印原因；写接口仅 admin/teacher
 - 文档解析 Worker（S2-8）：必须复用 `parse_document → chunk_document → index_chunks`，禁止在 `tasks/parse_document.py` 另写解析/切片/向量化；解析结果落“文档笔记”（`notes.user_id + source_file_id` 唯一定位），切片挂该 `note_id`；文件状态机 `pending→parsing→done/failed`，`error_msg` ≤500 字；**唯一允许 handler 自行 commit 的场景**：写 `files` 的 `parsing/failed/progress`（runner 的 rollback 会吞掉这些状态，且进度轮询需要中途可见），handler 不得提交 `async_tasks` 状态；失败先落 `failed` 再抛；图片/扫描件明确失败不静默成功
 
 ### 9.3 AI 层（阶段 1 的高压线）
@@ -123,6 +124,7 @@ eval/{datasets,configs,results}
 - 文件上传样例：backend/app/services/file_service.py（`sanitize_filename` 砍路径穿越、`detect_type` + `check_magic` 双校验、流式 sha256、`uq(user_id, sha256)` 去重、并发冲突复用赢家、库失败补偿删对象）
 - 异步任务样例：backend/app/tasks/{registry,runner,queue,worker}.py + backend/app/services/task_service.py（注册表 import 副作用；提交先落库再入队；runner 状态机与指数退避；同步 handler 走 `asyncio.to_thread`；Worker 启动时 `setup_logging`）
 - 文档解析 Worker 样例：backend/app/tasks/parse_document.py（下载到临时文件 → 复用解析门面 → chunk → upsert 文档笔记 → index_chunks；阶段进度 10/50/80/100；失败先 commit 再 raise；Windows 临时文件清理 best-effort）
+- 知识点树样例：backend/app/models/knowledge_point.py + backend/app/services/kp_service.py + backend/app/api/v1/kp.py（一次查询内存组树；level 由父推导；移动校验环/子树高度；删除保护 409；写接口 `require_role("admin", "teacher")`；导入见 `services/kp_import.py` 的纯函数 `plan_sync` + CLI `scripts/import_kp_tree.py`）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）

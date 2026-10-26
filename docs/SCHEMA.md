@@ -109,6 +109,8 @@ erDiagram
 | updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
 
 > S2-1：`embedding` 列与 HNSW 索引已建，数据由 S2-10 写入；`parent_id` 自引用不设级联删除（NO ACTION），删除顺序由 S2-9 业务控制。
+>
+> S2-9：种子树由 `scripts/import_kp_tree.py` 写入（`subjects.math` 首次自动创建）；`level` 由父节点推导（根 1、最深 4），不接受客户端直传；`code` 创建后稳定不可改，导入按 `(subject_id, code)` 对齐；删除保护为业务层（子节点 → `note_kps` → `knowledge_edges` 依次检查，不级联）。
 
 ### 3.2 knowledge_edges
 

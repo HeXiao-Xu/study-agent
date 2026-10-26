@@ -160,12 +160,52 @@
 - 状态机：`pending → running → succeeded`；可重试失败回 `pending`，第 3 次失败终态 `failed`
 - 错误：`404/40400`「任务不存在」；`403/40300`「无权访问该任务」
 
-## 4. 知识点
+## 4. 知识点（S2-9 定稿）
+
+### GET /api/v1/kp/subjects
+- 权限：登录用户
+- 类型：同步
+- 出参：`Envelope[SubjectOut[]]`：`id` / `name` / `code` / `stage`
+- 备注：当前由导入脚本种出 `math`（高中数学）
 
 ### GET /api/v1/kp/tree?subject=math
-- 权限：student
+- 权限：登录用户（原 student 放宽为登录用户，学生仍可读）
 - 类型：同步
-- 出参：知识点树（knowledge_points 层级结构）
+- 入参：`subject`（学科 **code**，1–30，必填）
+- 出参：`Envelope[KpTreeOut]`：
+
+  ```json
+  {"subject": {"id": 1, "name": "高中数学", "code": "math", "stage": "高中"},
+   "nodes": [{"id": 1, "subject_id": 1, "parent_id": null, "name": "高中数学",
+              "code": "MATH", "level": 1, "description": null, "exam_weight": 1.0,
+              "order_no": 0, "children": []}]}
+  ```
+
+- 备注：一次 SQL 查完同 subject 全部节点（`level, order_no, id` 排序），内存组树；节点按 `order_no, id` 稳定排序
+- 错误：`404/40400`「学科不存在」；`422/42200` 缺 `subject`
+
+### POST /api/v1/kp
+- 权限：`admin` / `teacher`（其他角色 → 403/40300）
+- 类型：同步
+- 入参：`subject`（学科 code）/ `parent_id`（可选，必须同 subject）/ `code`（1–50，同 subject 内唯一）/ `name`（1–100）/ `description`（可选，≤500）/ `exam_weight`（可选，0–1）/ `order_no`（可选，≥0，默认 0）
+- 出参：**201** `Envelope[KpNodeOut]`（不含 `children`）
+- 备注：`level` 由父节点推导（根 1，最深 4），不接受客户端传；`code` 创建后不可改
+- 错误：`404/40400` 学科/父节点不存在；`409/40900`「知识点编码已存在」；`422/42200` 层级超 4 / 父节点不属于同一学科
+
+### PATCH /api/v1/kp/{kp_id}
+- 权限：`admin` / `teacher`
+- 类型：同步（部分更新）
+- 入参：`name` / `description` / `exam_weight` / `order_no` / `parent_id` 任选；`parent_id=null` 表示移到根；`code` / `subject_id` 不可改
+- 出参：`Envelope[KpNodeOut]`
+- 备注：改父时校验目标同 subject、不能是自身/后代（环），且移动后子树高度不超过 4；成功自动 BFS 重算该节点及全部后代 `level`
+- 错误：`404/40400` 节点/新父节点不存在；`422/42200` 成环 / 超过 4 级 / 跨学科
+
+### DELETE /api/v1/kp/{kp_id}
+- 权限：`admin` / `teacher`
+- 类型：同步（物理删除）
+- 出参：**204** 无响应体
+- 备注：删除保护顺序——有子节点、被 `note_kps` 引用、被 `knowledge_edges` 引用，任一命中即拒绝（不级联）
+- 错误：`404/40400`；`409/40900`「存在子知识点，请先删除子节点」/「已被笔记引用，无法删除」/「存在知识点关系引用，无法删除」
 
 ### POST /api/v1/kp/align/confirm
 - 权限：student
