@@ -138,9 +138,9 @@ erDiagram
 | filename | TEXT | 否 | — | 原始文件名 | — |
 | mime | TEXT | 否 | — | MIME 类型 | — |
 | size | BIGINT | 否 | — | 字节数 | — |
-| storage_path | TEXT | 否 | — | MinIO 对象路径 | — |
+| storage_path | TEXT | 否 | — | MinIO 对象键：`uploads/{user_id}/{sha256[:2]}/{sha256}{ext}` ✅（S2-6 定稿；不返回给客户端） | — |
 | sha256 | TEXT | 否 | — | 内容哈希（去重，方案 5.3） | UNIQUE(user_id, sha256) ✅（S2-5 定稿：同用户唯一，跨用户互不可见） |
-| parse_status | TEXT | 否 | 'pending' | 解析状态，§10.2 | idx ⚠ |
+| parse_status | TEXT | 否 | 'pending' | 解析状态，§10.2；S2-6 只写 `pending`，`parsing/done/failed` 与错误信息由 S2-8 迁移扩展 | idx ⚠ |
 | parse_result_json | JSONB | 是 | — | 结构化解析结果（标题层级+段落+公式+题目块） | — |
 | created_at | TIMESTAMPTZ | 否 | now() | 创建时间 | — |
 

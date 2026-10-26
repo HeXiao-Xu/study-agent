@@ -88,6 +88,7 @@ eval/{datasets,configs,results}
 - 外部 HTTP 调用超时必设、失败必处理
 - 学生数据接口（S2-3）：先过 `require_student_access` / `ensure_student_access`，再查库；SQL 显式 `where(<Model>.user_id == student_id)`，越权统一 `403/40300`，不泄露目标是否存在
 - 列表接口（S2-4）：统一用 `page_params` / `sort_params` / `paginate_query` / `apply_sort`（utils/pagination.py）；禁止手写 `limit/offset`、禁止字符串拼接 `order_by`；排序字段必须来自白名单映射
+- 文件上传（S2-6）：必须分块流式读写（禁止 `await file.read()` 全量入内存）；先校验扩展名 + 文件头 magic，再落库；对象键内容寻址、原始文件名只做展示；同用户 `sha256` 去重靠唯一约束，冲突复用赢家；MinIO 异常统一 `StorageUnavailableError`（500/50000，不泄露 endpoint）
 
 ### 9.3 AI 层（阶段 1 的高压线）
 - ai/ 之外禁止 import openai/httpx 客户端；业务层只 import ai/ 的适配器
@@ -116,6 +117,8 @@ eval/{datasets,configs,results}
 - 权限样例：backend/app/core/permissions.py（`require_role` 工厂校验角色名；`require_student_access` 用于 `/students/{student_id}/...` 路径；service 用 `ensure_student_access`；本人或已绑定 parent/teacher 放行，admin 不绕过；越权 403/40300）
 - 分页样例：backend/app/utils/pagination.py + backend/app/schemas/common.py 的 `PageData`（`{items,total,page,page_size}` 套 `Envelope`；fastapi-pagination 只负责 count + limit/offset；`apply_sort` 白名单防注入；非法字段 422/42200）
 - 笔记模块样例：backend/app/models/note.py + backend/app/services/note_service.py + backend/app/api/v1/notes.py（写时派生 `content_text`；软删 `deleted_at` 全查询过滤；`build_notes_query` 固定 user_id + deleted_at；标签用 `tags @> ARRAY[tag]`；排序走 S2-4 白名单；越权 403 / 不存在 404）
+- 对象存储样例：backend/app/core/storage.py（`ObjectStorage` 协议 + `MinioStorage` 懒连接/懒建桶 + `get_storage()` 单例；SDK 异常统一 `StorageUnavailableError`；路由用 `Depends(get_storage)`，测试注入假实现）
+- 文件上传样例：backend/app/services/file_service.py（`sanitize_filename` 砍路径穿越、`detect_type` + `check_magic` 双校验、流式 sha256、`uq(user_id, sha256)` 去重、并发冲突复用赢家、库失败补偿删对象）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）

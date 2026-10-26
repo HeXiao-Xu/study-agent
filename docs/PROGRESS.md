@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-5 笔记表与 CRUD API（迁移 0003 建 files/notes/note_kps + note_chunks 外键；5 个笔记接口；`content_text` 派生；pytest 322/322，curl + psql 实测）
-- 下一步：S2-6 文件上传 + MinIO + sha256 去重（依赖本卡建好的 `files` 表与 `uq_files_user_sha256`）
+- 最近完成：S2-6 文件上传 + MinIO + 去重（流式上传、白名单+magic 校验、`uq(user_id, sha256)` 复用、`GET /files/{id}/parse-status`；pytest 368/368；真实 MinIO 验收对象数 1、61MB 413）
+- 下一步：S2-7 异步任务框架（ARQ/Celery + 任务状态查询），为 S2-8 解析 Worker 铺路
 - 已知阻塞：无
 
 ## 任务清单
@@ -36,7 +36,7 @@
 - [x] S2-3 RBAC 与数据隔离
 - [x] S2-4 通用分页/排序/筛选
 - [x] S2-5 笔记表与 CRUD API
-- [ ] S2-6 文件上传 + MinIO + 去重
+- [x] S2-6 文件上传 + MinIO + 去重
 - [ ] S2-7 异步任务框架
 - [ ] S2-8 文档解析 Worker
 - [ ] S2-9 知识点树 CRUD + 导入
@@ -108,7 +108,11 @@
 | 10 | 笔记 `q` 是 ILIKE 子串匹配，未接 jieba/tsvector（S2-5 遗留） | 数据量上万后慢；无语义与分词召回 | S3 检索服务化时统一切到 tsvector + 向量 |
 | 11 | 笔记软删无回收站，行与正文仍占存储（S2-5 遗留） | 误删只能改库恢复；存储不释放 | 前端回收站需求出现时补恢复/彻底删除 |
 | 12 | 只有「我的笔记」列表，没有「按学生列笔记」的家长/老师视角（S2-5 遗留） | 家长只能点开已知 note_id，无法浏览孩子笔记 | S2-12 前端联调或家长端卡 |
-| 13 | `note_kps` 只建表，无对齐/待确认接口；`files` 有表无上传接口（S2-5 遗留，S2-6/S2-10 承接） | 知识点关联与文件上传暂时不可用 | S2-6 上传、S2-10 对齐 |
+| 13 | `note_kps` 只建表，无对齐/待确认接口（S2-5 遗留，S2-10 承接）；`files` 上传接口已由 S2-6 交付 | 知识点关联暂时不可用 | S2-10 对齐 |
+| 14 | 上传去重必须读完整个文件才算 sha256（S2-6 遗留） | 60MB 文件要 1–2 秒才返回；无法“秒回” | 需求出现时改为客户端预哈希 |
+| 15 | 文件只有扩展名 + 头部 magic 校验，无病毒扫描/图片重编码（S2-6 遗留） | 合法容器内嵌恶意内容检测不到 | 上线前按需接扫描 |
+| 16 | 无文件列表/下载/删除接口，`presigned_get_url` 只在存储层（S2-6 遗留） | 前端无法直接列出/下载已传文件 | S2-12 笔记插图时补签名 URL 接口 |
+| 17 | `parse_status` 只有 `pending`，无 `error_msg` 列（S2-6 遗留） | 解析进度与失败原因还看不到 | S2-8 迁移 + Worker 回写 |
 
 ## 变更日志
 
@@ -223,3 +227,11 @@
 - 与 plan 的唯一偏差：标签过滤原写 `Note.tags.any(tag)`（`= ANY(tags)`），实测触发 SQLAlchemy 2.1 `SADeprecationWarning` 且不走 GIN，改为 PG `ARRAY.contains` → `tags @> ARRAY[tag]`；已同步 spec §2.3、plan、API.md、AGENTS §9.6
 - 已知事项（不粉饰）：`q` 是 ILIKE 子串匹配（遗留 10）；软删无回收站（遗留 11）；无家长视角笔记列表（遗留 12）；`note_kps`/`files` 只有表没有接口（遗留 13）；迁移删除的 83 行实验数据不可恢复
 - 文档同步：API.md（§2 五接口定稿 + §12 缺口）、SCHEMA.md（§4 表头、§4.1 sha256 定稿、§4.3 外键已补）、AGENTS.md（§9.6 笔记锚点）、DECISIONS D-025、PROGRESS、spec/plan 执行记录；无新依赖、无 .env 变更
+
+### 2026-10-26（S2-6）
+- S2-6 完成（按 §10 全流程：spec docs/spec/s2-6-file-upload.md + plan docs/plan/s2-6-file-upload.md，均经用户确认）。交付：backend/app/core/storage.py（`ObjectStorage` 协议 + `MinioStorage` + `get_storage()`）、backend/app/services/file_service.py（文件名清洗、类型/magic 校验、流式上传、去重、补偿）、backend/app/schemas/files.py、backend/app/api/v1/files.py、core/config.py 三个上传配置、exceptions.py 新增 413/41300 与 500/50000 存储异常、requirements.txt（minio 7.2.20 + python-multipart 0.0.32）、.env.example、tests 4 个文件共 46 条
+- 拍板（D-026，2026-10-26 用户确认，全部选 A）：新增 minio + python-multipart；首次 201 / 重复 200 + `deduped=true`；白名单 pdf/docx/md/txt/png/jpg/jpeg 且默认 60MB；本卡一并交付 `GET /files/{id}/parse-status`（返回 pending）；对象键 `uploads/{user_id}/{sha256[:2]}/{sha256}{ext}`；不信任客户端 MIME；超限 413/41300；并发唯一冲突不删对象；库失败补偿删对象；parse-status 权限同笔记详情；上传仅 student；存储用协议+适配器
+- 验收证据：pytest **368 passed, 1 warning**（基线 322 + 46）；真实 MinIO + Postgres（先用 compose 里的 study-agent-minio，venv 内 minio SDK 直连）：同一 PDF 首次 201（`id=1`、`size=77`、`sha256=68d3dbe2…`、`storage_path=uploads/8/68/<sha256>.pdf`、`pending`），第二次 **200** `deduped=true` 且 `id` 相同；psql `files` 仅 1 行；MinIO `uploads/` 前缀 `object_count 1`（77 字节）；再传 `.md` → 201（`mime=text/markdown`，证明文本类通路）；61MB PDF → **413/41300「文件超过 60MB 上限」** 且 files 行数仍 1、对象数不增；A 查 parse-status → 200 `pending`，B 查 A → **403/40300「无权访问该资源」**；清理后 `files=0, users=0`、`remaining 0`
+- 与 plan 的偏差（均为文档/测试细节，已同步 plan 执行记录）：① minio 7.2.20 的 `S3Error` 构造签名为 `(response, code, message, resource, request_id, host_id)`，测试改为关键字构造；② 测试样本 `b"%PDF-1.4\\n"` 实为 9 字节，`size` 断言由 8 改 9；③ 重复上传的 API 测试需用真实 sha256 计算对象键后再播种假存储对象
+- 已知事项（不粉饰）：去重需读完整个文件（遗留 14）；无病毒扫描、magic 只验头部（遗留 15）；无列表/下载/删除与签名 URL 接口（遗留 16）；`parse_status` 只有 pending（遗留 17）；不同用户同文件各存一份；补偿删除尽力而为
+- 文档同步：API.md（§3 两接口定稿 + §12 文件缺口 + §13 新增 41300）、SCHEMA.md（§4.1 storage_path 键规则 / parse_status 现状）、AGENTS.md（§9.2 上传约定、§9.6 存储与上传锚点）、DECISIONS D-026、PROGRESS、requirements.txt、.env.example、spec/plan 执行记录

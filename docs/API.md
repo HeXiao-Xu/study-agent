@@ -113,19 +113,31 @@
 - NoteOut = NoteSummary + `content_md` + `source_file_id`
 - `content_text`（检索用）与 `deleted_at` **永不返回**
 
-## 3. 文件上传与解析
+## 3. 文件上传与解析（S2-6 上传部分定稿）
 
 ### POST /api/v1/files
-- 权限：student
-- 类型：同步返回 + 后台异步解析（S2-7 任务框架 / S2-8 解析 Worker）
-- 入参：multipart 文件
-- 出参：`file_id`
-- 备注：按 `sha256` 去重（SCHEMA §9）
+- 权限：`student`（其他角色 403/40300）
+- 类型：同步上传返回 + 后台异步解析（S2-7 任务框架 / S2-8 解析 Worker 尚未接入；当前只落到 `parse_status=pending`）
+- 请求：`multipart/form-data`，字段名 `file`
+- 成功：`Envelope[FileUploadOut]`
+  - 首次：**201**，`deduped=false`
+  - 同用户同内容重复上传：**200**，`deduped=true`，返回已有 `id`（不再写对象存储）
+- `data` 字段：`id` / `filename` / `mime` / `size` / `sha256` / `parse_status` / `created_at` / `deduped`
+- 类型与大小：扩展名白名单 + 文件头 magic 双校验；`UPLOAD_ALLOWED_EXTENSIONS`（默认 `pdf,docx,md,txt,png,jpg,jpeg`）、`UPLOAD_MAX_SIZE_MB`（默认 60）
+- 存储：对象键 `uploads/{user_id}/{sha256[:2]}/{sha256}{ext}`（内容寻址，不暴露给客户端）
+- 错误：
+  - `400/40000`：请求缺少 `file` 字段
+  - `413/41300`：超过大小上限（message 含上限）
+  - `422/42200`：扩展名不在白名单 / 文件内容与类型不符 / 文件名为空
+  - `403/40300`：非 student
+  - `500/50000`：「文件存储不可用」（MinIO 异常，不泄露 endpoint）
 
-### GET /api/v1/files/{id}/parse-status
-- 权限：student
+### GET /api/v1/files/{file_id}/parse-status
+- 权限：本人或已绑定该学生的 parent/teacher（admin 不绕过）
 - 类型：同步
-- 出参：解析进度（`parse_status` + 进度细节 TODO）
+- 出参：`Envelope[FileStatusOut]`，字段 `id` / `filename` / `parse_status`
+- 备注：S2-6 只有 `pending`；`parsing` / `done` / `failed` 与错误信息由 S2-8 扩展（需迁移）
+- 错误：`404/40400`「文件不存在」；`403/40300`「无权访问该资源」
 
 ## 4. 知识点
 
@@ -275,6 +287,7 @@
 |---|---|---|
 | 认证 | 登出 / refresh / token 吊销策略 | 后续（S2-2 已交付注册/登录/me；无状态 JWT 暂无吊销） |
 | 笔记 | 笔记本（folder）管理、回收站恢复、按学生列笔记（家长视角） | 后续（S2-5 已交付建/列表/详情/更新/软删） |
+| 文件 | 文件列表 / 下载 / 删除、签名 URL 接口（S2-12 笔记插图用） | 后续（S2-6 已交付上传/去重/解析状态；`presigned_get_url` 只在存储层） |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
 | 错题 | 列表 / 统计看板 | S4-2 / S4-8 |
 | 复习 | 计划手动调整 | S5-5 |
@@ -293,6 +306,7 @@ S0-5 定稿（落地于 `backend/app/core/exceptions.py`）：
 | 40300 | 无权限 | 403 |
 | 40400 | 资源不存在 | 404 |
 | 40900 | 资源冲突（如用户名已存在） | 409 |
+| 41300 | 文件过大（S2-6） | 413 |
 | 42200 | 参数校验失败 | 422 |
 | 42900 | 限流 | 429 |
 | 50000 | 服务器内部错误 | 500 |

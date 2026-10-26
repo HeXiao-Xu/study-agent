@@ -272,6 +272,23 @@
 - 验证：pytest **322/322**（基线 280 + 新增 42：content_text 11 + 服务 18 + 接口 13）。真实 curl + psql：建 201（`content_text` 落库为「设 则」）→ 列表 total=1（4 个分页字段）→ 详情 200 → **B 读 A 的笔记 403/40300**（补上 S2-3 的真实接口证据）→ q/tag/subject_id 筛选命中 → 非白名单排序 422/42200（message 列可选字段）→ page_size=101 422 → PATCH 后 `updated_at` 从 `14:20:58` 变为 `14:21:23`、`created_at` 不变、`content_text` 重算为「修订后的正文」→ B 改/删均 403 → DELETE 204 → 列表 total=1（另一条未删）、详情 404 → psql 行仍在且 `deleted_at` 非空 → 清理后 notes/users/subjects/chunks 全为 0。
 - 已知不足（不粉饰）：`q` 是 ILIKE 子串匹配，大数据量慢且无语义/分词；软删无回收站、行仍占存储；没有“按学生列笔记”的家长视角接口；`note_kps` 只建表未对齐；`files` 有表无上传接口（S2-6），`notes.source_file_id` 暂时只能由后续流水线写；迁移删除的 83 行不恢复。
 
+## D-026 S2-6 文件上传与对象存储决策（spec §3/§12 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-6-file-upload.md，plan 见 docs/plan/s2-6-file-upload.md）
+- 决策 1（依赖）：新增 `minio==7.2.20`（官方 SDK，流式 `put_object` + `presigned_get_object`）与 `python-multipart==0.0.32`（FastAPI 解析 multipart 的硬依赖）。用户批准；无版本冲突。
+- 决策 2（去重响应）：首次 **201** `deduped=false`，同用户同 `sha256` 重复上传 **200** `deduped=true` + 已有 `file_id`。状态码不撒谎，前端可区分“新建/复用”。
+- 决策 3（类型与大小）：`pdf/docx/md/txt/png/jpg/jpeg`，默认上限 60MB；两者都是配置项（`UPLOAD_ALLOWED_EXTENSIONS` / `UPLOAD_MAX_SIZE_MB`）。扩展名白名单 + 文件头 magic 双校验，防改名绕过。
+- 决策 4（对象键）：`uploads/{user_id}/{sha256[:2]}/{sha256}{ext}`，内容寻址、天然幂等、无重名与路径穿越；原始文件名只入库做展示。
+- 决策 5（不信任客户端）：`mime` 由扩展名映射，不采用请求头 `Content-Type`；文件名清洗（砍路径、去控制字符、截断保留扩展名）。防止 MIME 混淆与路径注入。
+- 决策 6（超限状态码）：新增 `413/41300`「文件过大」并登记 API.md §13；比复用 422 语义准确。
+- 决策 7（并发冲突）：内容寻址下两个请求写同一对象，唯一键冲突时 **复用赢家、不删对象**（删了会毁掉赢家）。
+- 决策 8（失败补偿）：对象已写、库写失败（非唯一冲突）时尽力删除对象后再抛；补偿删除自身失败不掩盖原始异常。
+- 决策 9（parse-status 权限）：本人或已绑定家长/老师（`ensure_student_access`），admin 不绕过；与 S2-3/S2-5 一致。
+- 决策 10（上传权限）：仅 `student`；文件属于学生个人知识库。
+- 决策 11（存储抽象）：`ObjectStorage` 协议 + `MinioStorage`（懒连接/懒建桶）+ `get_storage()` 单例，路由用 `Depends(get_storage)`；SDK 异常统一 `StorageUnavailableError`（500/50000，不泄露 endpoint/凭据）。测试注入假实现，套件零网络。
+- 验证：pytest **368/368**（基线 322 + 新增 46：存储 10 + 规则 13 + 服务 13 + 接口 10）。真实 MinIO + Postgres：同一 PDF 首次 **201**（`size=77`、`sha256=68d3dbe2…`、`storage_path=uploads/8/68/<sha256>.pdf`、`parse_status=pending`），第二次 **200/`deduped=true`** 且 `id` 相同；psql 只 1 行，MinIO `uploads/` 前缀对象数 **1**；再次上传 `.md` → 201（文本类型通路可用）；61MB PDF → **413/41300「文件超过 60MB 上限」** 且行数/对象数不增；A 查 `parse-status` → 200 `pending`，B 查 A → **403/40300**；清理后 files/users 与对象数全为 0。
+- 已知不足（不粉饰）：去重必须读完整个文件（sha256 全量），不是秒回；只有扩展名 + 头部 magic，不防“合法 PDF 内嵌恶意内容”，docx 只验 ZIP 头；无病毒扫描、无图片重编码、未接上传限流；`parse_status` 只有 `pending`（S2-8 需迁移扩展）；无文件列表/下载/删除接口，`presigned_get_url` 只在存储层；不同用户传同一文件各存一份（按用户隔离的代价）；补偿删除是尽力而为，极端情况仍可能留孤儿对象。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |
