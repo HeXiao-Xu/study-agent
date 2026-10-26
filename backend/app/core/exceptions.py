@@ -25,6 +25,7 @@ CODE_FORBIDDEN = 40300
 CODE_NOT_FOUND = 40400
 CODE_CONFLICT = 40900
 CODE_VALIDATION = 42200
+CODE_PAYLOAD_TOO_LARGE = 41300
 CODE_RATE_LIMIT = 42900
 CODE_INTERNAL = 50000
 
@@ -34,6 +35,7 @@ _HTTP_TO_CODE = {
     403: CODE_FORBIDDEN,
     404: CODE_NOT_FOUND,
     409: CODE_CONFLICT,
+    413: CODE_PAYLOAD_TOO_LARGE,
     429: CODE_RATE_LIMIT,
 }
 
@@ -89,6 +91,18 @@ class ConflictError(AppError):
 class InvalidParamError(AppError):
     def __init__(self, message: str = "参数校验失败") -> None:
         super().__init__(message, code=CODE_VALIDATION, http_status=422)
+
+
+class PayloadTooLargeError(AppError):
+    def __init__(self, message: str = "文件过大") -> None:
+        super().__init__(message, code=CODE_PAYLOAD_TOO_LARGE, http_status=413)
+
+
+class StorageUnavailableError(AppError):
+    """对象存储不可用：对外固定话术，不泄露 endpoint/凭据。"""
+
+    def __init__(self, message: str = "文件存储不可用") -> None:
+        super().__init__(message, code=CODE_INTERNAL, http_status=500)
 
 
 def install_exception_handlers(app: FastAPI) -> None:

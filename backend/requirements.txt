@@ -35,3 +35,7 @@ PyJWT==2.15.1
 
 # --- S2-4 通用分页（任务卡点名；2026-10-26 用户批准，实测无版本冲突）---
 fastapi-pagination==0.16.1
+
+# --- S2-6 文件上传（官方 SDK + FastAPI multipart 解析；2026-10-26 用户批准）---
+minio==7.2.20
+python-multipart==0.0.32

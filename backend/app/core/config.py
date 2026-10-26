@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     minio_root_user: str = "study"
     minio_root_password: str = "study123456"
     minio_bucket: str = "study-agent"
+    # 开发环境走 http；生产启用 TLS 时置 true
+    minio_secure: bool = False
+
+    # --- 上传（S2-6）---
+    upload_max_size_mb: int = 60
+    # 逗号分隔、小写、不带点；服务层解析
+    upload_allowed_extensions: str = "pdf,docx,md,txt,png,jpg,jpeg"
 
     # --- 解析（S1-1）---
     # True=跳过 Docling 走 PyMuPDF 快速路径（spec 设计决策 6：显式开关而非自动猜）
