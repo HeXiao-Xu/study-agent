@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { NAV_ITEMS } from '@/layouts/nav'
 
 const route = useRoute()
+const activeNav = computed(() => route.meta.nav ?? route.name)
 </script>
 
 <template>
@@ -18,9 +20,9 @@ const route = useRoute()
         <li v-for="item in NAV_ITEMS" :key="item.name">
           <router-link
             class="nav-link"
-            :class="{ active: route.name === item.name }"
+            :class="{ active: activeNav === item.name }"
             :to="item.path"
-            :aria-current="route.name === item.name ? 'page' : undefined"
+            :aria-current="activeNav === item.name ? 'page' : undefined"
             data-testid="nav-link"
           >
             <span class="nav-index" aria-hidden="true">{{ item.index }}</span>

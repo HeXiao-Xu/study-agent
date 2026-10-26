@@ -4,12 +4,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { useAuthStore } from '@/stores/auth'
+import { NAV_ITEMS } from '@/layouts/nav'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
 const title = computed(() => String(route.meta.title ?? ''))
+const section = computed(() => {
+  const nav = route.meta.nav
+  if (!nav || nav === route.name) return null
+  return NAV_ITEMS.find((item) => item.name === nav) ?? null
+})
 const initials = computed(() => auth.user?.nickname.slice(0, 1) ?? '知')
 
 function onCommand(command: string | number | object): void {
@@ -23,7 +29,8 @@ function onCommand(command: string | number | object): void {
 <template>
   <header class="topbar">
     <nav class="crumbs" aria-label="面包屑">
-      <router-link to="/notes">首页</router-link>
+      <router-link v-if="section" :to="section.path">{{ section.label }}</router-link>
+      <router-link v-else to="/notes">首页</router-link>
       <span class="separator" aria-hidden="true">/</span>
       <span class="current">{{ title }}</span>
     </nav>

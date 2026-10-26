@@ -9,6 +9,7 @@ declare module 'vue-router' {
     public?: boolean
     title?: string
     task?: string
+    nav?: string
     description?: string
     roles?: UserRole[]
   }

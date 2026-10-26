@@ -24,12 +24,20 @@ const router = createRouter({
         {
           path: 'notes',
           name: 'notes',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '笔记',
-            task: 'S2-12',
-            description: '记录学习内容，系统会自动对齐已有知识点。',
-          },
+          component: () => import('@/views/notes/NoteListView.vue'),
+          meta: { title: '笔记', nav: 'notes', roles: ['student'] },
+        },
+        {
+          path: 'notes/new',
+          name: 'note-new',
+          component: () => import('@/views/notes/NoteEditView.vue'),
+          meta: { title: '新建笔记', nav: 'notes', roles: ['student'] },
+        },
+        {
+          path: 'notes/:id(\\d+)/edit',
+          name: 'note-edit',
+          component: () => import('@/views/notes/NoteEditView.vue'),
+          meta: { title: '编辑笔记', nav: 'notes', roles: ['student'] },
         },
         {
           path: 'files',
