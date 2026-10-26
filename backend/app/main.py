@@ -13,11 +13,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.context import get_trace_id
 from app.core.exceptions import install_exception_handlers
 from app.core.logging import setup_logging
 from app.core.middleware import TraceIdMiddleware
+from app.core.security import ensure_auth_configured
 from app.schemas.common import Envelope, HealthData
 
 
@@ -25,6 +27,8 @@ def create_app() -> FastAPI:
     """应用工厂：uvicorn 入口与测试共用同一条装配路径，保证测的就是跑的。"""
     settings = get_settings()
     setup_logging(settings.log_level)
+    # 无密钥直接启动失败：不允许服务跑起来后才在登录处 500
+    ensure_auth_configured(settings)
 
     app = FastAPI(title=settings.app_name, version=__version__)
 
@@ -39,6 +43,7 @@ def create_app() -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
 
     install_exception_handlers(app)
+    app.include_router(api_router)
 
     @app.get("/health", response_model=Envelope[HealthData], tags=["meta"], summary="健康检查")
     async def health() -> Envelope[HealthData]:
