@@ -28,3 +28,5 @@ class FileStatusOut(BaseModel):
     id: int
     filename: str
     parse_status: str
+    parse_progress: int
+    error_msg: str | None

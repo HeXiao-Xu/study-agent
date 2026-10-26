@@ -204,7 +204,8 @@ def test_facade_unsupported_ext(tmp_path: Path) -> None:
     from app.ai.parse import parse_document
     from app.core.exceptions import InvalidParamError
 
-    f = tmp_path / "a.txt"
+    # S2-8 起 .txt/.md 走 parse_plain_text；这里改用仍未支持的类型
+    f = tmp_path / "a.xlsx"
     f.write_text("x", encoding="utf-8")
     with pytest.raises(InvalidParamError):
         parse_document(f)

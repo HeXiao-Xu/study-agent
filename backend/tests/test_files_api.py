@@ -18,6 +18,8 @@ from app.models.file import File
 from app.models.user import User
 from app.models.user_relation import UserRelation
 from app.services import file_service
+from app.tasks.parse_document import TASK_PARSE_DOCUMENT
+from app.tasks.queue import get_task_queue
 
 _PDF_BYTES = b"%PDF-1.4\n"
 _DIGEST = hashlib.sha256(_PDF_BYTES).hexdigest()
@@ -63,6 +65,14 @@ class FakeSession:
         instance.created_at = datetime.now(timezone.utc)
 
 
+class FakeQueue:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    def enqueue(self, name: str, task_id: int) -> None:
+        self.calls.append((name, task_id))
+
+
 class FakeStorage:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
@@ -94,7 +104,7 @@ def _user(
     return user
 
 
-def _record(*, owner_id: int = 1) -> File:
+def _record(*, owner_id: int = 1, status: str = "pending") -> File:
     record = File(
         user_id=owner_id,
         filename="试卷.pdf",
@@ -102,7 +112,9 @@ def _record(*, owner_id: int = 1) -> File:
         size=len(_PDF_BYTES),
         storage_path=f"uploads/{owner_id}/{_DIGEST[:2]}/{_DIGEST}.pdf",
         sha256=_DIGEST,
-        parse_status="pending",
+        parse_status=status,
+        parse_progress=0,
+        error_msg=None,
     )
     record.id = 11
     record.created_at = datetime.now(timezone.utc)
@@ -125,11 +137,13 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides.clear()
 
 
-def _wire(session: FakeSession, storage: FakeStorage | None = None) -> FakeStorage:
+def _wire(session: FakeSession, storage: FakeStorage | None = None) -> FakeQueue:
     store = storage or FakeStorage()
+    queue = FakeQueue()
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_storage] = lambda: store
-    return store
+    app.dependency_overrides[get_task_queue] = lambda: queue
+    return queue
 
 
 def test_upload_returns_201_and_deduped_false(client: TestClient) -> None:
@@ -215,6 +229,8 @@ def test_parse_status_returns_pending(client: TestClient) -> None:
         "id": 11,
         "filename": "试卷.pdf",
         "parse_status": "pending",
+        "parse_progress": 0,
+        "error_msg": None,
     }
 
 
@@ -232,3 +248,45 @@ def test_parse_status_other_user_returns_403(client: TestClient) -> None:
     resp = client.get("/api/v1/files/11/parse-status", headers=_headers(user))
     assert resp.status_code == 403
     assert resp.json()["code"] == 40300
+
+def test_upload_enqueues_parse_task(client: TestClient) -> None:
+    user = _user()
+    queue = _wire(FakeSession(user=user))
+    resp = client.post("/api/v1/files", files=_file_payload(), headers=_headers(user))
+    assert resp.status_code == 201
+    assert queue.calls == [(TASK_PARSE_DOCUMENT, 11)]
+
+
+def test_upload_duplicate_done_does_not_enqueue(client: TestClient) -> None:
+    user = _user()
+    session = FakeSession(user=user, record=_record(status="done"))
+    storage = FakeStorage()
+    storage.objects[_record().storage_path] = _PDF_BYTES
+    queue = _wire(session, storage)
+    resp = client.post("/api/v1/files", files=_file_payload(), headers=_headers(user))
+    assert resp.status_code == 200
+    assert queue.calls == []
+
+
+def test_upload_duplicate_failed_reenqueues(client: TestClient) -> None:
+    user = _user()
+    session = FakeSession(user=user, record=_record(status="failed"))
+    storage = FakeStorage()
+    storage.objects[_record().storage_path] = _PDF_BYTES
+    queue = _wire(session, storage)
+    resp = client.post("/api/v1/files", files=_file_payload(), headers=_headers(user))
+    assert resp.status_code == 200
+    assert queue.calls == [(TASK_PARSE_DOCUMENT, 11)]
+
+
+def test_parse_status_returns_progress_and_error(client: TestClient) -> None:
+    user = _user()
+    record = _record(status="failed")
+    record.parse_progress = 50
+    record.error_msg = "RuntimeError: bad pdf"
+    _wire(FakeSession(user=user, record=record))
+    resp = client.get("/api/v1/files/11/parse-status", headers=_headers(user))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["parse_progress"] == 50
+    assert data["error_msg"] == "RuntimeError: bad pdf"

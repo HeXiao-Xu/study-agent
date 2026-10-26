@@ -9,10 +9,13 @@ from app.core.context import get_trace_id
 from app.core.exceptions import AppError
 from app.core.permissions import require_role
 from app.core.storage import ObjectStorage, get_storage
+from app.models.enums import ParseStatus
 from app.models.user import User
 from app.schemas.common import Envelope
 from app.schemas.files import FileOut, FileStatusOut, FileUploadOut
-from app.services import file_service
+from app.services import file_service, task_service
+from app.tasks.parse_document import TASK_PARSE_DOCUMENT
+from app.tasks.queue import TaskQueue, get_task_queue
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -29,12 +32,22 @@ def upload_file(
     current_user: User = Depends(require_role("student")),
     session: Session = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
+    queue: TaskQueue = Depends(get_task_queue),
 ) -> Envelope[FileUploadOut]:
     if file is None or not file.filename:
         raise AppError("请求缺少 file 字段", code=40000, http_status=400)
     record, deduped = file_service.upload_file(
         session, owner=current_user, upload=file, storage=storage
     )
+    # done/parsing 的去重命中不重复入队；pending（新文件）与 failed（重试）补入队
+    if record.parse_status in {ParseStatus.PENDING.value, ParseStatus.FAILED.value}:
+        task_service.create_task(
+            session,
+            owner=current_user,
+            name=TASK_PARSE_DOCUMENT,
+            payload={"file_id": record.id},
+            queue=queue,
+        )
     # 首次 201、命中已有记录 200：状态码本身携带“是否新建”的信息
     response.status_code = 200 if deduped else 201
     base = FileOut.model_validate(record)
