@@ -124,6 +124,13 @@ def align_note(
         for row in old_rows:
             session.delete(row)
         return AlignStats(0, 0, 0, 0, 0)
+    manual_kp_ids = {
+        row.kp_id
+        for row in session.scalars(
+            select(NoteKp).where(NoteKp.note_id == note.id, NoteKp.source == "manual")
+        )
+        if row.source == "manual"
+    }
     matches = extract_matches(
         note_title=note.title,
         note_excerpt=text[:_MAX_NOTE_CHARS],
@@ -134,6 +141,9 @@ def align_note(
     auto = pending = 0
     new_rows: list[NoteKp] = []
     for candidate in candidates:
+        if candidate.kp_id in manual_kp_ids:
+            # 用户确认过的关联优先，重跑不得降级/重复插入同一主键
+            continue
         match = selected.get(candidate.kp_id)
         if match is None or match.confidence < LLM_MIN_CONFIDENCE:
             continue

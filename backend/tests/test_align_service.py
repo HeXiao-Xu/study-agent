@@ -225,17 +225,24 @@ def test_align_note_classifies_auto_pending_drop() -> None:
 
 def test_align_note_replaces_ai_rows_but_keeps_manual() -> None:
     kp = _kp(1, "MATH-FUNC-02", "函数的单调性", 2, None, [1.0, 0.0])
+    manual_kp = _kp(8, "MATH-FUNC", "函数", 2, None, [1.0, 0.0])
     old_ai = NoteKp(note_id=1, kp_id=9, confidence=Decimal("0.6"), source="ai", confirmed=False)
     manual = NoteKp(note_id=1, kp_id=8, confidence=Decimal("0.9"), source="manual", confirmed=True)
-    session = FakeSession(kps=[kp], note_kps=[old_ai, manual])
+    session = FakeSession(kps=[kp, manual_kp], note_kps=[old_ai, manual])
     kp_align_service.align_note(
         session,
         note=_note("函数的单调性"),  # type: ignore[arg-type]
         embedder=FakeEmbedder([[[1.0, 0.0]]]),
-        llm_client=FakeLLM('{"matches":[{"kp_id":1,"confidence":0.9,"evidence":"x"}]}'),
+        llm_client=FakeLLM(
+            '{"matches":[{"kp_id":1,"confidence":0.9,"evidence":"x"},'
+            '{"kp_id":8,"confidence":0.9,"evidence":"函数"}]}'
+        ),
     )
     assert old_ai in session.deleted
     assert manual not in session.deleted
+    added_ids = {row.kp_id for row in session.added if isinstance(row, NoteKp)}
+    assert 1 in added_ids
+    assert 8 not in added_ids
 
 
 def test_confirm_pairs_updates_owned_rows_only() -> None:
