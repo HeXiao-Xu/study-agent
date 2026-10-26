@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-ParserName = Literal["docling", "pymupdf", "docx"]
+ParserName = Literal["docling", "pymupdf", "docx", "text"]
 
 
 class BlockType(str, Enum):

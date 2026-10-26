@@ -8,12 +8,23 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from app.ai.parse.models import ParsedDocument
+from app.ai.parse.models import ParsedBlock, ParsedDocument
 from app.ai.parse.pdf_pymupdf import PyMuPDFParser, detect_scanned
 from app.core.config import get_settings
 from app.core.exceptions import InvalidParamError
 
 logger = logging.getLogger(__name__)
+
+
+def parse_plain_text(path: str | Path) -> ParsedDocument:
+    """md/txt → 单个 text block；UTF-8，非法字节替换不抛。"""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8", errors="replace")
+    return ParsedDocument(
+        source=str(p),
+        parser="text",
+        blocks=[ParsedBlock(text=text, page_no=None)],
+    )
 
 
 def parse_document(path: str | Path, *, force_pymupdf: bool | None = None) -> ParsedDocument:
@@ -22,6 +33,8 @@ def parse_document(path: str | Path, *, force_pymupdf: bool | None = None) -> Pa
     if not p.exists():
         raise InvalidParamError(f"文件不存在: {p}")
     suffix = p.suffix.lower()
+    if suffix in {".md", ".txt"}:
+        return parse_plain_text(p)
     if suffix == ".docx":
         from app.ai.parse.docx_parser import DocxParser
 
