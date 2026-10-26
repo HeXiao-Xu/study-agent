@@ -20,7 +20,7 @@ class AlignBatchOut(BaseModel):
 
 
 class PendingAlignOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     note_id: int
     kp_id: int

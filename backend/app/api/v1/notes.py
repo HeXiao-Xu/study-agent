@@ -1,6 +1,7 @@
 """S2-5 笔记 CRUD 接口（API.md §2）。"""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
@@ -8,14 +9,35 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.context import get_trace_id
+from app.core.exceptions import TaskQueueUnavailableError
 from app.core.permissions import require_role
 from app.models.user import User
 from app.schemas.common import Envelope, PageData
 from app.schemas.notes import NoteCreate, NoteOut, NoteSummary, NoteUpdate
-from app.services import note_service
+from app.services import note_service, task_service
+from app.tasks.kp_align import TASK_KP_ALIGN
+from app.tasks.queue import TaskQueue, get_task_queue
 from app.utils.pagination import PageParams, SortParams, page_params, sort_params
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/notes", tags=["notes"])
+
+
+def _enqueue_align(session: Session, *, user: User, note_id: int, queue: TaskQueue) -> None:
+    """对齐是增强能力：入队失败只警告，不影响笔记本身保存成功。"""
+    try:
+        task_service.create_task(
+            session,
+            owner=user,
+            name=TASK_KP_ALIGN,
+            payload={"note_id": note_id},
+            queue=queue,
+        )
+    except TaskQueueUnavailableError as exc:
+        logger.warning(
+            "kp_align_enqueue_failed", extra={"note_id": note_id, "error": str(exc)}
+        )
 
 
 @router.post("", status_code=201, response_model=Envelope[NoteOut], summary="新建笔记")
@@ -23,8 +45,10 @@ def create_note(
     payload: NoteCreate,
     current_user: User = Depends(require_role("student")),
     session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
 ) -> Envelope[NoteOut]:
     note = note_service.create_note(session, owner=current_user, payload=payload)
+    _enqueue_align(session, user=current_user, note_id=note.id, queue=queue)
     return Envelope(trace_id=get_trace_id(), data=NoteOut.model_validate(note))
 
 
@@ -72,10 +96,12 @@ def update_note(
     payload: NoteUpdate,
     current_user: User = Depends(require_role("student")),
     session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
 ) -> Envelope[NoteOut]:
     note = note_service.update_note(
         session, note_id=note_id, owner=current_user, payload=payload
     )
+    _enqueue_align(session, user=current_user, note_id=note.id, queue=queue)
     return Envelope(trace_id=get_trace_id(), data=NoteOut.model_validate(note))
 
 

@@ -116,6 +116,7 @@ def parse_document_task(session: Session, payload: dict[str, Any]) -> dict[str, 
                 "tokens": stats.total_tokens,
             },
         )
+        _enqueue_align(file)
         return {
             "file_id": file.id,
             "chunks": stats.chunk_count,
@@ -177,3 +178,35 @@ def _upsert_note(session: Session, *, file: File, content_md: str) -> Note:
         note.content_text = to_plain_text(content_md)
     session.flush()
     return note
+
+def _enqueue_align(file: File) -> None:
+    """解析成功后入队对齐；独立 session，避免把任务提交混进 handler 主事务。"""
+    from app.core.db import get_session_factory
+    from app.models.user import User
+    from app.services import task_service
+    from app.tasks.kp_align import TASK_KP_ALIGN
+    from app.tasks.queue import get_task_queue
+
+    session = get_session_factory()()
+    try:
+        user = session.get(User, file.user_id)
+        note = session.scalar(
+            select(Note).where(
+                Note.user_id == file.user_id, Note.source_file_id == file.id
+            )
+        )
+        if user is None or note is None:
+            return
+        task_service.create_task(
+            session,
+            owner=user,
+            name=TASK_KP_ALIGN,
+            payload={"note_id": note.id},
+            queue=get_task_queue(),
+        )
+    except Exception as exc:  # noqa: BLE001 —— 对齐是增强能力，不能影响解析结果
+        logger.warning(
+            "kp_align_enqueue_failed", extra={"file_id": file.id, "error": str(exc)}
+        )
+    finally:
+        session.close()

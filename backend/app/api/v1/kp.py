@@ -6,11 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.context import get_trace_id
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.permissions import require_role
+from app.models.note import Note
 from app.models.user import User
-from app.schemas.common import Envelope
+from app.schemas.common import Envelope, PageData
 from app.schemas.kp import KpCreate, KpNodeOut, KpTreeOut, KpUpdate, SubjectOut
-from app.services import kp_service
+from app.schemas.kp_align import AlignBatchIn, AlignBatchOut, PendingAlignOut
+from app.schemas.tasks import TaskOut
+from app.services import kp_align_service, kp_service, task_service
+from app.services.kp_align_service import AlignPair
+from app.tasks.kp_align import TASK_KP_ALIGN
+from app.tasks.queue import TaskQueue, get_task_queue
+from app.utils.pagination import PageParams, page_params
 
 router = APIRouter(prefix="/kp", tags=["kp"])
 
@@ -67,3 +75,78 @@ def delete_kp(
     session: Session = Depends(get_db),
 ) -> None:
     kp_service.delete_kp(session, kp_id=kp_id)
+
+@router.post(
+    "/align/notes/{note_id}",
+    status_code=202,
+    response_model=Envelope[TaskOut],
+    summary="手动重跑笔记对齐",
+)
+def align_note_endpoint(
+    note_id: int,
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> Envelope[TaskOut]:
+    note = session.get(Note, note_id)
+    if note is None or note.deleted_at is not None:
+        raise NotFoundError("笔记不存在")
+    if note.user_id != current_user.id:
+        raise ForbiddenError("无权访问该资源")
+    task = task_service.create_task(
+        session,
+        owner=current_user,
+        name=TASK_KP_ALIGN,
+        payload={"note_id": note_id},
+        queue=queue,
+    )
+    return Envelope(trace_id=get_trace_id(), data=TaskOut.model_validate(task))
+
+
+@router.get(
+    "/align/pending",
+    response_model=Envelope[PageData[PendingAlignOut]],
+    summary="待确认队列",
+)
+def list_pending_align(
+    note_id: int | None = Query(None, ge=1),
+    params: PageParams = Depends(page_params),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[PageData[PendingAlignOut]]:
+    page = kp_align_service.list_pending(
+        session, viewer=current_user, params=params, note_id=note_id
+    )
+    return Envelope(trace_id=get_trace_id(), data=page)
+
+
+@router.post(
+    "/align/confirm", response_model=Envelope[AlignBatchOut], summary="批量确认对齐"
+)
+def confirm_align(
+    payload: AlignBatchIn,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[AlignBatchOut]:
+    result = kp_align_service.confirm_pairs(
+        session,
+        viewer=current_user,
+        pairs=[AlignPair(**item.model_dump()) for item in payload.items],
+    )
+    return Envelope(trace_id=get_trace_id(), data=result)
+
+
+@router.post(
+    "/align/reject", response_model=Envelope[AlignBatchOut], summary="批量忽略对齐"
+)
+def reject_align(
+    payload: AlignBatchIn,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[AlignBatchOut]:
+    result = kp_align_service.reject_pairs(
+        session,
+        viewer=current_user,
+        pairs=[AlignPair(**item.model_dump()) for item in payload.items],
+    )
+    return Envelope(trace_id=get_trace_id(), data=result)
