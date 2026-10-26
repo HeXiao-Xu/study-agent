@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    ARRAY,
     BigInteger,
     DateTime,
     ForeignKey,
@@ -16,6 +15,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
