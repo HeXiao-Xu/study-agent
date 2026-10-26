@@ -160,7 +160,7 @@
 - 状态机：`pending → running → succeeded`；可重试失败回 `pending`，第 3 次失败终态 `failed`
 - 错误：`404/40400`「任务不存在」；`403/40300`「无权访问该任务」
 
-## 4. 知识点（S2-9 定稿）
+## 4. 知识点（S2-9 / S2-10 定稿）
 
 ### GET /api/v1/kp/subjects
 - 权限：登录用户
@@ -207,11 +207,43 @@
 - 备注：删除保护顺序——有子节点、被 `note_kps` 引用、被 `knowledge_edges` 引用，任一命中即拒绝（不级联）
 - 错误：`404/40400`；`409/40900`「存在子知识点，请先删除子节点」/「已被笔记引用，无法删除」/「存在知识点关系引用，无法删除」
 
+### POST /api/v1/kp/align/notes/{note_id}
+- 权限：笔记所有者（`student`；他人笔记 403/40300，不存在/已软删 404/40400）
+- 类型：异步任务（`kp.align`）
+- 成功：**202** `Envelope[TaskOut]`：`id` / `name` / `status` / `created_at`
+- 备注：重跑会删除该笔记 `source='ai'` 的旧关联后重算；`source='manual'`（用户已确认）保留
+- 错误：`403/40300`；`404/40400`「笔记不存在」；`500/50000`「任务队列不可用」
+
+### GET /api/v1/kp/align/pending
+- 权限：登录用户（仅返回本人笔记的待确认项）
+- 类型：同步分页
+- 入参：`note_id`（可选，≥1）/ `page` / `page_size`（1–100）
+- 出参：`Envelope[PageData[PendingAlignOut]]`：
+
+  ```json
+  {"items": [{"note_id": 3, "note_title": "函数单调性笔记", "kp_id": 12,
+              "kp_name": "函数的单调性", "kp_code": "MATH-FUNC-02", "confidence": 0.68}],
+   "total": 1, "page": 1, "page_size": 20}
+  ```
+
+- 备注：只列 `source='ai' AND confirmed=false` 且 `confidence` 在 `[0.55, 0.75)` 的行；笔记已软删不返回；固定排序 `note_id DESC, kp_id`
+- 错误：`422/42200` 分页/筛选参数非法
+
 ### POST /api/v1/kp/align/confirm
-- 权限：student
+- 权限：登录用户（仅本人笔记）
 - 类型：同步
-- 说明：确认 AI 标注（对齐置信度 0.55–0.75 的待确认项，方案 6.2）
-- 入参：TODO（S2-10）
+- 入参：`{"items":[{"note_id":3,"kp_id":12}]}`，1–100 对
+- 出参：`Envelope[AlignBatchOut]`：`{"confirmed": 1, "deleted": 0, "skipped": 0}`
+- 备注：命中行置 `confirmed=true`、`source='manual'`；不属于本人/不存在的对计入 `skipped`（不报 404）
+- 错误：`422/42200` 空列表 / 超过 100 对
+
+### POST /api/v1/kp/align/reject
+- 权限：登录用户（仅本人笔记）
+- 类型：同步
+- 入参：同上
+- 出参：`Envelope[AlignBatchOut]`：`{"confirmed": 0, "deleted": 1, "skipped": 0}`
+- 备注：只删除 `source='ai' AND confirmed=false` 的行；已确认或 manual 行计入 `skipped`；忽略后重跑可能再次出现
+- 错误：`422/42200`
 
 ## 5. RAG 问答（论文核心）
 

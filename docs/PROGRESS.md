@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-9 知识点树 CRUD + 导入脚本（5 个 `/kp` 接口、一次查询组树、level 推导/移动防环、删除三段保护、append/overwrite + dry-run、108 节点高中数学种子；pytest 462/462；真实导入/幂等/权限/引用保护/overwrite 全流程实测）
-- 下一步：S2-10 知识点对齐与待确认队列（`kp_align_service.py`、`/kp/align/confirm`）
+- 最近完成：S2-10 笔记/文档 → 知识点对齐（`ai/align` 纯函数打分 + LLM 候选内抽取、`kp_align_service`、`kp.align` 任务、4 个 `/kp/align` 接口、笔记/解析自动入队；pytest 500/500；真实 30 条笔记自动关联精确率 28/28、待确认 8 条、批量确认/忽略/重跑全流程实测）
+- 下一步：S2-11 前端登录页 + 布局 + 路由守卫
 - 已知阻塞：无
 
 ## 任务清单
@@ -40,7 +40,7 @@
 - [x] S2-7 异步任务框架
 - [x] S2-8 文档解析 Worker
 - [x] S2-9 知识点树 CRUD + 导入
-- [ ] S2-10 知识点对齐与待确认队列
+- [x] S2-10 知识点对齐与待确认队列
 - [ ] S2-11 前端登录/布局/路由守卫
 - [ ] S2-12 前端笔记列表与编辑器
 - [ ] S2-13 前端上传与解析状态
@@ -108,7 +108,7 @@
 | 10 | 笔记 `q` 是 ILIKE 子串匹配，未接 jieba/tsvector（S2-5 遗留） | 数据量上万后慢；无语义与分词召回 | S3 检索服务化时统一切到 tsvector + 向量 |
 | 11 | 笔记软删无回收站，行与正文仍占存储（S2-5 遗留） | 误删只能改库恢复；存储不释放 | 前端回收站需求出现时补恢复/彻底删除 |
 | 12 | 只有「我的笔记」列表，没有「按学生列笔记」的家长/老师视角（S2-5 遗留） | 家长只能点开已知 note_id，无法浏览孩子笔记 | S2-12 前端联调或家长端卡 |
-| 13 | `note_kps` 只建表，无对齐/待确认接口（S2-5 遗留，S2-10 承接）；`files` 上传接口已由 S2-6 交付 | 知识点关联暂时不可用 | S2-10 对齐 |
+| 13 | `note_kps` 只建表，无对齐/待确认接口（S2-5 遗留，S2-10 承接）；`files` 上传接口已由 S2-6 交付 | 已由 S2-10 交付自动对齐 + 待确认队列 | 已完成 |
 | 14 | 上传去重必须读完整个文件才算 sha256（S2-6 遗留） | 60MB 文件要 1–2 秒才返回；无法“秒回” | 需求出现时改为客户端预哈希 |
 | 15 | 文件只有扩展名 + 头部 magic 校验，无病毒扫描/图片重编码（S2-6 遗留） | 合法容器内嵌恶意内容检测不到 | 上线前按需接扫描 |
 | 16 | 无文件列表/下载/删除接口，`presigned_get_url` 只在存储层（S2-6 遗留） | 前端无法直接列出/下载已传文件 | S2-12 笔记插图时补签名 URL 接口 |
@@ -125,8 +125,18 @@
 | 27 | 高中数学种子树是 AI 草稿，考点归属与 `exam_weight` 未经教研校对（S2-9 遗留） | 对齐/组卷权重可能偏差 | 用户人工校对 `backend/data/kp_math.json` 后 overwrite |
 | 28 | 知识点无拖拽/批量排序，`order_no` 无唯一约束（S2-9 遗留） | 前端调整顺序需逐节点 PATCH；同序按 id 兜底 | S2-14 前端树管理时按需补批量接口 |
 | 29 | 导入 overwrite 直接改库，无自动备份/并发锁；append 假设完整树（S2-9 遗留） | 误删只能靠备份；并发导入第二个报唯一冲突；部分树会重置 level | 覆盖前 `pg_dump`；批量导入串行执行 |
+| 30 | 对齐关键词只匹配节点全名/去前缀核心词，无别名/同义词表；树先验只是 tags/title 近似（S2-10 遗留） | 同义表述漏召回；本次 30 条中 5 条未产生任何关联 | 收真实笔记后补别名表/按学科调阈值 |
+| 31 | 对齐阈值 0.75/0.55 基于 text-embedding-v4 分数分布（S2-10 遗留） | 换 Embedding 模型需重新校准，可能大量进待确认或大量丢弃 | 换模型时用标注集重跑 ROC 选阈值 |
+| 32 | `note_kps` 无时间列/审计表，忽略即删除；并发重跑同一笔记可能 pkey 冲突（S2-10 遗留） | 无法按时间排序/追溯，忽略项重跑可能再现 | 需要时补 `created_at/updated_at` 迁移与审计表 |
+| 33 | 对齐 LLM 失败即任务失败，无纯算法兜底；未写 `llm_call_logs`（S2-10 遗留） | 无 Key/额度时对齐不可用；成本只能看结构化日志 | S3-7 建表后接入；如需降级再设计兜底分数 |
 
 ## 变更日志
+
+### 2026-10-27（S2-10）
+- S2-10 完成（spec `docs/spec/s2-10-kp-align.md` + plan `docs/plan/s2-10-kp-align.md`，用户确认后实施）。交付：`app/ai/align/{scoring,extractor}.py` + `ai/prompts/kp_align_v1.md`（固定权重打分、候选内 LLM 抽取、严格 JSON + 2 次重试）、`app/services/kp_align_service.py`（KP 向量补全、top-10 召回、分类落库、待确认列表/确认/忽略）、`app/schemas/kp_align.py`、`app/tasks/kp_align.py`（注册 `kp.align`）、`api/v1/kp.py` 4 个 `/kp/align` 接口、`notes.py` 写后自动入队、`parse_document.py` 解析完成后独立 Session 入队、`data/align_demo_notes.json`（30 条验收笔记）。
+- 验收证据：pytest **500 passed, 1 warning**（基线 462 + 新增 38）；真实 30 条笔记（note_id 7–36）→ 30 个 `kp.align` 任务全部 succeeded；`knowledge_points.embedding` 补齐 108/108；`note_kps` 36 行（自动 28 / 待确认 8）；人工核对自动关联 **28/28 正确（100%）**，覆盖 25/30 条笔记；5 条仅有 LLM 命中但分数 <0.55（`matched=1, dropped=10`）未落库；待确认列表 200、批量确认 3 → `manual+confirmed` 3、批量忽略 2 → 删除成功；手动重跑 note 15 成功且 `manual` 行保留；清理后五表计数 0、KP 108。
+- 实测抓修：首版重跑时未排除已有 `manual` 行，重复插入 `(15, 118)` 触发 `note_kps_pkey`（任务 3 次失败）→ 修复为候选命中 manual 即跳过，并补单测；commit `2fb9dd1`。
+- 文档同步：API.md §4 四接口定稿、SCHEMA.md §4.4 行语义、AGENTS §9.2/§9.3/§9.6、DECISIONS D-030、PROGRESS 30–33、实施计划勾选。
 
 ### 2026-10-26（S2-9）
 - S2-9 完成（spec `docs/spec/s2-9-kp-tree.md` + plan `docs/plan/s2-9-kp-tree.md`，用户确认后实施）。交付：`app/schemas/kp.py`、`app/services/kp_service.py`（一次查询内存组树、level 推导、移动防环/子树高度、删除三段保护）、`app/services/kp_import.py`（`load_tree_file`/`flatten_tree`/纯函数 `plan_sync`/`import_tree`/`referenced_codes_for`）、`app/api/v1/kp.py` 5 接口、`scripts/import_kp_tree.py`（append/overwrite/dry-run/退出码）、`data/kp_math.json`（108 节点 4 层 11 模块）；`api/router.py` 挂载。

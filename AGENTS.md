@@ -91,12 +91,13 @@ eval/{datasets,configs,results}
 - 文件上传（S2-6）：必须分块流式读写（禁止 `await file.read()` 全量入内存）；先校验扩展名 + 文件头 magic，再落库；对象键内容寻址、原始文件名只做展示；同用户 `sha256` 去重靠唯一约束，冲突复用赢家；MinIO 异常统一 `StorageUnavailableError`（500/50000，不泄露 endpoint）；上传成功后按 `parse_status ∈ {pending, failed}` 入队 `parse.document`，`done/parsing` 去重命中不重复入队
 - 异步任务（S2-7）：提交必须走 `task_service.create_task`（先写 `async_tasks` 再入队，入队失败置 `failed`）；处理函数是同步 `(Session, payload)`，**不得自行 commit**，由 `tasks/runner.py` 统一提交/回滚；重试只由 runner 决策（3 次、2s/4s 退避）；ARQ `enqueue_job` 不接受 `_max_tries`/`_job_timeout`（配在 `WorkerSettings`）；Redis 一律 `127.0.0.1`（Windows IPv6 坑）
 - 知识点树（S2-9）：树查询必须一次 SQL 查完同 subject 全部节点再内存组树（禁止 N+1 递归）；`level` 只由父节点推导（根 1、最深 4），移动节点先校验环与子树高度并 BFS 重算后代 level；`code` 创建后不可改；删除保护顺序 子节点 → `note_kps` → `knowledge_edges`（409，不级联）；导入 `append` 只 upsert、`overwrite` 同步删除缺失项，被引用或仍有保留子节点的节点 skip 并打印原因；写接口仅 admin/teacher
+- 知识点对齐（S2-10）：`services/kp_align_service.py` 是唯一入口；公式固定 `0.6*cos + 0.3*keyword + 0.1*prior`（阈值 0.75/0.55），LLM 只能从向量召回 top-10 的 `kp_id` 中选并给 confidence，禁止生成新节点名；`confidence<0.5` 丢弃；重跑只删 `source='ai'` 行并跳过已有 `manual` 行（避免 PK 冲突/降级用户确认）；自动触发失败只记 WARNING，不影响笔记/解析；`note_kps` 无时间列，队列固定排序不提供时间排序
 - 文档解析 Worker（S2-8）：必须复用 `parse_document → chunk_document → index_chunks`，禁止在 `tasks/parse_document.py` 另写解析/切片/向量化；解析结果落“文档笔记”（`notes.user_id + source_file_id` 唯一定位），切片挂该 `note_id`；文件状态机 `pending→parsing→done/failed`，`error_msg` ≤500 字；**唯一允许 handler 自行 commit 的场景**：写 `files` 的 `parsing/failed/progress`（runner 的 rollback 会吞掉这些状态，且进度轮询需要中途可见），handler 不得提交 `async_tasks` 状态；失败先落 `failed` 再抛；图片/扫描件明确失败不静默成功
 
 ### 9.3 AI 层（阶段 1 的高压线）
 - ai/ 之外禁止 import openai/httpx 客户端；业务层只 import ai/ 的适配器
 - 每次调用落 llm_call_logs：scene/model/tokens/cost/latency/trace_id
-- 结构化输出：Pydantic 校验 + 最多 2 次重试；仍失败抛专用异常，禁止返回半解析结果
+- 结构化输出：Pydantic 校验 + 最多 2 次重试；仍失败抛专用异常，禁止返回半解析结果；知识点对齐的 LLM 输出必须限定在候选 `kp_id` 集合内（schema 见 `ai/align/extractor.py`，prompt 见 `ai/prompts/kp_align_v1.md`）
 - 代码里禁止出现超过 3 行的 prompt 字符串（存 ai/prompts/ 或 prompt_templates 表）
 - 适配器可替换：Docling/PyMuPDF、DeepSeek/Qwen、Embedding 厂商都要能配置切换
 
@@ -126,6 +127,7 @@ eval/{datasets,configs,results}
 - 文档解析 Worker 样例：backend/app/tasks/parse_document.py（下载到临时文件 → 复用解析门面 → chunk → upsert 文档笔记 → index_chunks；阶段进度 10/50/80/100；失败先 commit 再 raise；Windows 临时文件清理 best-effort）
 - 知识点树样例：backend/app/models/knowledge_point.py + backend/app/services/kp_service.py + backend/app/api/v1/kp.py（一次查询内存组树；level 由父推导；移动校验环/子树高度；删除保护 409；写接口 `require_role("admin", "teacher")`；导入见 `services/kp_import.py` 的纯函数 `plan_sync` + CLI `scripts/import_kp_tree.py`）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
+- 知识点对齐样例：backend/app/ai/align/{scoring,extractor}.py + backend/app/services/kp_align_service.py + backend/app/tasks/kp_align.py（纯函数打分/分类；LLM 候选内抽取 + 严格 JSON + 2 次重试；向量补全一次批量；重跑保留 manual；待确认列表 `paginate_query` + `AliasPath` 展平；批量确认/忽略按 owner 过滤并计 skipped）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）
 - ai Rerank 适配器样例：backend/app/ai/rerank/client.py（契约 + DashScope 适配器 + 本地占位 + 门面；批量、3,600 token 截断、30s 超时、2 次重试、费用估算；失败由 retriever 回退）

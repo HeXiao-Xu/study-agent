@@ -197,6 +197,8 @@ erDiagram
 | source | TEXT | 否 | — | ai / manual（§10.4） | — |
 | confirmed | BOOLEAN | 否 | false ⚠ | 用户是否确认 | — |
 
+> S2-10 语义：自动关联写 `source='ai', confirmed=true`；0.55–0.75 进待确认队列写 `source='ai', confirmed=false`；用户批量确认后改 `confirmed=true, source='manual'`，忽略直接删除。重跑对齐只替换该笔记 `source='ai'` 的行，`manual` 行保留。表无时间列，待确认队列固定按 `(note_id DESC, kp_id)` 排序。
+
 ### 4.5 async_tasks（S2-7）
 
 异步任务状态表：ARQ 只负责投递与延时重试，状态/结果/历史全在这里。

@@ -342,6 +342,26 @@
 - 验证：pytest **462/462**（基线 425 + 新增 37：service 12 + import 12 + seed 3 + API 10）。真实 Postgres + uvicorn + CLI：append `created=108`，`subjects=1`、level 分布 1/11/68/28；二次 append `created=0 unchanged=108`；tree 接口 total=108；student 读 200、匿名 401、student 写 403/40300；teacher 建叶子 201（level=4）、PATCH 移到根下 200（level=2）、删根 409「存在子知识点」、有 `note_kps` 引用删 409「已被笔记引用」、清引用后 204；overwrite `--dry-run` `deleted=2 skipped=0`（修复前）→ 修复后 `deleted=1 skipped=1`，正式执行 deleted=1、被引用节点保留且打印 `skip code=MATH-COUNT-02-02 reason=referenced`，库内 107；再 append 补回 `created=1`；清理后 kp/subjects/notes/users 均 0。
 - 已知不足（不粉饰）：种子树是 AI 草稿，需人工校对考点归属与权重；无拖拽/批量排序，`order_no` 冲突不做唯一约束（按 `order_no,id` 稳定排序）；overwrite 直接改库、无自动备份与并发锁（唯一约束兜底，第二个导入会报 409）；append 假设文件是完整树（部分树会把节点 level/parent 按文件重置）；删除物理且无回收站；导入不做跨 subject 批量。
 
+## D-030 笔记/文档 → 知识点对齐与待确认队列（S2-10）
+
+- 背景：S2-9 已导入 108 节点高中数学树、`knowledge_points.embedding` 全为 NULL；S2-5 的 `note_kps` 只有表；S2-10 需实现方案 6.2 的自动对齐 + 待确认队列。spec 见 `docs/spec/s2-10-kp-align.md`。
+- 决策 1（触发）：笔记 `POST`/`PATCH` 成功后由路由层 `task_service.create_task` 入队 `kp.align`；入队失败只记 WARNING，不影响笔记保存。手动重跑 `POST /kp/align/notes/{note_id}` 返回 202 + TaskOut。
+- 决策 2（文档笔记）：`parse_document` 在文件 `done` 的 commit 之后，用**独立 Session** 入队对齐；异常只记 WARNING，不污染解析 handler 主事务、不把 LLM 延迟塞进解析 job。
+- 决策 3（KP 向量）：`ensure_kp_embeddings` 一次查出同 subject `embedding IS NULL` 的节点，按「祖先路径 / 名称 / 描述」批量编码并写回；本次真实补齐 108 节点，后续对齐零成本。
+- 决策 4（候选召回）：pgvector 余弦距离取 top-10，按 `note.subject_id` 过滤（为空则全树）；空正文直接 0 关联。
+- 决策 5（关键词分）：知识点全名命中 1.0；去掉固定前缀（函数的/数列的/集合的/三角函数的/平面向量的/一元二次/空间的/复数的）后的核心词（≥2 字）命中 0.6；否则 0。
+- 决策 6（树先验）：候选任一祖先名出现在笔记 `tags` 或 `title` → 1.0；否则 `level<=2` → 0.3；否则 0。没有“笔记章节”字段，用标签/标题近似“同章节”。
+- 决策 7（LLM 角色）：LLM 只从候选 `kp_id` 中选并给 `confidence`/`evidence`；严格 JSON + Pydantic 校验，解析/校验失败最多重试 2 次（共 3 次），仍失败抛 `AlignError` 让任务失败重试；候选外 id/重复 id 丢弃；空候选不调用 LLM。
+- 决策 8（分数）：最终分固定 `0.6*cos + 0.3*keyword + 0.1*prior`，LLM `confidence` 只做门槛（`<0.5` 丢弃），不参与加权；`>=0.75` 自动、`[0.55,0.75)` 待确认、`<0.55` 丢弃。
+- 决策 9（落库语义）：自动行 `source='ai', confirmed=true`；待确认行 `source='ai', confirmed=false`；确认接口改 `confirmed=true, source='manual'`；忽略删除 `source='ai' AND confirmed=false`。
+- 决策 10（重跑）：先删该笔记全部 `source='ai'` 行，保留 `manual`；候选若已有 manual 行则跳过不插入（避免 PK 冲突、不降级用户确认）。真实验收抓到此 bug：首版重跑 note 15 时重复插入 `(15, 118)` 触发 `note_kps_pkey`，已修复并补单测。
+- 决策 11（待确认列表）：`select(NoteKp).join(Note)` + `paginate_query`，`AliasPath` 从 ORM 关系展平 `note_title/kp_name/kp_code`；过滤本人、未软删、`source='ai' AND confirmed=false AND confidence∈[0.55,0.75)`；固定排序 `note_id DESC, kp_id`（表无时间列）。
+- 决策 12（批量操作）：`confirm`/`reject` 接收 1–100 对，只处理本人笔记；非本人/不存在/状态不符计入 `skipped` 而不 404，保证批量幂等。
+- 决策 13（不新增迁移）：`note_kps` 四列 + 现有 `knowledge_points.embedding` 足够；不引入对齐历史表/时间列/审计。
+- 决策 14（测试）：新增 38 条（scoring 10、extractor 8、service 8、task 4、api 8）；LLM/Embedding 全部 Fake，pytest 全量 **500 passed, 1 warning**。
+- 验证（真实 DashScope Embedding + qwen-plus + Postgres + Redis + ARQ Worker）：注册 `align_student`，30 条验收笔记全部 `POST /notes`（note_id 7–36），30 个 `kp.align` 任务 **succeeded=30 / failed=0**；`knowledge_points.embedding` 补齐 108/108；`note_kps` 36 行 = 自动 28 + 待确认 8。按链接人工核对 28 条自动关联全部与笔记主题一致 → **自动关联精确率 28/28 = 100%**，覆盖 25/30 条笔记；5 条（集合运算/复数/直线与圆/抛物线/导数与单调性）LLM 各命中 1 个候选但最终分 <0.55 被丢弃（`candidates=10, matched=1, auto=0, dropped=10`），属阈值偏严而非错链。待确认队列 `GET` 返回 8 条，批量确认 3 条（15/118、17/155、19/120）→ DB `manual+confirmed=3`，批量忽略 2 条（20/206、26/209）→ 删除成功，剩余待确认 3；`note_kps` 最终 34 行（ai true 28 / ai false 3 / manual true 3）。手动重跑 note 15：任务成功 `auto=1, matched=2, dropped=9`，manual 行保留、ai 行被替换。清理 notes/note_kps/async_tasks/users 后 pytest 复跑 500/500。
+- 已知不足（不粉饰）：树先验只是标签/标题近似；关键词无别名表/同义词，召回漏（本次 5/30 完全未关联）；阈值基于 text-embedding-v4 分布，换模型需重校准；LLM 失败即任务失败，无纯算法兜底；待确认无时间列/无审计，忽略后重跑可能再来；文档笔记解析失败则不对齐；并发重跑同一笔记可能 pkey 冲突（任务失败重试）；未写 `llm_call_logs`（S3-7 建表后再接）。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |
