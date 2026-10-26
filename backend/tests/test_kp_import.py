@@ -99,7 +99,7 @@ def test_flatten_tree_rejects_duplicate_codes(tmp_path: Path) -> None:
 
 def test_flatten_tree_rejects_depth_five() -> None:
     node = {"code": "L5", "name": "L5"}
-    for level in (4, 3, 2):
+    for level in (4, 3, 2, 1):
         node = {"code": f"L{level}", "name": f"L{level}", "children": [node]}
     tree = TreeFile.model_validate({"subject": {"code": "math", "name": "数学"}, "nodes": [node]})
     with pytest.raises(ValueError, match="4 级"):

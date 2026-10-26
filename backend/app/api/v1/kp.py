@@ -1,0 +1,69 @@
+"""S2-9 知识点树接口（API.md §4）。"""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user, get_db
+from app.core.context import get_trace_id
+from app.core.permissions import require_role
+from app.models.user import User
+from app.schemas.common import Envelope
+from app.schemas.kp import KpCreate, KpNodeOut, KpTreeOut, KpUpdate, SubjectOut
+from app.services import kp_service
+
+router = APIRouter(prefix="/kp", tags=["kp"])
+
+
+@router.get("/subjects", response_model=Envelope[list[SubjectOut]], summary="学科列表")
+def list_subjects(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[list[SubjectOut]]:
+    subjects = kp_service.list_subjects(session)
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=[SubjectOut.model_validate(subject) for subject in subjects],
+    )
+
+
+@router.get("/tree", response_model=Envelope[KpTreeOut], summary="知识点树")
+def get_tree(
+    subject: str = Query(min_length=1, max_length=30, description="学科 code"),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[KpTreeOut]:
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=kp_service.get_tree(session, subject_code=subject),
+    )
+
+
+@router.post("", status_code=201, response_model=Envelope[KpNodeOut], summary="新建知识点")
+def create_kp(
+    payload: KpCreate,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[KpNodeOut]:
+    kp = kp_service.create_kp(session, payload=payload)
+    return Envelope(trace_id=get_trace_id(), data=KpNodeOut.model_validate(kp))
+
+
+@router.patch("/{kp_id}", response_model=Envelope[KpNodeOut], summary="更新知识点")
+def update_kp(
+    kp_id: int,
+    payload: KpUpdate,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[KpNodeOut]:
+    kp = kp_service.update_kp(session, kp_id=kp_id, payload=payload)
+    return Envelope(trace_id=get_trace_id(), data=KpNodeOut.model_validate(kp))
+
+
+@router.delete("/{kp_id}", status_code=204, summary="删除知识点")
+def delete_kp(
+    kp_id: int,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> None:
+    kp_service.delete_kp(session, kp_id=kp_id)
