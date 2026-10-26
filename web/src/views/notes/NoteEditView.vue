@@ -34,7 +34,7 @@ const statusText = computed(() => {
       hour12: false,
     })}`
   }
-  return dirty.value ? '未保存' : '已保存'
+  return dirty.value ? '未保存' : currentId.value === null ? '新笔记' : '已保存'
 })
 
 function scheduleDraft(): void {

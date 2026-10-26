@@ -97,6 +97,7 @@ describe('NoteEditView', () => {
       note({ id: 9, title: '新笔记', content_md: '正文', subject_id: null, tags: [] }),
     )
     const { wrapper, router } = await mountAt('/notes/new')
+    expect(wrapper.find('[data-testid="save-status"]').text()).toBe('新笔记')
     await wrapper.find('[data-testid="note-title"]').setValue('新笔记')
     await wrapper.find('[data-testid="note-body"]').setValue('正文')
     await wrapper.find('[data-testid="save-note"]').trigger('click')
