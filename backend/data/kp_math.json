@@ -1,0 +1,899 @@
+{
+  "subject": {
+    "code": "math",
+    "name": "高中数学",
+    "stage": "高中"
+  },
+  "nodes": [
+    {
+      "code": "MATH",
+      "name": "高中数学",
+      "description": null,
+      "exam_weight": 1.0,
+      "order_no": 0,
+      "children": [
+        {
+          "code": "MATH-SET",
+          "name": "集合与常用逻辑用语",
+          "description": null,
+          "exam_weight": 0.8,
+          "order_no": 0,
+          "children": [
+            {
+              "code": "MATH-SET-01",
+              "name": "集合的概念与表示",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-SET-02",
+              "name": "集合间的基本关系",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-SET-03",
+              "name": "集合的基本运算",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-SET-04",
+              "name": "充分条件与必要条件",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-SET-05",
+              "name": "全称量词与存在量词",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 4,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-QUAD",
+          "name": "一元二次函数、方程和不等式",
+          "description": null,
+          "exam_weight": 0.8,
+          "order_no": 1,
+          "children": [
+            {
+              "code": "MATH-QUAD-01",
+              "name": "等式性质与不等式性质",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-QUAD-02",
+              "name": "基本不等式",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-QUAD-03",
+              "name": "一元二次函数",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-QUAD-04",
+              "name": "一元二次方程",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-QUAD-05",
+              "name": "一元二次不等式",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 4,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-FUNC",
+          "name": "函数",
+          "description": null,
+          "exam_weight": 1.0,
+          "order_no": 2,
+          "children": [
+            {
+              "code": "MATH-FUNC-01",
+              "name": "函数的概念及其表示",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 0,
+              "children": [
+                {
+                  "code": "MATH-FUNC-01-01",
+                  "name": "定义域与值域",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-FUNC-01-02",
+                  "name": "分段函数",
+                  "description": null,
+                  "exam_weight": 0.5,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-FUNC-02",
+              "name": "函数的单调性",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 1,
+              "children": [
+                {
+                  "code": "MATH-FUNC-02-01",
+                  "name": "单调性的判断与证明",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-FUNC-03",
+              "name": "函数的奇偶性",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-04",
+              "name": "函数的周期性与对称性",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-05",
+              "name": "幂函数",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-06",
+              "name": "指数函数",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 5,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-07",
+              "name": "对数函数",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 6,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-08",
+              "name": "函数图象变换",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 7,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-09",
+              "name": "函数零点与二分法",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 8,
+              "children": []
+            },
+            {
+              "code": "MATH-FUNC-10",
+              "name": "函数模型及其应用",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 9,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-TRIG",
+          "name": "三角函数",
+          "description": null,
+          "exam_weight": 1.0,
+          "order_no": 3,
+          "children": [
+            {
+              "code": "MATH-TRIG-01",
+              "name": "任意角与弧度制",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-TRIG-02",
+              "name": "三角函数的定义与同角关系",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": [
+                {
+                  "code": "MATH-TRIG-02-01",
+                  "name": "同角三角函数基本关系",
+                  "description": null,
+                  "exam_weight": 0.5,
+                  "order_no": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-TRIG-03",
+              "name": "诱导公式",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-TRIG-04",
+              "name": "三角恒等变换",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 3,
+              "children": [
+                {
+                  "code": "MATH-TRIG-04-01",
+                  "name": "两角和与差公式",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-TRIG-04-02",
+                  "name": "二倍角公式",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                },
+                {
+                  "code": "MATH-TRIG-04-03",
+                  "name": "辅助角公式",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-TRIG-05",
+              "name": "三角函数的图象与性质",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-TRIG-06",
+              "name": "函数 y=Asin(ωx+φ)",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 5,
+              "children": []
+            },
+            {
+              "code": "MATH-TRIG-07",
+              "name": "解三角形",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 6,
+              "children": [
+                {
+                  "code": "MATH-TRIG-07-01",
+                  "name": "正弦定理",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-TRIG-07-02",
+                  "name": "余弦定理",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                },
+                {
+                  "code": "MATH-TRIG-07-03",
+                  "name": "三角形面积公式",
+                  "description": null,
+                  "exam_weight": 0.5,
+                  "order_no": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "MATH-VEC",
+          "name": "平面向量与复数",
+          "description": null,
+          "exam_weight": 0.8,
+          "order_no": 4,
+          "children": [
+            {
+              "code": "MATH-VEC-01",
+              "name": "向量的概念与线性运算",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-VEC-02",
+              "name": "平面向量基本定理与坐标表示",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-VEC-03",
+              "name": "平面向量的数量积",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-VEC-04",
+              "name": "向量的应用",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-VEC-05",
+              "name": "复数的概念与运算",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-VEC-06",
+              "name": "复数的几何意义",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 5,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-SEQ",
+          "name": "数列",
+          "description": null,
+          "exam_weight": 0.9,
+          "order_no": 5,
+          "children": [
+            {
+              "code": "MATH-SEQ-01",
+              "name": "数列的概念与表示",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-SEQ-02",
+              "name": "等差数列",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 1,
+              "children": [
+                {
+                  "code": "MATH-SEQ-02-01",
+                  "name": "通项公式与性质",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-SEQ-02-02",
+                  "name": "前 n 项和",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-SEQ-03",
+              "name": "等比数列",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 2,
+              "children": [
+                {
+                  "code": "MATH-SEQ-03-01",
+                  "name": "通项公式与性质",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-SEQ-03-02",
+                  "name": "前 n 项和",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-SEQ-04",
+              "name": "数列求和",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-SEQ-05",
+              "name": "递推数列与通项",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-SEQ-06",
+              "name": "数学归纳法",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 5,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-GEO",
+          "name": "立体几何",
+          "description": null,
+          "exam_weight": 0.9,
+          "order_no": 6,
+          "children": [
+            {
+              "code": "MATH-GEO-01",
+              "name": "空间几何体",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 0,
+              "children": [
+                {
+                  "code": "MATH-GEO-01-01",
+                  "name": "表面积与体积",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-GEO-02",
+              "name": "点、直线、平面的位置关系",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-GEO-03",
+              "name": "平行的判定与性质",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-GEO-04",
+              "name": "垂直的判定与性质",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-GEO-05",
+              "name": "空间向量及其应用",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-GEO-06",
+              "name": "空间角与距离",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 5,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-ANA",
+          "name": "解析几何",
+          "description": null,
+          "exam_weight": 1.0,
+          "order_no": 7,
+          "children": [
+            {
+              "code": "MATH-ANA-01",
+              "name": "直线的方程",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-ANA-02",
+              "name": "圆的方程",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-ANA-03",
+              "name": "椭圆",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 2,
+              "children": [
+                {
+                  "code": "MATH-ANA-03-01",
+                  "name": "定义与标准方程",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-ANA-03-02",
+                  "name": "几何性质",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-ANA-04",
+              "name": "双曲线",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 3,
+              "children": [
+                {
+                  "code": "MATH-ANA-04-01",
+                  "name": "定义与标准方程",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-ANA-04-02",
+                  "name": "几何性质",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-ANA-05",
+              "name": "抛物线",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 4,
+              "children": [
+                {
+                  "code": "MATH-ANA-05-01",
+                  "name": "定义与标准方程",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-ANA-05-02",
+                  "name": "几何性质",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-ANA-06",
+              "name": "直线与圆锥曲线的位置关系",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 5,
+              "children": []
+            },
+            {
+              "code": "MATH-ANA-07",
+              "name": "参数方程与极坐标",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 6,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-DER",
+          "name": "导数及其应用",
+          "description": null,
+          "exam_weight": 1.0,
+          "order_no": 8,
+          "children": [
+            {
+              "code": "MATH-DER-01",
+              "name": "导数的概念与运算",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 0,
+              "children": [
+                {
+                  "code": "MATH-DER-01-01",
+                  "name": "基本求导公式",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-DER-01-02",
+                  "name": "复合函数求导",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-DER-02",
+              "name": "导数与函数的单调性",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-DER-03",
+              "name": "函数的极值与最值",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-DER-04",
+              "name": "导数与不等式",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 3,
+              "children": []
+            },
+            {
+              "code": "MATH-DER-05",
+              "name": "导数的实际应用",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 4,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-PROB",
+          "name": "概率与统计",
+          "description": null,
+          "exam_weight": 0.9,
+          "order_no": 9,
+          "children": [
+            {
+              "code": "MATH-PROB-01",
+              "name": "随机事件与概率",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-02",
+              "name": "古典概型",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 1,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-03",
+              "name": "条件概率与事件的独立性",
+              "description": null,
+              "exam_weight": 0.8,
+              "order_no": 2,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-04",
+              "name": "离散型随机变量及其分布",
+              "description": null,
+              "exam_weight": 0.9,
+              "order_no": 3,
+              "children": [
+                {
+                  "code": "MATH-PROB-04-01",
+                  "name": "分布列与期望",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-PROB-04-02",
+                  "name": "二项分布",
+                  "description": null,
+                  "exam_weight": 0.7,
+                  "order_no": 1,
+                  "children": []
+                },
+                {
+                  "code": "MATH-PROB-04-03",
+                  "name": "正态分布",
+                  "description": null,
+                  "exam_weight": 0.6,
+                  "order_no": 2,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-PROB-05",
+              "name": "抽样方法",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 4,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-06",
+              "name": "用样本估计总体",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 5,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-07",
+              "name": "变量间的相关关系与回归分析",
+              "description": null,
+              "exam_weight": 0.7,
+              "order_no": 6,
+              "children": []
+            },
+            {
+              "code": "MATH-PROB-08",
+              "name": "独立性检验",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 7,
+              "children": []
+            }
+          ]
+        },
+        {
+          "code": "MATH-COUNT",
+          "name": "计数原理",
+          "description": null,
+          "exam_weight": 0.6,
+          "order_no": 10,
+          "children": [
+            {
+              "code": "MATH-COUNT-01",
+              "name": "分类加法计数原理与分步乘法计数原理",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 0,
+              "children": []
+            },
+            {
+              "code": "MATH-COUNT-02",
+              "name": "排列与组合",
+              "description": null,
+              "exam_weight": 0.6,
+              "order_no": 1,
+              "children": [
+                {
+                  "code": "MATH-COUNT-02-01",
+                  "name": "排列",
+                  "description": null,
+                  "exam_weight": 0.5,
+                  "order_no": 0,
+                  "children": []
+                },
+                {
+                  "code": "MATH-COUNT-02-02",
+                  "name": "组合",
+                  "description": null,
+                  "exam_weight": 0.5,
+                  "order_no": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "code": "MATH-COUNT-03",
+              "name": "二项式定理",
+              "description": null,
+              "exam_weight": 0.5,
+              "order_no": 2,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

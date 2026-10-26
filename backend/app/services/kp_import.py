@@ -91,6 +91,8 @@ def flatten_tree(nodes: list[SeedNode]) -> list[FlatSeed]:
     seen: set[str] = set()
 
     def walk(items: list[SeedNode], level: int, parent_code: str | None) -> None:
+        if not items:
+            return
         if level > MAX_LEVEL:
             raise ValueError(f"知识点层级最多 {MAX_LEVEL} 级")
         for index, node in enumerate(items):

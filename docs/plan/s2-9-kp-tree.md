@@ -665,7 +665,7 @@ def test_flatten_tree_rejects_duplicate_codes(tmp_path: Path) -> None:
 
 def test_flatten_tree_rejects_depth_five() -> None:
     node = {"code": "L5", "name": "L5"}
-    for level in (4, 3, 2):
+    for level in (4, 3, 2, 1):
         node = {"code": f"L{level}", "name": f"L{level}", "children": [node]}
     tree = TreeFile.model_validate({"subject": {"code": "math", "name": "数学"}, "nodes": [node]})
     with pytest.raises(ValueError, match="4 级"):
@@ -844,6 +844,8 @@ def flatten_tree(nodes: list[SeedNode]) -> list[FlatSeed]:
     seen: set[str] = set()
 
     def walk(items: list[SeedNode], level: int, parent_code: str | None) -> None:
+        if not items:
+            return
         if level > MAX_LEVEL:
             raise ValueError(f"知识点层级最多 {MAX_LEVEL} 级")
         for index, node in enumerate(items):
@@ -1225,8 +1227,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.core.db import get_session_factory
-from app.services.kp_import import import_tree, load_tree_file
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app.core.db import get_session_factory  # noqa: E402
+from app.services.kp_import import import_tree, load_tree_file  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
