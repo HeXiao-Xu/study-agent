@@ -191,6 +191,24 @@ erDiagram
 | source | TEXT | 否 | — | ai / manual（§10.4） | — |
 | confirmed | BOOLEAN | 否 | false ⚠ | 用户是否确认 | — |
 
+### 4.5 async_tasks（S2-7）
+
+异步任务状态表：ARQ 只负责投递与延时重试，状态/结果/历史全在这里。
+
+| 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
+|---|---|---|---|---|---|
+| id | BIGINT IDENTITY | 否 | 自增 | 主键；同时作为 ARQ job id（`task:{id}`） | PK |
+| user_id | BIGINT | 否 | — | 创建者 → users.id | 复合 idx(user_id, created_at) |
+| name | TEXT | 否 | — | 任务名（注册表键，如 `demo.sleep`） | — |
+| status | TEXT | 否 | pending | pending / running / succeeded / failed（§10.15） | idx |
+| payload | JSONB | 否 | `{}` | 提交参数 | — |
+| result | JSONB | 是 | — | 成功结果 | — |
+| error | TEXT | 是 | — | 最近一次失败原因（重试中也写） | — |
+| attempts | INT | 否 | 0 | 已执行次数（= ARQ job_try） | — |
+| created_at | TIMESTAMPTZ | 否 | now() | | 复合 idx |
+| started_at | TIMESTAMPTZ | 是 | — | 首次开始执行时间（重试不覆盖） | — |
+| finished_at | TIMESTAMPTZ | 是 | — | 终态时间 | — |
+
 ## 5. 题库与错题
 
 ### 5.1 questions
@@ -455,6 +473,7 @@ erDiagram
 | 10.12 | messages.role | user / assistant / system ✅ | 方案 5.2 |
 | 10.13 | agent_tasks.status | pending / running / waiting_confirm / succeeded / failed ✅；task_type 首批：weekly_mindmap / mistake_paper（见 API 草案） | 方案 5.2 + 附录 B |
 | 10.14 | llm_call_logs.scene | qa / mistake / gen / agent / embed ✅ | 方案 5.2 |
+| 10.15 | async_tasks.status | pending / running / succeeded / failed（S2-7 定稿；失败重试回 pending） | 本卡 S2-7 |
 
 ---
 

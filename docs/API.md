@@ -22,7 +22,7 @@
 - trace_id 透出：响应头 `X-Trace-Id` 一律返回；请求头可传 `X-Trace-Id` 续链（S0-5 定稿）
 - 分页（S2-4 定稿）：所有列表接口统一 query `page`（默认 1，≥1）+ `page_size`（默认 20，1–100）；响应 `data = {items, total, page, page_size}`；越界/非整数 → `422/42200`；超过末页返回空 `items`，`total` 不变
 - 排序（S2-4 定稿）：`sort_by`（字段白名单，各接口在文档中列出）+ `order`（`asc`/`desc`，默认 `desc`）；非白名单字段 → `422/42200`「不支持的排序字段：xxx（可选：...）」；筛选一律显式 query 参数，不使用通用 filter DSL
-- SSE 与异步任务接口的轮询/推送约定：TODO（S3-5 / S2-7 定）
+- 异步任务轮询约定（S2-7 定稿）：提交接口返回 `202` + 任务 `id`；客户端每 1–2s `GET /api/v1/tasks/{id}`，直到 `status ∈ {succeeded, failed}`；本阶段不提供 SSE/WebSocket 推送（S3-5 再定流式）
 
 ## 1. 认证（S2-2 定稿）
 
@@ -138,6 +138,22 @@
 - 出参：`Envelope[FileStatusOut]`，字段 `id` / `filename` / `parse_status`
 - 备注：S2-6 只有 `pending`；`parsing` / `done` / `failed` 与错误信息由 S2-8 扩展（需迁移）
 - 错误：`404/40400`「文件不存在」；`403/40300`「无权访问该资源」
+
+## 3.5 异步任务（S2-7 定稿）
+
+### POST /api/v1/tasks/demo
+- 权限：`student`
+- 类型：异步任务提交
+- 请求体：`{"seconds": 5, "fail": false}`（`seconds` 1–10，默认 5；`fail` 默认 false）
+- 成功：**202**，`Envelope[TaskOut]`：`id` / `name`（`demo.sleep`）/ `status`（`pending`）/ `created_at`
+- 错误：`403/40300` 非 student；`422/42200` 参数越界；`500/50000`「任务队列不可用」
+- 说明：验收/联调端点；S2-8 起业务接口内部复用 `task_service.create_task`，不经过此端点
+
+### GET /api/v1/tasks/{task_id}
+- 权限：仅创建者（admin 不绕过）
+- 出参：`Envelope[TaskDetailOut]`：`id` / `name` / `status` / `attempts` / `payload` / `result` / `error` / `created_at` / `started_at` / `finished_at`
+- 状态机：`pending → running → succeeded`；可重试失败回 `pending`，第 3 次失败终态 `failed`
+- 错误：`404/40400`「任务不存在」；`403/40300`「无权访问该任务」
 
 ## 4. 知识点
 
@@ -288,6 +304,7 @@
 | 认证 | 登出 / refresh / token 吊销策略 | 后续（S2-2 已交付注册/登录/me；无状态 JWT 暂无吊销） |
 | 笔记 | 笔记本（folder）管理、回收站恢复、按学生列笔记（家长视角） | 后续（S2-5 已交付建/列表/详情/更新/软删） |
 | 文件 | 文件列表 / 下载 / 删除、签名 URL 接口（S2-12 笔记插图用） | 后续（S2-6 已交付上传/去重/解析状态；`presigned_get_url` 只在存储层） |
+| 异步任务 | 任务列表 / 取消 / 重跑、running 心跳回收、SSE 状态推送 | 后续（S2-7 已交付提交/轮询/重试；S3-5 定流式） |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
 | 错题 | 列表 / 统计看板 | S4-2 / S4-8 |
 | 复习 | 计划手动调整 | S5-5 |

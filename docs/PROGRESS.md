@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-6 文件上传 + MinIO + 去重（流式上传、白名单+magic 校验、`uq(user_id, sha256)` 复用、`GET /files/{id}/parse-status`；pytest 368/368；真实 MinIO 验收对象数 1、61MB 413）
-- 下一步：S2-7 异步任务框架（ARQ/Celery + 任务状态查询），为 S2-8 解析 Worker 铺路
+- 最近完成：S2-7 异步任务框架（ARQ 0.28 + `async_tasks` 表 + 状态机/重试/Worker；`POST /tasks/demo`、`GET /tasks/{id}`；pytest 401/401；真实 Worker 实测 pending→running→succeeded、3 次失败退避 2s/4s）
+- 下一步：S2-8 文档解析 Worker（上传后入队 `parse_document`，回写 `files.parse_status` 与解析结果）
 - 已知阻塞：无
 
 ## 任务清单
@@ -37,7 +37,7 @@
 - [x] S2-4 通用分页/排序/筛选
 - [x] S2-5 笔记表与 CRUD API
 - [x] S2-6 文件上传 + MinIO + 去重
-- [ ] S2-7 异步任务框架
+- [x] S2-7 异步任务框架
 - [ ] S2-8 文档解析 Worker
 - [ ] S2-9 知识点树 CRUD + 导入
 - [ ] S2-10 知识点对齐与待确认队列
@@ -113,6 +113,10 @@
 | 15 | 文件只有扩展名 + 头部 magic 校验，无病毒扫描/图片重编码（S2-6 遗留） | 合法容器内嵌恶意内容检测不到 | 上线前按需接扫描 |
 | 16 | 无文件列表/下载/删除接口，`presigned_get_url` 只在存储层（S2-6 遗留） | 前端无法直接列出/下载已传文件 | S2-12 笔记插图时补签名 URL 接口 |
 | 17 | `parse_status` 只有 `pending`，无 `error_msg` 列（S2-6 遗留） | 解析进度与失败原因还看不到 | S2-8 迁移 + Worker 回写 |
+| 18 | Worker 崩溃后 `running` 行无心跳回收（S2-7 遗留） | 任务会卡在 running，需人工改库 | 后续卡加心跳/超时回收 |
+| 19 | 无任务列表/取消/重跑接口（S2-7 遗留） | 前端只能按 id 轮询 | 有需求时补 |
+| 20 | 单队列、无优先级；`demo.sleep` 是验收入口（S2-7 遗留） | 正式前端不应暴露 demo 入口 | S2-8 起只内部复用 `create_task` |
+| 21 | 提交用 `asyncio.run` 建短连接（S2-7 遗留） | 高频提交会浪费 Redis 连接 | 量级上来再改连接池 |
 
 ## 变更日志
 
@@ -235,3 +239,11 @@
 - 与 plan 的偏差（均为文档/测试细节，已同步 plan 执行记录）：① minio 7.2.20 的 `S3Error` 构造签名为 `(response, code, message, resource, request_id, host_id)`，测试改为关键字构造；② 测试样本 `b"%PDF-1.4\\n"` 实为 9 字节，`size` 断言由 8 改 9；③ 重复上传的 API 测试需用真实 sha256 计算对象键后再播种假存储对象
 - 已知事项（不粉饰）：去重需读完整个文件（遗留 14）；无病毒扫描、magic 只验头部（遗留 15）；无列表/下载/删除与签名 URL 接口（遗留 16）；`parse_status` 只有 pending（遗留 17）；不同用户同文件各存一份；补偿删除尽力而为
 - 文档同步：API.md（§3 两接口定稿 + §12 文件缺口 + §13 新增 41300）、SCHEMA.md（§4.1 storage_path 键规则 / parse_status 现状）、AGENTS.md（§9.2 上传约定、§9.6 存储与上传锚点）、DECISIONS D-026、PROGRESS、requirements.txt、.env.example、spec/plan 执行记录
+
+### 2026-10-26（S2-7）
+- S2-7 完成（按 §10 全流程：spec docs/spec/s2-7-task-framework.md + plan docs/plan/s2-7-task-framework.md，均经用户确认）。交付：迁移 0004 建 `async_tasks`（CHECK + 两个索引）；`app/tasks/{__init__,registry,demo,queue,runner,worker}.py`（注册表、demo.sleep、ARQ 适配器、状态机执行器、WorkerSettings）；`services/task_service.py`（提交先落库再入队、查询权限）；`POST /api/v1/tasks/demo`（202）+ `GET /api/v1/tasks/{id}`；配置 4 项；`TaskQueueUnavailableError`；5 个测试文件共 33 条
+- 拍板（D-027，2026-10-26 用户确认，全部选 A）：ARQ 而非 Celery；状态存 DB 表 `async_tasks`；提供 `POST /tasks/demo` 验收端点
+- 验收证据：pytest **401 passed, 1 warning**（368 + 33）；真实 Redis 7.4.11 + Worker + Postgres：成功任务 5s —— `pending`（attempts=0）→ `running`（attempts=1、started_at 14:56:32.418）→ `succeeded`（`result={"slept":5}`、finished_at 14:56:37.426，正好 5.0s）；失败任务 —— `attempts=3`、`failed`、error=「第 3 次失败：演示任务按请求失败」，ARQ 日志「retrying job in 2.00s」「retrying job in 4.00s」，started_at 只写一次（14:56:52.044，finished_at 14:57:01.222）；B 查 A 的任务 → **403/40300「无权访问该任务」**；Worker 结构化日志（`on_startup` 配置后）出现 task_started/task_retry/task_failed/task_succeeded，只含 id/name/attempts；清理后 async_tasks=0、users=0
+- 与 plan 的偏差（已同步 plan 执行记录）：① 额外新增 `app/tasks/__init__.py`，并在包初始化时 import demo（否则只 import runner 时注册表为空，demo.sleep 被判「未知任务类型」）；② runner 日志 extra 的 `name` 与 `LogRecord.name` 冲突（KeyError），改 `task_name`；③ Worker 首轮验收发现 INFO 日志被根 logger 的 WARNING 吞掉，补 `WorkerSettings.on_startup = setup_logging`（追加提交 `fix(s2-7)`）；④ `REDIS_URL` 由 localhost 改 127.0.0.1（Windows IPv6 超时，实测 ARQ `TimeoutError`），默认值/.env.example/本地 .env 同步
+- 已知事项（不粉饰）：Worker 崩溃留 running 行（遗留 18）；无列表/取消/重跑（19）；单队列 + demo 端点（20）；短连接提交（21）；`error` 只留最近一次；结果 JSONB 无大小限制
+- 文档同步：API.md（§0 轮询约定、§3.5 两接口、§12 任务缺口）、SCHEMA.md（§4.5 async_tasks、§10.15 状态枚举）、AGENTS.md（§9.2 异步任务约定、§9.6 任务框架锚点）、DECISIONS D-027、PROGRESS、README（日常启动 ③ Worker）、requirements.txt、.env.example、spec/plan 执行记录

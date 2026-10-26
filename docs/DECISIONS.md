@@ -289,6 +289,24 @@
 - 验证：pytest **368/368**（基线 322 + 新增 46：存储 10 + 规则 13 + 服务 13 + 接口 10）。真实 MinIO + Postgres：同一 PDF 首次 **201**（`size=77`、`sha256=68d3dbe2…`、`storage_path=uploads/8/68/<sha256>.pdf`、`parse_status=pending`），第二次 **200/`deduped=true`** 且 `id` 相同；psql 只 1 行，MinIO `uploads/` 前缀对象数 **1**；再次上传 `.md` → 201（文本类型通路可用）；61MB PDF → **413/41300「文件超过 60MB 上限」** 且行数/对象数不增；A 查 `parse-status` → 200 `pending`，B 查 A → **403/40300**；清理后 files/users 与对象数全为 0。
 - 已知不足（不粉饰）：去重必须读完整个文件（sha256 全量），不是秒回；只有扩展名 + 头部 magic，不防“合法 PDF 内嵌恶意内容”，docx 只验 ZIP 头；无病毒扫描、无图片重编码、未接上传限流；`parse_status` 只有 `pending`（S2-8 需迁移扩展）；无文件列表/下载/删除接口，`presigned_get_url` 只在存储层；不同用户传同一文件各存一份（按用户隔离的代价）；补偿删除是尽力而为，极端情况仍可能留孤儿对象。
 
+## D-027 S2-7 异步任务框架决策（spec §3/§12 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-7-task-framework.md，plan 见 docs/plan/s2-7-task-framework.md）
+- 决策 1（框架）：用 **ARQ 0.28.0**（符合 AGENTS §2 的 ARQ + APScheduler 选型），不引入 Celery；`redis` 由 arq 解析为 5.3.1 并显式锁定。
+- 决策 2（状态存储）：新建 **`async_tasks` 表**（迁移 0004），ARQ 只当执行器。原因：ARQ 结果默认 1 小时过期、无历史、无法按用户鉴权；DB 还能给 S2-8/S2-11 直接查。
+- 决策 3（提交顺序）：先落库（pending）再入队；入队失败把行置 `failed` +「任务入队失败」并抛 500/50000，不留永远 pending 的幽灵任务。
+- 决策 4（状态机）：`pending → running → succeeded`；可重试失败回 `pending`，第 3 次失败终态 `failed`。轮询方只需认 4 个值。
+- 决策 5（重试）：最多 3 次尝试，指数退避 `2s`、`4s`（`task_retry_base_seconds * 2^(try-1)`）；重试决策在 `runner.execute_task`，ARQ 只负责延时投递（`Retry(defer=...)`）。
+- 决策 6（执行模型）：处理函数是同步 `(Session, payload) -> dict | None`，Worker 里 `asyncio.to_thread` 执行；处理器不得自行 commit，runner 统一提交，失败先 rollback 再写 failed/pending。
+- 决策 7（幂等）：终态任务再次投递直接返回，不重复执行；任务行不存在 → 返回 `missing` 并记 warning，不抛异常避免 ARQ 无意义重试。
+- 决策 8（接口）：`POST /api/v1/tasks/demo`（student，202）+ `GET /api/v1/tasks/{id}`（仅创建者，admin 不绕过）。demo 端点只用于验收/联调，`seconds` 1–10、`fail` 可复现失败。
+- 决策 9（轮询约定）：写进 API.md §0——提交 202 + id，客户端每 1–2s 轮询，终态即停；本阶段不做 SSE。
+- 决策 10（Windows 坑）：`REDIS_URL` 统一 `redis://127.0.0.1:6379/0`（`localhost` 先解析 `::1`，Docker 只发布 IPv4，ARQ 实测直接 `TimeoutError`），与 `core/db.py` 的 Postgres 注释同因；默认值、`.env.example`、本地 `.env` 同步。
+- 决策 11（ARQ 0.28 API 限制）：`enqueue_job` 没有 `_max_tries`/`_job_timeout`（`**kwargs` 会被当函数入参），重试数/超时只能配在 `WorkerSettings`；job id 固定 `task:{id}`。
+- 决策 12（Worker 日志）：`WorkerSettings.on_startup` 调 `setup_logging`；否则根 logger 默认 WARNING，`task_started`/`task_succeeded` 等 INFO 会消失（首轮验收实际踩到）。
+- 验证：pytest **401/401**（基线 368 + 新增 33）。真实 Redis 7.4.11 + Worker + Postgres：`demo.sleep` 5s 实测 `pending`（attempts=0）→ `running`（attempts=1、started_at 14:56:32）→ `succeeded`（`result={"slept":5}`、finished_at 14:56:37，恰好 5.0s）；`fail=true` 实测 attempts=3、`failed`，ARQ 日志显示 retry 2.00s / 4.00s，started_at 只写一次，error=「第 3 次失败：演示任务按请求失败」；B 查 A 的任务 → **403/40300**；Worker 结构化日志出现 `task_started`/`task_retry`/`task_failed`/`task_succeeded`（只含 id/name/attempts，无 payload 正文）；清理后 async_tasks/users 均 0。
+- 已知不足（不粉饰）：`asyncio.run` 每次提交建短连接（低频可用，高频需连接池/后台循环）；单队列、无优先级、无取消/重跑/列表；Worker 崩溃会留下永久 `running` 行（无心跳回收）；`demo.sleep` 是验收入口，前端不应暴露；`error` 只保留最近一次；结果 JSONB 无大小限制。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

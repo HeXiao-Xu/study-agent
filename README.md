@@ -61,15 +61,20 @@ cd E:\BiShe-AIStudy\study-agent\backend
 uvicorn app.main:app --reload           # 看到 "Application startup complete" 即成功
 # 交互式 API 文档：http://127.0.0.1:8000/docs
 
-# ③ 前端（再开一个终端）
+# ③ 异步 Worker（S2-7 起；不启动则任务一直 pending）
+cd E:\BiShe-AIStudy\study-agent\backend
+arq app.tasks.worker.WorkerSettings
+
+# ④ 前端（再开一个终端）
 cd E:\BiShe-AIStudy\study-agent\web
 npm run dev                             # 看到 "Local: http://localhost:5173/" 即成功
 # 验收页：http://localhost:5173/debug（显示后端 /health 结果）
 ```
 
-> `uvicorn` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
+> `uvicorn` / `arq` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
 > 普通 PowerShell 先跑 `.venv\Scripts\Activate.ps1` 再用。
-> 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）。
+> 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）；
+> 不跑异步任务可不启动 ③。
 
 ### 收工
 
