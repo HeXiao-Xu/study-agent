@@ -38,6 +38,7 @@ eval/{datasets,configs,results}
 - 错误：不吞异常，不用 `except: pass`；异常带上下文与 trace_id
 - 数据库：所有查询必须显式过滤 user_id（除非是公共语料）；禁止在循环里查库
 - 注释：只解释"为什么"，不复述"做了什么"
+- 枚举一律 `TEXT + CHECK`（不用 PostgreSQL ENUM）：值集常量放 `app/models/enums.py`，CHECK 文本由 `in_check()` 生成（D-021）
 
 ## 5. AI 调用约束
 - 所有 LLM/Embedding/Rerank 调用必须走 ai/ 层的 Client 适配器，禁止在业务代码里直接调 SDK
@@ -107,6 +108,7 @@ eval/{datasets,configs,results}
 - 前端校验规则与后端 Pydantic 保持一致（从 API.md 抄，不各自发明）
 
 ### 9.6 一致性锚点（每个正式模块落地后回填，防代码风格漂移）
+- 后端模型样例：backend/app/models/user.py（BIGINT IDENTITY 主键、TEXT+CHECK 枚举、created_at/updated_at + onupdate、uq_/ck_/ix_/fk_ 命名；枚举常量见同目录 enums.py）
 - 后端路由样例：（待 S2 首个正式路由后回填）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）

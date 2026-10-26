@@ -208,6 +208,16 @@
 - 验证：pytest 191/191（新增 31）；真实 vector hit@5=1.000/MRR=0.917、hybrid 1.000/0.827、hybrid_rerank 1.000/0.938、引用精确率 0.827、引用命中率 1.000、拒答准确率 100%、回答平均 6243ms/945.5 tokens/¥0.0317224；证据 eval/results/s1-7-*.json。
 - 已知不足（不粉饰）：30 条/83 块，hit@5 饱和且受预标注偏差影响；q004/q005/q009 弱证据；q026/q029 最终拒答正确但已经调用 LLM；引用精确率不等于答案数学正确。
 
+## D-021 S2-1 数据模型与迁移实现决策（spec §2/§3/§5 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-1-data-model.md）
+- 决策 1（表数 7 → 5）：任务卡的 `roles` / `user_roles` 在 SCHEMA 中不存在；契约按 `users.role` 单列枚举，API.md 权限与 S2-2/S2-3 任务卡（JWT 含 role、require_role）亦按单角色设计。按 AGENTS §8 以 SCHEMA 为准，不建这两张表，任务卡条目视为 SCHEMA 成文前的旧稿。
+- 决策 2（认证路线）：`fastapi-users` 的 SQLAlchemy 适配器 async 专用（官方文档要求 `AsyncSession` + `asyncpg`），且其基础模型要求 `email/hashed_password/is_active/is_verified/is_superuser`，与项目同步 psycopg 栈及 SCHEMA 的 `username/password_hash/...` 冲突；S2-2 改用 FastAPI 官方安全示例（pwdlib/bcrypt + PyJWT），仍不手写哈希与令牌算法。
+- 决策 3（枚举 TEXT + CHECK）：PG ENUM 加值不可回滚，`downgrade` 会失效；TEXT + CHECK 可对称 `DROP/ADD CONSTRAINT`，且与 `note_chunks.chunk_type` 的 TEXT 风格一致，中文枚举值（S4 起）也更自然。代价是失去 PG enum 的类型安全，由 Pydantic + CHECK 双层兜底；值集唯一来源 `app/models/enums.py`。
+- 决策 4（note_chunks 外键延后 S2-5）：存量 83 行 `user_id=1` 无对应 users 行，S2-1 直接加 FK 会迁移失败；改为 S2-5 建 notes/files 时一起补。SCHEMA §4.3 注记已同步改口径。
+- 其他落定：5 张表全部补 `created_at/updated_at`（应用层 `onupdate`，不建触发器）；SCHEMA §0 数组字段定为原生 `TEXT[]/BIGINT[]`（不转 JSONB）；新增 `ck_user_relations_not_self`、`ck_knowledge_edges_not_self` 两条完整性约束与 `ix_user_relations_student_id` 反查索引。
+- 验证：pytest 206/206（新增 15）；`alembic upgrade head → downgrade -1 → upgrade head` 往返通过；5 条负向约束（非法 role / 重复 username / 自环边 / 删除被引用学科 / 非法 level）实测均被数据库拒绝且事务回滚无残留；smoke 核心表 6/6。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

@@ -15,7 +15,7 @@
 - 外键：`BIGINT`，命名 `<表名单数>_id`
 - 时间：统一 `TIMESTAMPTZ`；`created_at` 默认 `now()`
 - 软删除：`deleted_at`，检索时统一过滤（方案 5.3）
-- 数组字段（方案中 `xxx[]` 写法）：`TEXT[]` / `BIGINT[]`（⚠ TEXT[] vs JSONB 在 S2-1 定）
+- 数组字段（方案中 `xxx[]` 写法）：`TEXT[]` / `BIGINT[]`（✅ S2-1 定稿：用原生数组，标签检索建 GIN，不转 JSONB）
 - 向量维度：统一 `VECTOR(1024)`（✅ S1-3 定稿：DashScope text-embedding-v4 实测输出 1024）
 - JSON 字段：统一 `JSONB`
 - 金额/权重/分数：`NUMERIC`
@@ -61,6 +61,7 @@ erDiagram
 | grade | TEXT | 是 | — | 年级（取值待定 TODO） | — |
 | role | TEXT | 否 | 'student' ⚠ | 枚举见 §10.1 | — |
 | created_at | TIMESTAMPTZ | 否 | now() | 创建时间 | — |
+| updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
 
 ### 2.2 user_relations
 
@@ -70,7 +71,11 @@ erDiagram
 |---|---|---|---|---|---|
 | id | BIGINT | 否 | 自增 | 主键 | PK ⚠ |
 | teacher_id | BIGINT | 否 | — | 老师/家长，FK→users | 复合 UNIQUE(teacher_id, student_id) ⚠ |
-| student_id | BIGINT | 否 | — | 被绑定学生，FK→users | — |
+| student_id | BIGINT | 否 | — | 被绑定学生，FK→users | idx(student_id) ✅（S2-1 补） |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S2-1 补） | — |
+| updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
+
+> S2-1 落库时新增 `ck_user_relations_not_self`：禁止 teacher_id = student_id。
 
 ### 2.3 subjects
 
@@ -81,6 +86,8 @@ erDiagram
 | code | TEXT | 否 | — | 学科代码，如 math | UNIQUE ⚠ |
 | stage | TEXT | 否 | '高中' ⚠ | 学段 | — |
 | config_json | JSONB | 是 | — | 难度分布/题型配比默认值 | — |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S2-1 补） | — |
+| updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
 
 ## 3. 知识组织
 
@@ -93,11 +100,15 @@ erDiagram
 | parent_id | BIGINT | 是 | — | 上级知识点（根为 NULL），自引用 | idx ⚠ |
 | name | TEXT | 否 | — | 知识点名称 | — |
 | code | TEXT | 否 | — | 如 MATH-FUNC-012 | UNIQUE(subject_id, code) ⚠ |
-| level | SMALLINT | 否 | — | 层级 1–4 ✅ | — |
+| level | SMALLINT | 否 | — | 层级 1–4 ✅；`CHECK 1..4` ✅（S2-1） | — |
 | description | TEXT | 是 | — | 说明 | — |
 | exam_weight | NUMERIC | 是 | — | 考纲权重（复习优先级、组卷打分用） | — |
-| embedding | VECTOR(1024) | 是 | — | 语义向量（对齐打分用，方案 6.2） | HNSW ⚠建议 |
+| embedding | VECTOR(1024) | 是 | — | 语义向量（对齐打分用，方案 6.2） | HNSW ✅（S2-1 建） |
 | order_no | INTEGER | 否 | 0 ⚠ | 同层排序 | — |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S2-1 补） | — |
+| updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
+
+> S2-1：`embedding` 列与 HNSW 索引已建，数据由 S2-10 写入；`parent_id` 自引用不设级联删除（NO ACTION），删除顺序由 S2-9 业务控制。
 
 ### 3.2 knowledge_edges
 
@@ -109,6 +120,10 @@ erDiagram
 | relation | TEXT | 否 | — | 枚举见 §10.3 | — |
 | weight | NUMERIC | 是 | — | 关系强度 | — |
 | source | TEXT | 否 | — | ai / manual（§10.4） | — |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S2-1 补） | — |
+| updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
+
+> S2-1 新增 `ck_knowledge_edges_not_self`（src_kp_id <> dst_kp_id）；relation / source 以 CHECK 约束落库。
 
 ## 4. 笔记与文件
 
@@ -162,7 +177,7 @@ erDiagram
 | page_no | INTEGER | 是 | — | 页码（引用定位） | — |
 | bbox_json | JSONB | 是 | — | 原文位置框（引用高亮） | — |
 
-> S1-3 建表时 notes/users/files 尚未建，note_id/user_id/source_file_id 暂不加外键；S2-1 建齐后补。
+> S1-3 建表时 notes/users/files 尚未建，note_id/user_id/source_file_id 暂不加外键；S2-1 复核后改为**延后到 S2-5**：时存量 83 行 `user_id=1` 无对应用户，现在加 FK 会失败，等建 notes/files 时一起补（附说明性数据迁移或先建对应用户）。
 
 ### 4.4 note_kps
 
@@ -424,7 +439,7 @@ erDiagram
 
 | # | 字段 | 取值 | 依据 |
 |---|---|---|---|
-| 10.1 | users.role | student / teacher / parent / admin ⚠（S2-2 定稿） | 依据 user_relations 与 /admin/usage 接口推断 |
+| 10.1 | users.role | student / teacher / parent / admin ✅（S2-1 以 `ck_users_role` 落库定稿） | 依据 user_relations 与 /admin/usage 接口推断 |
 | 10.2 | files.parse_status | pending / done（中间态与失败态 TODO，S2-8 定） | 方案 6.1 流水线 |
 | 10.3 | knowledge_edges.relation | prerequisite / related / confusable / contains ✅ | 方案 5.2 |
 | 10.4 | note_kps.source、knowledge_edges.source | ai / manual ✅ | 方案 5.2 |

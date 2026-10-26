@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 1（RAG 技术验证，M0）——阶段 0 已完成（tag `m0-env-ready`）
-- 最近完成：S1-7 自测用例与效果抽查（30 条：20 应答题 + 10 应拒题；三配置真实数字；pytest 191/191；tag `m0-rag-validated`）
-- 下一步：S2-1 数据模型与迁移（第一批）
+- 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S2-1 数据模型与迁移（第一批 5 张表：users / user_relations / subjects / knowledge_points / knowledge_edges；pytest 206/206；迁移正反往返通过）
+- 下一步：S2-2 认证（注册 / 登录 / JWT，走 FastAPI 官方安全示例，不引入 fastapi-users）
 - 已知阻塞：无
 
 ## 任务清单
@@ -31,7 +31,7 @@
 - [x] S1-7 自测用例与效果抽查 20–30 条 ★
 
 ### 阶段 2：基础框架（M1）
-- [ ] S2-1 数据模型与迁移（第一批）
+- [x] S2-1 数据模型与迁移（第一批）
 - [ ] S2-2 认证 JWT
 - [ ] S2-3 RBAC 与数据隔离
 - [ ] S2-4 通用分页/排序/筛选
@@ -96,7 +96,7 @@
 
 | # | 问题 | 影响 | 计划处理时间 |
 |---|---|---|---|
-| 1 | SCHEMA.md 中 ⚠ 标记的推断类型/索引未复核 | 建表返工 | S2-1 建迁移前 |
+| 1 | SCHEMA.md 中 ⚠ 标记的推断类型/索引未复核（S2-1 已逐条结案，见 spec §3） | 建表返工 | 已完成 2026-10-26 |
 | 2 | API.md 存在 TODO 待定字段与待定接口 | 前后端并行开发受限 | 各对应任务定稿时 |
 
 ## 变更日志
@@ -173,3 +173,12 @@
 - 已知限制：hit@5=1.000 受预标注参考候选清单影响，不能外推；样本 30 条/83 块；纯向量延迟复用混合检索调用；回答链路内部重复检索一次；引用精确率不等于答案数学正确
 - 文档同步：DECISIONS D-020、spec §15、PROGRESS、docs/EVAL_S1.md；无 API/SCHEMA/迁移/新依赖
 - 里程碑：本地 tag `m0-rag-validated`；用户负责 push
+
+### 2026-10-26（S2-1）
+- S2-1 完成（按 §10 全流程：spec docs/spec/s2-1-data-model.md + plan docs/plan/s2-1-data-model.md，均经用户确认）。交付：backend/app/models/enums.py（UserRole / EdgeRelation / EdgeSource + in_check）、5 个模型（user / user_relation / subject / knowledge_point / knowledge_edge）与 __init__ 注册、backend/alembic/versions/0002_s2_1_business_tables.py、backend/tests/test_models_s2_1.py（15 条）、scripts/smoke.py 的 REQUIRED_TABLES
+- 拍板与偏离（D-021）：表数 7→5（roles / user_roles 不建，以 SCHEMA 的 users.role 单列枚举为准）；S2-2 认证改走 FastAPI 官方安全示例（fastapi-users 的 SQLAlchemy 适配器 async 专用且基础字段与 SCHEMA 不符）；枚举一律 TEXT+CHECK；note_chunks 外键延后到 S2-5
+- 验收证据：pytest **206 passed, 1 warning**（S1 基线 191 + 新增 15）；`alembic upgrade head`（0001→0002）→ `\d` 五表字段齐全（knowledge_points.embedding 为 vector(1024)、HNSW m=16/ef_construction=64）、5 个 UNIQUE、7 条 CHECK、6 个 FK、6 个业务索引；`alembic downgrade -1` 回到 0001（5 表消失、note_chunks 83 行保留）；再次 `upgrade head` 通过
+- 负向验证（事务内制造违规后 ROLLBACK，库内零残留）：非法 role → `ck_users_role`；重复 username → `uq_users_username`；自环边 → `ck_knowledge_edges_not_self`；删除被引用学科 → `fk_knowledge_points_subject_id`；level=5 → `ck_knowledge_points_level`
+- 冒烟：`scripts/smoke.py` 8 项中 7 PASS + 1 SKIP（前端 dev 未启动，可选组件），核心表 6/6，退出码 0
+- 已知事项（不粉饰）：users 表暂无数据，note_chunks 的 user_id 外键仍待 S2-5 回补；updated_at 由应用层 onupdate 维护，裸 SQL 更新不会刷新；knowledge_points.embedding 全为 NULL，待 S2-10 对齐时写入
+- 文档同步：SCHEMA.md（§0 数组字段定稿、5 表时间列/索引/约束、§4.3 FK 口径、§10.1 role 定稿）、AGENTS.md（§4 枚举规则、§9.6 模型锚点）、DECISIONS D-021、PROGRESS
