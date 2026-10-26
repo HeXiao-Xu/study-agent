@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Index,
+    SmallInteger,
     Text,
     UniqueConstraint,
     func,
@@ -23,6 +24,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.models.enums import ParseStatus, in_check
 
 
 class File(Base):
@@ -30,7 +32,11 @@ class File(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "sha256", name="uq_files_user_sha256"),
         CheckConstraint(
-            "parse_status IN ('pending', 'done')", name="ck_files_parse_status"
+            in_check("parse_status", [status.value for status in ParseStatus]),
+            name="ck_files_parse_status",
+        ),
+        CheckConstraint(
+            "parse_progress BETWEEN 0 AND 100", name="ck_files_parse_progress"
         ),
         Index("ix_files_user_id", "user_id"),
     )
@@ -48,6 +54,16 @@ class File(Base):
         Text, nullable=False, server_default=text("'pending'")
     )
     parse_result_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    parse_progress: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=0, server_default=text("0")
+    )
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parse_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    parse_finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

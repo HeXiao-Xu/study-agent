@@ -28,6 +28,13 @@ class EdgeSource(StrEnum):
     MANUAL = "manual"
 
 
+class ParseStatus(StrEnum):
+    PENDING = "pending"
+    PARSING = "parsing"
+    DONE = "done"
+    FAILED = "failed"
+
+
 class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
