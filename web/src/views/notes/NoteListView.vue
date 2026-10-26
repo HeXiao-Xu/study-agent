@@ -59,6 +59,7 @@ async function onSizeChange(size: number): Promise<void> {
 }
 
 async function clearFilters(): Promise<void> {
+  if (timer) clearTimeout(timer)
   keyword.value = ''
   await updateQuery({ q: '', subjectId: null }, true)
 }
