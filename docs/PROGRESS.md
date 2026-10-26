@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-1 数据模型与迁移（第一批 5 张表：users / user_relations / subjects / knowledge_points / knowledge_edges；pytest 206/206；迁移正反往返通过）
-- 下一步：S2-2 认证（注册 / 登录 / JWT，走 FastAPI 官方安全示例，不引入 fastapi-users）
+- 最近完成：S2-2 认证（注册 / 登录 / `/auth/me` / `get_current_user`；Argon2id + HS256 JWT；pytest 237/237；curl 全链路实测通过）
+- 下一步：S2-3 RBAC 与数据隔离（在 `get_current_user` 上叠角色与家长-学生关系校验）
 - 已知阻塞：无
 
 ## 任务清单
@@ -32,7 +32,7 @@
 
 ### 阶段 2：基础框架（M1）
 - [x] S2-1 数据模型与迁移（第一批）
-- [ ] S2-2 认证 JWT
+- [x] S2-2 认证 JWT
 - [ ] S2-3 RBAC 与数据隔离
 - [ ] S2-4 通用分页/排序/筛选
 - [ ] S2-5 笔记表与 CRUD API
@@ -98,6 +98,8 @@
 |---|---|---|---|
 | 1 | SCHEMA.md 中 ⚠ 标记的推断类型/索引未复核（S2-1 已逐条结案，见 spec §3） | 建表返工 | 已完成 2026-10-26 |
 | 2 | API.md 存在 TODO 待定字段与待定接口 | 前后端并行开发受限 | 各对应任务定稿时 |
+| 3 | 无 refresh / 登出 / token 吊销，无登录限流（S2-2 遗留） | 令牌到期前无法主动失效；暴力破解防护缺失 | 部署层或 S3-7 之后 |
+| 4 | `users` 表仍无业务数据（注册已可用，等待 S2-3/S2-11 真实使用） | 家长-学生关系与权限演示缺素材 | S2-3 起按需创建 |
 
 ## 变更日志
 
@@ -182,3 +184,11 @@
 - 冒烟：`scripts/smoke.py` 8 项中 7 PASS + 1 SKIP（前端 dev 未启动，可选组件），核心表 6/6，退出码 0
 - 已知事项（不粉饰）：users 表暂无数据，note_chunks 的 user_id 外键仍待 S2-5 回补；updated_at 由应用层 onupdate 维护，裸 SQL 更新不会刷新；knowledge_points.embedding 全为 NULL，待 S2-10 对齐时写入
 - 文档同步：SCHEMA.md（§0 数组字段定稿、5 表时间列/索引/约束、§4.3 FK 口径、§10.1 role 定稿）、AGENTS.md（§4 枚举规则、§9.6 模型锚点）、DECISIONS D-021、PROGRESS
+
+### 2026-10-26（S2-2）
+- S2-2 完成（按 §10 全流程：spec docs/spec/s2-2-auth.md + plan docs/plan/s2-2-auth.md，均经用户确认）。交付：backend/app/core/security.py（Argon2id 哈希、PyJWT HS256 签发/解析、启动密钥校验）、backend/app/api/deps.py（get_db / HTTPBearer / get_current_user）、backend/app/services/auth_service.py（注册、认证、签发）、backend/app/schemas/auth.py（RegisterRequest / LoginRequest / UserOut / TokenOut）、backend/app/api/v1/auth.py + api/router.py、main.py 装配、4 个测试文件
+- 拍板（D-022，2026-10-26 用户确认）：依赖 pwdlib[argon2]==0.3.1 + PyJWT==2.15.1；登录走 JSON + HTTPBearer + 统一壳（不用 OAuth2 表单）；注册可选 student/teacher/parent、admin 由 Literal 拒绝；单 token 24h、无 refresh/登出；登录失败统一文案 + 假哈希抹时间差；重名靠 DB UNIQUE + IntegrityError→409/40900
+- 验收证据：pytest **237 passed, 1 warning**（S2-1 基线 206 + 新增 31：配置 4 / 安全原语 10 / 服务 6 / 接口 11）；真实 uvicorn + curl：注册 201（`username=test_user_1`、无 `password_hash`）、重复注册 409/40900、`role=admin` 422/42200、登录返回 164 字符 token、`/auth/me` 200 回显用户、无 token「未提供认证凭据」/错密码与未知用户同为「用户名或密码错误」/过期 token「登录已过期，请重新登录」/乱码 token「无效的认证凭据」全部 401/40100；登录耗时 0.269–0.277s、未知用户 0.260–0.289s（时间差已抹平）
+- 数据库核验：`password_hash` 前缀 `$argon2id$v=19$m=655`；验收后删除测试账号，`users` 计数 0
+- 已知事项（不粉饰）：无 refresh/登出/吊销与登录限流（见遗留 3）；Argon2id 单次登录约 270ms；用户名大小写归一为小写（`Alice`=`alice`）；token 内 role 不作为权限来源，S2-3 必须基于回表用户判断
+- 文档同步：API.md（§0 Bearer 约定、§1 三条接口定稿、§12 TODO 更新、§13 增 40900）、AGENTS.md（§9.6 路由 + 认证锚点）、DECISIONS D-022、PROGRESS、.env.example（AUTH_*）、requirements.txt

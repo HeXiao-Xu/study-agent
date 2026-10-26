@@ -109,7 +109,8 @@ eval/{datasets,configs,results}
 
 ### 9.6 一致性锚点（每个正式模块落地后回填，防代码风格漂移）
 - 后端模型样例：backend/app/models/user.py（BIGINT IDENTITY 主键、TEXT+CHECK 枚举、created_at/updated_at + onupdate、uq_/ck_/ix_/fk_ 命名；枚举常量见同目录 enums.py）
-- 后端路由样例：（待 S2 首个正式路由后回填）
+- 后端路由样例：backend/app/api/v1/auth.py（路由只做 Pydantic 入参 → service → `Envelope` 组装；业务错误由 service 抛 `AppError`；请求级依赖见同目录上级 api/deps.py）
+- 后端认证样例：backend/app/core/security.py + backend/app/api/deps.py（Argon2id 口令哈希；PyJWT HS256，`sub`=user_id 字符串；HTTPBearer 取 token；`get_current_user` 回表取角色为权威；错误统一 `AuthError`→40100；S2-3 在其上叠权限依赖）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）

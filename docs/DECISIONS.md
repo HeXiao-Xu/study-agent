@@ -218,6 +218,19 @@
 - 其他落定：5 张表全部补 `created_at/updated_at`（应用层 `onupdate`，不建触发器）；SCHEMA §0 数组字段定为原生 `TEXT[]/BIGINT[]`（不转 JSONB）；新增 `ck_user_relations_not_self`、`ck_knowledge_edges_not_self` 两条完整性约束与 `ix_user_relations_student_id` 反查索引。
 - 验证：pytest 206/206（新增 15）；`alembic upgrade head → downgrade -1 → upgrade head` 往返通过；5 条负向约束（非法 role / 重复 username / 自环边 / 删除被引用学科 / 非法 level）实测均被数据库拒绝且事务回滚无残留；smoke 核心表 6/6。
 
+## D-022 S2-2 认证实现决策（spec §2.3/§10 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-2-auth.md，plan 见 docs/plan/s2-2-auth.md）
+- 决策 1（依赖与路线）：哈希用 `pwdlib[argon2]==0.3.1`（Argon2id），令牌用 `PyJWT==2.15.1`（HS256），走 FastAPI 官方安全示例，**不手写哈希/令牌算法**；不用 `passlib`（停更且与 bcrypt≥4 不兼容）、`python-jose`（停更）、`fastapi-users`（D-021 已论证与同步 psycopg 栈冲突）。用户 2026-10-26 批准新增这两个依赖。
+- 决策 2（传输与响应壳）：登录走 **JSON**，三条接口都套 `Envelope`；令牌用 `HTTPBearer` 提取。放弃 OAuth2 密码流表单（`OAuth2PasswordRequestForm`）的原因：它会要求登录返回裸 `{access_token,token_type}`，破坏 API.md §0 统一响应，前端也要额外发 form。代价是 Swagger 的 Authorize 不能一键登录，手动粘贴 Bearer token 仍可调试。
+- 决策 3（注册角色）：公开注册允许 `student/teacher/parent`，`admin` 用 Pydantic `Literal` 直接 422。老师/家长没有 `user_relations` 绑定就看不到任何学生数据，越权由 S2-3 的 RBAC 与数据隔离兜底，因此不额外收紧。
+- 决策 4（令牌生命周期）：单 access token，默认 24h，载荷 `{sub, role, iat, exp}`（`sub` 为字符串 user_id）；不做 refresh/登出/黑名单。无状态 JWT 在过期前无法吊销，密钥轮换会让全部 token 立即失效——该限制写进 PROGRESS 遗留项，后续卡再补。
+- 决策 5（防账号枚举 + 防重名）：登录失败统一 401「用户名或密码错误」；用户不存在时也对固定 dummy 哈希跑一次校验（实测存在/不存在两路 0.26–0.29s 无差异）。重名靠 `uq_users_username` + 捕获 `IntegrityError` → 409/40900（先查后插仍有并发竞态，故以 DB 约束为准）。
+- 决策 6（用户名归一化与口令强度）：用户名注册/登录都 trim + 转小写，3–50 字符且不含空白（`Alice` 与 `alice` 是同一账号）；口令 8–128 字符，只存 Argon2id 哈希。
+- 其他落定：`role` 以数据库为权威（`get_current_user` 按 `sub` 回表），token 内 role 仅用于快速判断；`AUTH_SECRET_KEY` 为空时 `create_app()` 启动即失败，`env=prod` 时长度 <32 直接校验失败；新增 `40900`/`ConflictError` 并同步 API.md §13。
+- 验证：pytest **237/237**（新增 31：配置 4 + 安全原语 10 + 服务 6 + 接口 11）；真实 curl：注册 201（`id=4`、`username=test_user_1`、无 `password_hash`）、重复注册 409/40900、`role=admin` 422/42200、登录 token 长度 164、`/auth/me` 200、无 token/错密码/未知用户/过期 token/乱码 token 均 401 且文案符合预期；DB 中 `password_hash` 前缀 `$argon2id$v=19$m=655`；测试用户已删除，`users` 计数 0。
+- 已知不足（不粉饰）：无 refresh/登出/吊销与登录限流（暴力破解防护留给部署层或 S3-7 之后）；Argon2id 单次登录约 270ms（含 DB 与网络，本机 curl 实测 0.269–0.277s），是有意付出的安全成本；无邮箱/手机号验证与找回密码（SCHEMA 无 email 字段）。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

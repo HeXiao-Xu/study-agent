@@ -8,19 +8,55 @@
 
 - Base path：`/api/v1`；另有 `GET /health`（无前缀，S0-5 交付）
 - 命名：路径与字段一律 `snake_case`（与数据库一致，**定死**）
-- 认证：JWT（S2-2 交付）。未特别标注的接口权限默认 `student`，且只能访问自己的数据；⚠ RBAC 细则 S2-3 定稿
+- 认证：Bearer JWT（S2-2 交付）：请求头 `Authorization: Bearer <token>`；载荷 `{sub, role, iat, exp}`，HS256，默认 24h 过期；无 refresh/登出（见 §12）。未特别标注的接口权限默认 `student`，且只能访问自己的数据；⚠ RBAC 细则 S2-3 定稿
 - 统一响应：`{code, message, trace_id, data}`（成功 `code=0`；错误结构与码表见 §13，S0-5 已落地）
 - trace_id 透出：响应头 `X-Trace-Id` 一律返回；请求头可传 `X-Trace-Id` 续链（S0-5 定稿）
 - 分页：列表接口统一分页参数（fastapi-pagination，S2-4 交付）
 - SSE 与异步任务接口的轮询/推送约定：TODO（S3-5 / S2-7 定）
 
-## 1. 认证
+## 1. 认证（S2-2 定稿）
+
+> 通用约定
+> - 认证头：`Authorization: Bearer <jwt>`；载荷 `{sub, role, iat, exp}`（`sub` 为字符串 user_id），HS256，默认 24h。
+> - 用户名不区分大小写：注册与登录都会 trim 后转小写；`^[^\s]{3,50}$`（不含空白，3–50 字符）。
+> - `role` 以数据库为准：`GET /auth/me` 等接口按 `sub` 回表取用户，token 里的 `role` 只用于快速判断/日志。
+> - 三条接口都套统一壳；错误结构与业务码见 §13。
+
+### POST /api/v1/auth/register
+- 权限：公开
+- 类型：同步
+- 状态码：**201**
+- 入参（JSON）：
+
+| 字段 | 类型 | 必填 | 约束 |
+|---|---|---|---|
+| username | string | 是 | 3–50 字符，不含空白；入库前 trim + 小写 |
+| password | string | 是 | 8–128 字符（只存 Argon2id 哈希） |
+| nickname | string | 是 | 1–50 字符（trim 后非空） |
+| grade | string | 否 | ≤20 字符，可空 |
+| role | string | 否 | `student`(默认) / `teacher` / `parent`；`admin` 不可自助注册 |
+
+- 出参：`data` = UserOut：`{id, username, nickname, grade, role, created_at}`（`created_at` ISO-8601 UTC，无 `password_hash`）
+- 错误：`422/42200` 参数校验失败（含 `role=admin`）；`409/40900` 用户名已存在
 
 ### POST /api/v1/auth/login
 - 权限：公开
 - 类型：同步
-- 入参/出参：TODO 待定（S2-2 定稿）
-- 备注：注册 / 登出 / refresh 等接口清单同样 TODO（S2-2 补充，方案未列）
+- 入参（JSON）：`{username, password}`（username 同样 trim + 小写）
+- 出参：`data` = TokenOut：
+
+```json
+{"access_token": "<jwt>", "token_type": "bearer", "expires_in": 86400,
+ "user": {"id": 1, "username": "student01", "nickname": "测试用户_1", "grade": "高一", "role": "student", "created_at": "2026-10-26T13:21:07.218738Z"}}
+```
+
+- 错误：`401/40100` 用户名或密码错误（用户不存在与密码错误**同文案同状态码**，不泄露账号是否存在）
+
+### GET /api/v1/auth/me
+- 权限：需 `Authorization: Bearer <token>`
+- 类型：同步
+- 出参：`data` = UserOut（同上）
+- 错误：`401/40100` 未提供认证凭据 / 无效的认证凭据 / 登录已过期，请重新登录 / 账号不存在或已被删除
 
 ## 2. 笔记
 
@@ -196,7 +232,7 @@
 
 | 模块 | 缺口 | 定稿任务 |
 |---|---|---|
-| 认证 | 注册 / 登出 / refresh / token 刷新策略 | S2-2 |
+| 认证 | 登出 / refresh / token 吊销策略 | 后续（S2-2 已交付注册/登录/me；无状态 JWT 暂无吊销） |
 | 笔记 | 单篇详情 / 更新 / 删除、笔记本（folder）管理 | S2-5 |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
 | 错题 | 列表 / 统计看板 | S4-2 / S4-8 |
@@ -215,6 +251,7 @@ S0-5 定稿（落地于 `backend/app/core/exceptions.py`）：
 | 40100 | 未认证 | 401 |
 | 40300 | 无权限 | 403 |
 | 40400 | 资源不存在 | 404 |
+| 40900 | 资源冲突（如用户名已存在） | 409 |
 | 42200 | 参数校验失败 | 422 |
 | 42900 | 限流 | 429 |
 | 50000 | 服务器内部错误 | 500 |
