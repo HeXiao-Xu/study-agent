@@ -38,7 +38,8 @@ class Settings(BaseSettings):
 
     # --- 数据三件套（S0-4；database/redis 自 S1-3、minio 自 S2-6 起实际连接）---
     database_url: str = "postgresql+psycopg://study:study123@127.0.0.1:5432/study_agent"
-    redis_url: str = "redis://localhost:6379/0"
+    # Windows 下 localhost 先解析 ::1，Docker 只发布 IPv4，会卡到超时；与 DATABASE_URL 同理
+    redis_url: str = "redis://127.0.0.1:6379/0"
     minio_endpoint: str = "localhost:9000"
     minio_root_user: str = "study"
     minio_root_password: str = "study123456"
@@ -50,6 +51,12 @@ class Settings(BaseSettings):
     upload_max_size_mb: int = 60
     # 逗号分隔、小写、不带点；服务层解析
     upload_allowed_extensions: str = "pdf,docx,md,txt,png,jpg,jpeg"
+
+    # --- 异步任务（S2-7，ARQ Worker）---
+    task_max_tries: int = 3
+    task_retry_base_seconds: float = 2.0
+    task_job_timeout_seconds: int = 300
+    task_result_keep_seconds: int = 3600
 
     # --- 解析（S1-1）---
     # True=跳过 Docling 走 PyMuPDF 快速路径（spec 设计决策 6：显式开关而非自动猜）

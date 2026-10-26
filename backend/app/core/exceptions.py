@@ -105,6 +105,13 @@ class StorageUnavailableError(AppError):
         super().__init__(message, code=CODE_INTERNAL, http_status=500)
 
 
+class TaskQueueUnavailableError(AppError):
+    """任务入队失败：Redis 不可用或队列操作异常（不泄露地址）。"""
+
+    def __init__(self, message: str = "任务队列不可用") -> None:
+        super().__init__(message, code=CODE_INTERNAL, http_status=500)
+
+
 def install_exception_handlers(app: FastAPI) -> None:
     """把四类异常统一转成 {code, message, trace_id, data:null}。"""
 

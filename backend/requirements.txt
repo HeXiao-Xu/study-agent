@@ -39,3 +39,7 @@ fastapi-pagination==0.16.1
 # --- S2-6 文件上传（官方 SDK + FastAPI multipart 解析；2026-10-26 用户批准）---
 minio==7.2.20
 python-multipart==0.0.32
+
+# --- S2-7 异步任务框架（ARQ + Redis；2026-10-26 用户批准）---
+arq==0.28.0
+redis==5.3.1

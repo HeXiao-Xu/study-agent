@@ -28,6 +28,13 @@ class EdgeSource(StrEnum):
     MANUAL = "manual"
 
 
+class TaskStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 def in_check(column: str, values: Iterable[str]) -> str:
     """渲染 `<column> IN ('a', 'b')`；StrEnum 成员经 f-string 取到值本身。"""
     joined = ", ".join(f"'{value}'" for value in values)
