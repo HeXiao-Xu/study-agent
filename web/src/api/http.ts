@@ -27,6 +27,9 @@ export interface ApiEnvelope<T> {
   data: T
 }
 
+/** 业务接口统一前缀；health 在根路径，不走这里 */
+export const API_PREFIX = '/api/v1'
+
 // 请求拦截：带 token（无 token 照常放行，公开接口如 /health 不需要）
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const auth = useAuthStore()

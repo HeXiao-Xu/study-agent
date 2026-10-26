@@ -5,7 +5,8 @@ import SideNav from '@/components/layout/SideNav.vue'
 import TopBar from '@/components/layout/TopBar.vue'
 import { useAuthStore } from '@/stores/auth'
 
-const { roleLabel } = storeToRefs(useAuthStore())
+const auth = useAuthStore()
+const { roleLabel, user } = storeToRefs(auth)
 </script>
 
 <template>
@@ -13,6 +14,7 @@ const { roleLabel } = storeToRefs(useAuthStore())
     <SideNav>
       <template #user>
         <div class="user-card">
+          <span class="user-name">{{ user?.nickname }}</span>
           <el-tag size="small" effect="plain">{{ roleLabel }}</el-tag>
         </div>
       </template>
@@ -50,6 +52,18 @@ const { roleLabel } = storeToRefs(useAuthStore())
 }
 
 .user-card {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
   padding: 0 12px;
+}
+
+.user-name {
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

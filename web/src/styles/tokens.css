@@ -41,3 +41,9 @@
   --el-bg-color: var(--app-surface);
   --el-box-shadow-light: var(--app-shadow-sm);
 }
+
+@media (max-width: 1279px) {
+  :root {
+    --app-sidebar-width: 220px;
+  }
+}
