@@ -29,3 +29,15 @@ class Envelope(BaseModel, Generic[T]):
     message: str = "ok"
     trace_id: str
     data: T | None = None
+
+
+class PageData(BaseModel, Generic[T]):
+    """列表接口的统一分页 data（API.md §0，S2-4）。
+
+    只暴露任务卡要求的 4 个字段；底层 fastapi-pagination 的 size/pages 不泄给前端。
+    """
+
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
