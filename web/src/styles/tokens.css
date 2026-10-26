@@ -1,0 +1,43 @@
+:root {
+  --app-bg: #f7f8fa;
+  --app-surface: #ffffff;
+  --app-text: #1f2933;
+  --app-text-secondary: #6b7280;
+  --app-text-tertiary: #9aa3ae;
+  --app-border: #e5e7eb;
+  --app-primary: #3b5bdb;
+  --app-primary-soft: #eef2ff;
+  --app-primary-strong: #2f49b8;
+  --app-success: #2f9e44;
+  --app-warning: #e8590c;
+  --app-danger: #c92a2a;
+
+  --app-radius-sm: 8px;
+  --app-radius-md: 10px;
+  --app-radius-lg: 12px;
+  --app-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --app-shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12);
+
+  --app-sidebar-width: 248px;
+  --app-topbar-height: 56px;
+  --app-content-max: 1160px;
+
+  --el-color-primary: var(--app-primary);
+  --el-color-primary-light-3: #6b82e5;
+  --el-color-primary-light-5: #a9b6f0;
+  --el-color-primary-light-7: #c7d0f5;
+  --el-color-primary-light-8: #dce2f9;
+  --el-color-primary-light-9: var(--app-primary-soft);
+  --el-color-primary-dark-2: var(--app-primary-strong);
+  --el-border-color: var(--app-border);
+  --el-border-color-light: var(--app-border);
+  --el-border-color-lighter: #eef0f3;
+  --el-border-radius-base: var(--app-radius-sm);
+  --el-font-size-base: 14px;
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: #4b5563;
+  --el-text-color-secondary: var(--app-text-secondary);
+  --el-bg-color-page: var(--app-bg);
+  --el-bg-color: var(--app-surface);
+  --el-box-shadow-light: var(--app-shadow-sm);
+}
