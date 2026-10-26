@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-7 异步任务框架（ARQ 0.28 + `async_tasks` 表 + 状态机/重试/Worker；`POST /tasks/demo`、`GET /tasks/{id}`；pytest 401/401；真实 Worker 实测 pending→running→succeeded、3 次失败退避 2s/4s）
-- 下一步：S2-8 文档解析 Worker（上传后入队 `parse_document`，回写 `files.parse_status` 与解析结果）
+- 最近完成：S2-8 文档解析 Worker（上传自动入队 `parse.document`；`files` 四列迁移 0005；复用 parse/chunk/index；文档笔记 + chunks；状态机 pending→parsing→done/failed + 进度 + error_msg；pytest 425/425；真实 PDF/损坏 PDF/md/png 全流程实测）
+- 下一步：S2-9 知识点树 CRUD + 导入脚本（`api/v1/kp.py`、`scripts/import_kp_tree.py`、种子数据）
 - 已知阻塞：无
 
 ## 任务清单
@@ -38,6 +38,7 @@
 - [x] S2-5 笔记表与 CRUD API
 - [x] S2-6 文件上传 + MinIO + 去重
 - [x] S2-7 异步任务框架
+- [x] S2-8 文档解析 Worker
 - [ ] S2-8 文档解析 Worker
 - [ ] S2-9 知识点树 CRUD + 导入
 - [ ] S2-10 知识点对齐与待确认队列
@@ -117,6 +118,11 @@
 | 19 | 无任务列表/取消/重跑接口（S2-7 遗留） | 前端只能按 id 轮询 | 有需求时补 |
 | 20 | 单队列、无优先级；`demo.sleep` 是验收入口（S2-7 遗留） | 正式前端不应暴露 demo 入口 | S2-8 起只内部复用 `create_task` |
 | 21 | 提交用 `asyncio.run` 建短连接（S2-7 遗留） | 高频提交会浪费 Redis 连接 | 量级上来再改连接池 |
+| 22 | 解析与 embedding 共用 300s job timeout，无分页续跑（S2-8 遗留） | 超大 PDF 会超时失败，需重新上传 | 有真实大文件需求时按页分批/延长超时 |
+| 23 | 图片/扫描件不支持，直接 failed（S2-8 遗留） | 拍照错题无法入库 | S3 OCR 卡 |
+| 24 | 文档笔记与上传文件无删除联动（S2-8 遗留） | 删笔记不删文件；删文件无接口 | 文件管理接口一起补 |
+| 25 | 解析重试会让文件状态短暂在 failed/parsing 抖动（S2-8 遗留） | 前端可能闪一次失败提示 | 前端按 task 终态判定或加“重试中”标记 |
+| 26 | `parse_progress` 是阶段值，不是页级；Docling 首轮约 3 分钟（S2-8 遗留） | 用户看不到细粒度进度，首轮体感慢 | 需要时加页级回调/预热 |
 
 ## 变更日志
 
@@ -247,3 +253,11 @@
 - 与 plan 的偏差（已同步 plan 执行记录）：① 额外新增 `app/tasks/__init__.py`，并在包初始化时 import demo（否则只 import runner 时注册表为空，demo.sleep 被判「未知任务类型」）；② runner 日志 extra 的 `name` 与 `LogRecord.name` 冲突（KeyError），改 `task_name`；③ Worker 首轮验收发现 INFO 日志被根 logger 的 WARNING 吞掉，补 `WorkerSettings.on_startup = setup_logging`（追加提交 `fix(s2-7)`）；④ `REDIS_URL` 由 localhost 改 127.0.0.1（Windows IPv6 超时，实测 ARQ `TimeoutError`），默认值/.env.example/本地 .env 同步
 - 已知事项（不粉饰）：Worker 崩溃留 running 行（遗留 18）；无列表/取消/重跑（19）；单队列 + demo 端点（20）；短连接提交（21）；`error` 只留最近一次；结果 JSONB 无大小限制
 - 文档同步：API.md（§0 轮询约定、§3.5 两接口、§12 任务缺口）、SCHEMA.md（§4.5 async_tasks、§10.15 状态枚举）、AGENTS.md（§9.2 异步任务约定、§9.6 任务框架锚点）、DECISIONS D-027、PROGRESS、README（日常启动 ③ Worker）、requirements.txt、.env.example、spec/plan 执行记录
+
+### 2026-10-26（S2-8）
+- S2-8 完成（按 §10 全流程：spec docs/spec/s2-8-parse-worker.md + plan docs/plan/s2-8-parse-worker.md，均经用户确认）。交付：迁移 0005 给 `files` 加 `parse_progress/error_msg/parse_started_at/parse_finished_at` 与两个 CHECK；`ParseStatus` 枚举；`parse_plain_text` 文本支路；`app/tasks/parse_document.py`（下载→解析→切片→upsert 文档笔记→`index_chunks`→状态回写）；上传接口按状态入队；`FileStatusOut` 增 `parse_progress/error_msg`；4 个测试文件共 24 条（文本 2 + 任务 18 + 接口 4）
+- 拍板（D-028，2026-10-26 用户确认，全部选 A）：解析产物落“文档笔记”；仅上传自动入队（不加手动重解析接口）；`parse_result_json` 只存统计
+- 验收证据：pytest **425 passed, 1 warning**（401 + 24）；真实 PDF + Worker + MinIO + Postgres + 真实 Embedding：中文 2 页 PDF 上传 201 → `parsing(10) → parsing(50) → done(100)`；`notes` 自动建 `source_file_id=4`、`content_md` 含「单调性/例题」；`note_chunks=2` 与 `parse_result_json.chunks` 一致；重复上传 200 `deduped=true`，任务/chunks 不变；损坏 PDF `failed`、`error_msg=FileDataError...`、attempts=3；`.md` done（chunks=1，真实 Embedding 9 tokens）；`.png` failed +「图片解析暂未支持（待 OCR）」；Worker 日志三类事件只含 file_id/chunks/tokens/error；清理后五张表全 0
+- 与 plan 的偏差（已同步 plan 执行记录）：① 解析器在 Windows 上失败时仍持有临时文件句柄，`unlink` 抛 WinError 32 会掩盖原始错误，改为 best-effort 清理 + WARNING（追加 `fix(s2-8)`，多 1 条测试，故总数 425 而非 424）；② 既有 S1-1 测试 `test_facade_unsupported_ext` 用的 `.txt` 现在合法，改用 `.xlsx` 并注明 S2-8 契约变更；③ Docling 首轮加载模型约 3 分钟（182s），二次 90s，仍在 300s 超时内
+- 已知事项（不粉饰）：大文件无分页续跑（遗留 22）；图片/扫描件待 OCR（23）；文档笔记与文件无删除联动（24）；重试期间状态抖动（25）；进度为阶段值、Docling 首轮慢（26）；ARQ 控制台日志 `↻` 在 GBK 终端报 UnicodeEncodeError（不影响 JSON 日志与任务）
+- 文档同步：API.md（§3 上传副作用 + parse-status 字段/状态机）、SCHEMA.md（§4.1 四列 + §10.2 四值）、AGENTS.md（§9.2 解析约定与 handler commit 例外、§9.6 锚点）、DECISIONS D-028、PROGRESS、实施计划勾选、S1-1 spec ParserName、spec/plan 执行记录

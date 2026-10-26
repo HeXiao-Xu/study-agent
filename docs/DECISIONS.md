@@ -307,6 +307,21 @@
 - 验证：pytest **401/401**（基线 368 + 新增 33）。真实 Redis 7.4.11 + Worker + Postgres：`demo.sleep` 5s 实测 `pending`（attempts=0）→ `running`（attempts=1、started_at 14:56:32）→ `succeeded`（`result={"slept":5}`、finished_at 14:56:37，恰好 5.0s）；`fail=true` 实测 attempts=3、`failed`，ARQ 日志显示 retry 2.00s / 4.00s，started_at 只写一次，error=「第 3 次失败：演示任务按请求失败」；B 查 A 的任务 → **403/40300**；Worker 结构化日志出现 `task_started`/`task_retry`/`task_failed`/`task_succeeded`（只含 id/name/attempts，无 payload 正文）；清理后 async_tasks/users 均 0。
 - 已知不足（不粉饰）：`asyncio.run` 每次提交建短连接（低频可用，高频需连接池/后台循环）；单队列、无优先级、无取消/重跑/列表；Worker 崩溃会留下永久 `running` 行（无心跳回收）；`demo.sleep` 是验收入口，前端不应暴露；`error` 只保留最近一次；结果 JSONB 无大小限制。
 
+## D-028 文档解析 Worker 与进度回写（S2-8）
+
+- 背景：S2-6 只把文件落库并置 `pending`，解析与入库未接入；S2-7 已提供任务框架。本卡把上传→解析→切片→向量化串起来。
+- 决策 1（产物归属）：解析文本落一条“文档笔记”，`notes.source_file_id = files.id`，chunks 挂其 `note_id`；`note_chunks.note_id` 保持 NOT NULL，不改 S1-3/S1-4 契约。重复解析按 `(user_id, source_file_id)` 复用同一条笔记。
+- 决策 2（触发）：仅上传接口入队；新增文件（pending）与失败重试（failed）入队，`done/parsing` 去重命中不重复入队；不新增手动重解析接口。
+- 决策 3（结果存储）：`files.parse_result_json` 只存统计（parser/pages/blocks/chunks/tokens/elapsed_ms/degraded_reason/note_id），正文只在 `notes.content_md`，避免大文本存两份。
+- 决策 4（状态机）：`pending → parsing → done/failed`；新增 `parse_progress` 阶段值 10/50/80/100，轮询可见；`error_msg` 截断 500 字。
+- 决策 5（失败落库）：handler 捕获异常后先 `commit` 文件 `failed/error_msg` 再 `raise`。runner 失败会 rollback，若交给 runner 文件会永远停在 `parsing`；这是 AGENTS §9.2「handler 不得自行 commit」的唯一例外，已回填 §9.2。handler 不提交 `async_tasks` 状态。
+- 决策 6（md/txt）：`parse_plain_text` 单 block、`ParserName` 增 `text`；S1-1 的 `ParserName` 说明同步。图片（png/jpg/jpeg）明确 `failed` +「图片解析暂未支持（待 OCR）」，扫描件 `failed` +「扫描版」。
+- 决策 7（幂等）：任务重投时 `done` 直接返回 `{"skipped": true}`；重复执行覆盖同笔记 chunks（`index_chunks replace=True`）。
+- 决策 8（上传失败语义）：入队失败时文件已落库，接口仍返回 `500/50000`；重新上传命中去重并补入队。
+- 决策 9（临时文件）：下载到 `NamedTemporaryFile` 后按原后缀解析；Windows 上解析器可能仍持有句柄，`unlink` 失败只记 WARNING，不掩盖原始解析错误（实测踩到 WinError 32）。
+- 验证：pytest **425/425**（基线 401 + 新增 24：文本支路 2 + 任务 18 + 接口 4）。真实 PDF + Worker + MinIO + Postgres + 真实 Embedding：英文/中文样张 `parsing(10) → parsing(50) → done(100)`（Docling 首轮 182s、次轮 90s）；`files.parse_result_json={"pages":2,"blocks":4,"chunks":2,"parser":"docling","tokens":85,...}`；`notes` 一条 `source_file_id=4`、`content_md` 含「单调性/例题」；`note_chunks` 2 条与统计一致；重复上传同一 PDF → 200 `deduped=true`、任务数/chunks 不变；损坏 PDF → `failed`、`error_msg="FileDataError: Failed to open file ..."`、attempts=3；`.md` → `done` 且 chunks=1（真实 Embedding 9 tokens）；`.png` → `failed` +「图片解析暂未支持（待 OCR）」；Worker 日志 `file_parse_started/file_parse_done/file_parse_failed` 只含 file_id/chunks/tokens/error；清理后五张表计数 0。
+- 已知不足（不粉饰）：解析+embedding 共用一个 300s job timeout，超大 PDF 可能超时且不能分页续跑；图片/扫描件依赖 OCR 卡；文档笔记会出现在笔记列表，文件无删除接口，笔记与文件可能不同步；重试期间文件状态会在 failed/parsing 间短暂抖动；`parse_progress` 是阶段值而非页级；`parse_result_json` 不含正文，笔记被删后只能重新上传（done 不会重解析）；Docling 首轮加载模型 3 分钟级；ARQ 自带控制台日志含 `↻`，Windows GBK 终端会打印 `UnicodeEncodeError`（不影响任务，JSON 日志正常）。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

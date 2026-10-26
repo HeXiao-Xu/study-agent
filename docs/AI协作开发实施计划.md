@@ -996,7 +996,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [ ] S2-5 笔记表与 CRUD API
 [ ] S2-6 文件上传 + MinIO + 去重
 [ ] S2-7 异步任务框架
-[ ] S2-8 文档解析 Worker
+[x] S2-8 文档解析 Worker
 [ ] S2-9 知识点树 CRUD + 导入
 [ ] S2-10 知识点对齐与待确认队列
 [ ] S2-11 前端登录/布局/路由守卫

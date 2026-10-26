@@ -32,7 +32,7 @@ class ParsedBlock(BaseModel):
 
 class ParsedDocument(BaseModel):
     source: str                    # 输入文件路径（原样）
-    parser: Literal["docling", "pymupdf", "docx"]   # 实际使用的解析器
+    parser: Literal["docling", "pymupdf", "docx", "text"]   # 实际使用的解析器（text 由 S2-8 增补）
     is_scanned: bool = False       # 扫描版检测（见 §5.1）
     degraded_reason: str | None = None  # 降级原因（仅 docling→pymupdf 时非空）
     blocks: list[ParsedBlock]      # 任务卡要求的统一结构就是这个列表
@@ -59,7 +59,7 @@ parse_document(path)                      # __init__.py 唯一入口（门面）
 
 ```python
 class DocumentParser(ABC):
-    name: ClassVar[str]                      # "docling" | "pymupdf" | "docx"
+    name: ClassVar[str]                      # "docling" | "pymupdf" | "docx"（"text" 由 S2-8 增补）
     def supports(self, path: Path) -> bool   # 按扩展名
     def parse(self, path: Path) -> ParsedDocument
 ```

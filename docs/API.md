@@ -113,11 +113,11 @@
 - NoteOut = NoteSummary + `content_md` + `source_file_id`
 - `content_text`（检索用）与 `deleted_at` **永不返回**
 
-## 3. 文件上传与解析（S2-6 上传部分定稿）
+## 3. 文件上传与解析（S2-6 上传 + S2-8 解析 Worker 定稿）
 
 ### POST /api/v1/files
 - 权限：`student`（其他角色 403/40300）
-- 类型：同步上传返回 + 后台异步解析（S2-7 任务框架 / S2-8 解析 Worker 尚未接入；当前只落到 `parse_status=pending`）
+- 类型：同步上传返回 + 后台异步解析（S2-8 起：上传成功后自动入队 `parse.document`）
 - 请求：`multipart/form-data`，字段名 `file`
 - 成功：`Envelope[FileUploadOut]`
   - 首次：**201**，`deduped=false`
@@ -125,6 +125,8 @@
 - `data` 字段：`id` / `filename` / `mime` / `size` / `sha256` / `parse_status` / `created_at` / `deduped`
 - 类型与大小：扩展名白名单 + 文件头 magic 双校验；`UPLOAD_ALLOWED_EXTENSIONS`（默认 `pdf,docx,md,txt,png,jpg,jpeg`）、`UPLOAD_MAX_SIZE_MB`（默认 60）
 - 存储：对象键 `uploads/{user_id}/{sha256[:2]}/{sha256}{ext}`（内容寻址，不暴露给客户端）
+- 解析副作用：仅当 `parse_status ∈ {pending, failed}` 时入队；`done/parsing` 的去重命中不重复入队
+- 入队失败：文件已落库，但接口返回 `500/50000`「任务队列不可用」；重新上传会命中 `sha256` 去重并补入队
 - 错误：
   - `400/40000`：请求缺少 `file` 字段
   - `413/41300`：超过大小上限（message 含上限）
@@ -135,8 +137,11 @@
 ### GET /api/v1/files/{file_id}/parse-status
 - 权限：本人或已绑定该学生的 parent/teacher（admin 不绕过）
 - 类型：同步
-- 出参：`Envelope[FileStatusOut]`，字段 `id` / `filename` / `parse_status`
-- 备注：S2-6 只有 `pending`；`parsing` / `done` / `failed` 与错误信息由 S2-8 扩展（需迁移）
+- 出参：`Envelope[FileStatusOut]`：`id` / `filename` / `parse_status` / `parse_progress` / `error_msg`
+- 状态机（S2-8 定稿）：`pending` → `parsing` → `done` / `failed`
+- `parse_progress`：阶段值 `0`（未开始）/`10`（已开始）/`50`（解析完成）/`80`（切片完成）/`100`（入库完成）
+- `error_msg`：仅 `failed` 非空，格式 `异常类型: 原因`，≤500 字
+- 轮询建议：每 1–2s 一次，直到 `done`/`failed`；不做 SSE/WebSocket
 - 错误：`404/40400`「文件不存在」；`403/40300`「无权访问该资源」
 
 ## 3.5 异步任务（S2-7 定稿）
