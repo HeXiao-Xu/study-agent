@@ -5,12 +5,30 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
+import tempfile
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
 
 from app.core.config import get_settings
-from app.core.exceptions import InvalidParamError
+from app.core.exceptions import (
+    ConflictError,
+    InvalidParamError,
+    NotFoundError,
+    PayloadTooLargeError,
+)
+from app.core.permissions import ensure_student_access
+from app.core.storage import ObjectStorage
+from app.models.file import File
+from app.models.user import User
 
 MAX_FILENAME_LENGTH = 200
+_CHUNK_SIZE = 1024 * 1024
+_KEY_PREFIX = "uploads"
 
 # ext -> (mime, magic)；magic=None 表示文本类，仅拒绝 NUL
 TYPE_TABLE: dict[str, tuple[str, bytes | None]] = {
@@ -67,3 +85,91 @@ def check_magic(head: bytes, ext: str) -> None:
         return
     if not head.startswith(magic):
         raise InvalidParamError("文件内容与类型不符")
+
+def _build_key(user_id: int, sha256: str, ext: str) -> str:
+    return f"{_KEY_PREFIX}/{user_id}/{sha256[:2]}/{sha256}.{ext}"
+
+
+def upload_file(
+    session: Session, *, owner: User, upload: UploadFile, storage: ObjectStorage
+) -> tuple[File, bool]:
+    """流式读完 → 查重 → 写对象 → 写库；返回 (记录, 是否复用已有记录)。"""
+    filename = sanitize_filename(upload.filename)
+    ext, mime = detect_type(filename)
+    limit = get_settings().upload_max_size_mb * 1024 * 1024
+
+    digest = hashlib.sha256()
+    size = 0
+    with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as spool:
+        first = True
+        while True:
+            chunk = upload.file.read(_CHUNK_SIZE)
+            if not chunk:
+                break
+            if first:
+                check_magic(chunk[:4096], ext)
+                first = False
+            size += len(chunk)
+            if size > limit:
+                raise PayloadTooLargeError(
+                    f"文件超过 {get_settings().upload_max_size_mb}MB 上限"
+                )
+            digest.update(chunk)
+            spool.write(chunk)
+        if first:
+            raise InvalidParamError("文件内容为空")
+
+        sha256 = digest.hexdigest()
+        key = _build_key(owner.id, sha256, ext)
+
+        existing = session.scalar(
+            select(File).where(File.user_id == owner.id, File.sha256 == sha256)
+        )
+        if existing is not None and storage.exists(key):
+            return existing, True
+
+        spool.seek(0)
+        storage.put(key, spool, size=size, content_type=mime)
+        if existing is not None:
+            # 行在、对象被清理过：补齐对象即可，不新增行
+            return existing, False
+
+        record = File(
+            user_id=owner.id,
+            filename=filename,
+            mime=mime,
+            size=size,
+            storage_path=key,
+            sha256=sha256,
+            parse_status="pending",
+        )
+        session.add(record)
+        try:
+            session.commit()
+        except IntegrityError:
+            # 并发同文件：先到的那条赢了，对象键相同，别删对象
+            session.rollback()
+            winner = session.scalar(
+                select(File).where(File.user_id == owner.id, File.sha256 == sha256)
+            )
+            if winner is None:
+                raise ConflictError("文件上传冲突，请重试")
+            return winner, True
+        except Exception:
+            session.rollback()
+            try:
+                storage.delete(key)
+            except Exception:  # 补偿删除失败不掩盖原始异常
+                pass
+            raise
+        session.refresh(record)
+        return record, False
+
+
+def get_file_status(session: Session, *, file_id: int, viewer: User) -> File:
+    record = session.get(File, file_id)
+    if record is None:
+        raise NotFoundError("文件不存在")
+    if record.user_id != viewer.id:
+        ensure_student_access(session, viewer, record.user_id)
+    return record
