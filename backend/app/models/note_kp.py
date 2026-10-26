@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -13,9 +14,13 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+
+if TYPE_CHECKING:
+    from app.models.knowledge_point import KnowledgePoint
+    from app.models.note import Note
 
 
 class NoteKp(Base):
@@ -39,4 +44,9 @@ class NoteKp(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     confirmed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+
+    note: Mapped["Note"] = relationship("Note", lazy="joined")
+    knowledge_point: Mapped["KnowledgePoint"] = relationship(
+        "KnowledgePoint", lazy="joined"
     )
