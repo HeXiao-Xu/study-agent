@@ -256,6 +256,22 @@
 - 验证：pytest **280/280**（基线 260 + 新增 20：单元 12 + 接口 8），`1 warning` 为既有 StarletteDeprecatedWarning。
 - 已知不足（不粉饰）：本卡无生产列表接口，**没有 curl 证据**（笔记 S2-5、错题/题目 S4 接入时补）；`total` 依赖 count，大表深分页会变慢，量大后改 keyset/cursor；无多字段排序、无 `pages`/`links`、无 `page_size` 自定义上限；排序白名单需各接口手工维护（漏写只是不支持，不会注入）。
 
+## D-025 S2-5 笔记表与 CRUD 决策（spec §2.3/§10 归档）
+
+- 日期：2026-10-26（用户拍板后归档；spec 见 docs/spec/s2-5-notes-crud.md，plan 见 docs/plan/s2-5-notes-crud.md）
+- 决策 1（建表范围）：一次建 `files` / `notes` / `note_kps`，并补 `note_chunks` 的 `note_id`/`user_id`/`source_file_id` 三个外键。任务卡把 files 列为 S2-5 产出，SCHEMA §4.3 也明确外键延后到 S2-5，一次补齐避免再开迁移。
+- 决策 2（files.sha256 唯一性）：`UNIQUE(user_id, sha256)`（同用户唯一）。多租户下不同用户上传同一份文件互不可见；S2-6 去重逻辑直接按 `(user_id, sha256)` 命中。
+- 决策 3（孤儿清理）：迁移补外键前按条件删除 `note_chunks`：`user_id` 不在 users 或 `note_id` 不在 notes。本库 83 行是 S1-3 实验残留（`user_id=1`，users 为空），删除后不可恢复；新库上是 no-op。保留它们只能造假用户/假笔记，等于把脏数据带进正式库。
+- 决策 4（更新/删除语义）：PATCH 部分更新（`exclude_unset`，只改传入字段，`content_md` 变则重算 `content_text`）；DELETE 软删置 `deleted_at` 并返回 204。编辑器自动保存只改正文时，PUT 全量容易清空未加载字段。
+- 决策 5（权限）：列表仅本人；详情本人或已绑定家长/老师（复用 `ensure_student_access`，admin 不绕过）；创建/修改/删除仅本人且仅 `student` 角色。写操作共享给家长/老师会让“谁改的”不可追溯。
+- 决策 6（检索）：`q` 对 `title` + `content_text` 做 ILIKE，转义 `\`/`%`/`_`。中文原词可直接搜、实现简单；jieba + tsvector 依赖 note_chunks 写入链路，留给 S3 检索卡。
+- 决策 7（content_text 规则）：冻结代码块 → 去 `$$…$$`/`$…$`/`\(…\)`/`\[…\]` → 链接取文字、图片取 alt → 去 HTML/Markdown 标记 → 还原转义 → 折叠空白。公式符号对关键词检索无意义；代码内容可能是要搜的词。
+- 决策 8（学科校验）：写入前 `session.get(Subject, subject_id)`，不存在 → `422/42200`「学科不存在」。不靠 FK 抛 IntegrityError，避免变成 500。
+- 决策 9（标签）：`TEXT[]`（SCHEMA 现值）；过滤用 `tags @> ARRAY[tag]`（`postgresql.ARRAY.contains`），可直接命中 `ix_notes_tags_gin`；单标签 ≤30 字、最多 20 个、去重保序。原计划的 `= ANY(tags)` 在 SQLAlchemy 2.1 已弃用，且不易走 GIN。
+- 决策 10（列表出参）：列表返回 `NoteSummary`（无正文），详情/创建/更新返回 `NoteOut`（含 `content_md`）。20 条正文可达数 MB，列表页不需要。
+- 验证：pytest **322/322**（基线 280 + 新增 42：content_text 11 + 服务 18 + 接口 13）。真实 curl + psql：建 201（`content_text` 落库为「设 则」）→ 列表 total=1（4 个分页字段）→ 详情 200 → **B 读 A 的笔记 403/40300**（补上 S2-3 的真实接口证据）→ q/tag/subject_id 筛选命中 → 非白名单排序 422/42200（message 列可选字段）→ page_size=101 422 → PATCH 后 `updated_at` 从 `14:20:58` 变为 `14:21:23`、`created_at` 不变、`content_text` 重算为「修订后的正文」→ B 改/删均 403 → DELETE 204 → 列表 total=1（另一条未删）、详情 404 → psql 行仍在且 `deleted_at` 非空 → 清理后 notes/users/subjects/chunks 全为 0。
+- 已知不足（不粉饰）：`q` 是 ILIKE 子串匹配，大数据量慢且无语义/分词；软删无回收站、行仍占存储；没有“按学生列笔记”的家长视角接口；`note_kps` 只建表未对齐；`files` 有表无上传接口（S2-6），`notes.source_file_id` 暂时只能由后续流水线写；迁移删除的 83 行不恢复。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

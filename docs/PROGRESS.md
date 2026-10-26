@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-4 通用分页与白名单排序（`PageData[T]` + `page_params` / `sort_params` / `paginate_query` / `apply_sort`；fastapi-pagination 0.16.1；pytest 280/280）
-- 下一步：S2-5 笔记 CRUD（首个真实列表接口，必须复用 S2-4 分页件并补 curl 证据）
+- 最近完成：S2-5 笔记表与 CRUD API（迁移 0003 建 files/notes/note_kps + note_chunks 外键；5 个笔记接口；`content_text` 派生；pytest 322/322，curl + psql 实测）
+- 下一步：S2-6 文件上传 + MinIO + sha256 去重（依赖本卡建好的 `files` 表与 `uq_files_user_sha256`）
 - 已知阻塞：无
 
 ## 任务清单
@@ -35,7 +35,7 @@
 - [x] S2-2 认证 JWT
 - [x] S2-3 RBAC 与数据隔离
 - [x] S2-4 通用分页/排序/筛选
-- [ ] S2-5 笔记表与 CRUD API
+- [x] S2-5 笔记表与 CRUD API
 - [ ] S2-6 文件上传 + MinIO + 去重
 - [ ] S2-7 异步任务框架
 - [ ] S2-8 文档解析 Worker
@@ -100,11 +100,15 @@
 | 2 | API.md 存在 TODO 待定字段与待定接口 | 前后端并行开发受限 | 各对应任务定稿时 |
 | 3 | 无 refresh / 登出 / token 吊销，无登录限流（S2-2 遗留） | 令牌到期前无法主动失效；暴力破解防护缺失 | 部署层或 S3-7 之后 |
 | 4 | `users` 表仍无业务数据（注册已可用，等待 S2-3/S2-11 真实使用） | 家长-学生关系与权限演示缺素材 | S2-3 起按需创建 |
-| 5 | 无家长-学生绑定管理接口（S2-3 只做「已绑定则放行」判断） | 绑定只能靠 SQL/后续卡，家长看不到学生数据 | S2-5 起按需补接口 |
+| 5 | 无家长-学生绑定管理接口（S2-3 只做「已绑定则放行」判断） | 绑定只能靠 SQL/后续卡，家长看不到学生数据 | S2-11 起按需补（前端家长视角需要时） |
 | 6 | 无越权审计日志（S2-3 遗留） | 越权尝试只返回 403，无落库记录 | S3-7 之后随 `audit_logs`/`llm_call_logs` 一起 |
 | 7 | 权限判定未缓存：每个受保护请求多一次 `user_relations` 查询 | 量小可接受；高并发时是额外 RTT | 有性能需求时再加缓存 |
 | 8 | 分页 `total` 依赖 count，深分页 offset 也随页码线性变慢（S2-4 遗留） | 数据量上万后列表接口延迟上升 | 有真实数据量后改 keyset/cursor 分页 |
 | 9 | 分页只支持单字段排序，无 `pages`/`links`（S2-4 遗留） | 前端需自行算总页数；复杂排序要前端二次处理 | 需求出现时再扩 |
+| 10 | 笔记 `q` 是 ILIKE 子串匹配，未接 jieba/tsvector（S2-5 遗留） | 数据量上万后慢；无语义与分词召回 | S3 检索服务化时统一切到 tsvector + 向量 |
+| 11 | 笔记软删无回收站，行与正文仍占存储（S2-5 遗留） | 误删只能改库恢复；存储不释放 | 前端回收站需求出现时补恢复/彻底删除 |
+| 12 | 只有「我的笔记」列表，没有「按学生列笔记」的家长/老师视角（S2-5 遗留） | 家长只能点开已知 note_id，无法浏览孩子笔记 | S2-12 前端联调或家长端卡 |
+| 13 | `note_kps` 只建表，无对齐/待确认接口；`files` 有表无上传接口（S2-5 遗留，S2-6/S2-10 承接） | 知识点关联与文件上传暂时不可用 | S2-6 上传、S2-10 对齐 |
 
 ## 变更日志
 
@@ -211,3 +215,11 @@
 - 验收证据：pytest **280 passed, 1 warning**（基线 260 + 新增 20）：分页 12 条（默认参数、第 1/2 页、超末页空列表、出参模型转换、升降序、非法字段/方向、无默认排序不改写语句、默认排序生效）；接口 8 条（`data` 恰为 4 键且无 pages/size、第 2 页 id 正确、page=0 与 page_size=101 → 422/42200、未知排序字段 422/42200、order 非法 422/42200、按 name 升序、total 跨页稳定）
 - 已知事项（不粉饰）：本卡无生产列表接口，**没有 curl 证据**，复用验收在 S2-5（笔记列表）与 S4（错题/题目列表）补；深分页 count/offset 成本（遗留 8）；单字段排序、无 pages/links（遗留 9）
 - 文档同步：API.md（§0 分页/排序两行定稿）、AGENTS.md（§9.2 列表接口约定、§9.6 分页锚点）、DECISIONS D-024、PROGRESS、requirements.txt；无 API 端点/SCHEMA 变更
+
+### 2026-10-26（S2-5）
+- S2-5 完成（按 §10 全流程：spec docs/spec/s2-5-notes-crud.md + plan docs/plan/s2-5-notes-crud.md，均经用户确认）。交付：迁移 `0003_s2_5_note_tables.py`（建 files/notes/note_kps + 清理孤儿 + 补 note_chunks 三个外键）、模型 `file.py`/`note.py`/`note_kp.py`、`app/utils/markdown_text.py`、`app/schemas/notes.py`、`app/services/note_service.py`、`app/api/v1/notes.py`、`tests/test_markdown_text.py`（11）、`tests/test_note_service.py`（18）、`tests/test_notes_api.py`（13）
+- 拍板（D-025，2026-10-26 用户确认，全部选 A）：一次建 files/notes/note_kps；`uq_files_user_sha256 (user_id, sha256)`；迁移前条件删除 83 行无主 note_chunks 再补外键；PATCH 部分更新 + DELETE 204 软删；列表仅本人、详情本人或已绑定家长/老师、写删仅本人且仅 student（admin 不绕过）；`q` 走 ILIKE 并转义；`content_text` 去公式派生；`subject_id` 先查存在性；标签 `TEXT[]`；列表出参 `NoteSummary`（无正文）
+- 验收证据：pytest **322 passed, 1 warning**（基线 280 + 新增 42）；`alembic upgrade head` 输出 `Running upgrade 0002_s2_1 -> 0003_s2_5`，psql 核验 note_chunks 由 83 → 0、三个 FK 就位、notes 含 GIN 标签索引；`alembic check` 输出 `No new upgrade operations detected.`；真实 curl：建 201（psql 落库 `content_text=设 则`）→ 列表 total=1 且仅 4 个分页键 → A 详情 200 → **B 读 A 的笔记 403/40300**（补上 S2-3 的真实接口证据）→ q/tag/subject_id 筛选命中、不存在关键词 0 条 → `sort_by=content_md` 422/42200（message 列可选字段）、`page_size=101` 422 → B 改/删均 403 → PATCH 后 `updated_at` 14:20:58→14:21:23、`created_at` 不变、`content_text` 重算 → DELETE 204 → 列表 total=1（另一条）、详情 404、psql 行仍在且 `deleted_at` 非空 → 清理后 notes/users/subjects/chunks 全为 0
+- 与 plan 的唯一偏差：标签过滤原写 `Note.tags.any(tag)`（`= ANY(tags)`），实测触发 SQLAlchemy 2.1 `SADeprecationWarning` 且不走 GIN，改为 PG `ARRAY.contains` → `tags @> ARRAY[tag]`；已同步 spec §2.3、plan、API.md、AGENTS §9.6
+- 已知事项（不粉饰）：`q` 是 ILIKE 子串匹配（遗留 10）；软删无回收站（遗留 11）；无家长视角笔记列表（遗留 12）；`note_kps`/`files` 只有表没有接口（遗留 13）；迁移删除的 83 行实验数据不可恢复
+- 文档同步：API.md（§2 五接口定稿 + §12 缺口）、SCHEMA.md（§4 表头、§4.1 sha256 定稿、§4.3 外键已补）、AGENTS.md（§9.6 笔记锚点）、DECISIONS D-025、PROGRESS、spec/plan 执行记录；无新依赖、无 .env 变更

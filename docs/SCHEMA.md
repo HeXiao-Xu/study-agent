@@ -127,6 +127,8 @@ erDiagram
 
 ## 4. 笔记与文件
 
+> S2-5 迁移 `0003_s2_5` 已建表：files / notes / note_kps，并为 note_chunks 补 3 个外键（见 §4.3）。
+
 ### 4.1 files
 
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
@@ -137,7 +139,7 @@ erDiagram
 | mime | TEXT | 否 | — | MIME 类型 | — |
 | size | BIGINT | 否 | — | 字节数 | — |
 | storage_path | TEXT | 否 | — | MinIO 对象路径 | — |
-| sha256 | TEXT | 否 | — | 内容哈希（去重，方案 5.3） | UNIQUE ⚠（全局/按用户，S2-6 定） |
+| sha256 | TEXT | 否 | — | 内容哈希（去重，方案 5.3） | UNIQUE(user_id, sha256) ✅（S2-5 定稿：同用户唯一，跨用户互不可见） |
 | parse_status | TEXT | 否 | 'pending' | 解析状态，§10.2 | idx ⚠ |
 | parse_result_json | JSONB | 是 | — | 结构化解析结果（标题层级+段落+公式+题目块） | — |
 | created_at | TIMESTAMPTZ | 否 | now() | 创建时间 | — |
@@ -177,7 +179,7 @@ erDiagram
 | page_no | INTEGER | 是 | — | 页码（引用定位） | — |
 | bbox_json | JSONB | 是 | — | 原文位置框（引用高亮） | — |
 
-> S1-3 建表时 notes/users/files 尚未建，note_id/user_id/source_file_id 暂不加外键；S2-1 复核后改为**延后到 S2-5**：时存量 83 行 `user_id=1` 无对应用户，现在加 FK 会失败，等建 notes/files 时一起补（附说明性数据迁移或先建对应用户）。
+> S2-1 复核时把外键延后到 S2-5；**S2-5 迁移 0003 已补齐**：`note_id → notes.id`（ON DELETE CASCADE）、`user_id → users.id`、`source_file_id → files.id`。补外键前条件清理了无主行（本库 83 行 S1-3 实验残留，`user_id=1` 但 users 为空），删除后不可恢复。
 
 ### 4.4 note_kps
 

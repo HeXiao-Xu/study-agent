@@ -70,17 +70,48 @@
 
 ## 2. 笔记
 
-### GET /api/v1/notes
-- 权限：student（仅本人数据）
-- 类型：同步（分页）
-- 入参：`subject` / `tag` / `q`（检索）/ `page`
-- 出参：笔记列表（字段细节 TODO，S2-5）
+## 2. 笔记（S2-5 定稿）
 
 ### POST /api/v1/notes
-- 权限：student
+- 权限：`student`（仅本人可建；teacher / parent / admin → 403/40300）
 - 类型：同步
-- 入参/出参：TODO（S2-5）
-- 备注：单篇详情 / 更新 / 删除、笔记本（folder）管理接口方案未列，TODO（S2-5 补充）
+- 入参：`title`（1–200）、`content_md`（1–200000）、`subject_id`（可选，必须存在）、`tags`（可选，≤20 个、单个 ≤30 字、去重保序）、`folder`（可选，≤100）
+- 出参：`data` = NoteOut
+- 备注：服务端由 `content_md` 派生 `content_text`（去公式纯文本，不出参）；`source_file_id` 由解析流水线写，本接口不收
+- 错误：`422/42200` 字段校验失败 / 学科不存在；`403/40300` 非 student
+
+### GET /api/v1/notes
+- 权限：登录用户（仅本人数据）
+- 类型：同步（分页）
+- 入参：`subject_id` / `tag`（精确匹配，`tags @> ARRAY[tag]`）/ `q`（标题+正文子串，`%`/`_` 已转义）/ `created_from` / `created_to`（ISO-8601）/ `page` / `page_size` / `sort_by`（`created_at`｜`updated_at`｜`title`）/ `order`（`asc`｜`desc`，默认 `desc`）
+- 出参：`data` = `{items: NoteSummary[], total, page, page_size}`
+- 备注：仅返回 `deleted_at IS NULL`；`NoteSummary` 不含正文（正文用详情接口取）
+- 错误：`422/42200` 分页越界 / 排序字段非白名单（message 列出可选字段）/ 时间格式非法
+
+### GET /api/v1/notes/{note_id}
+- 权限：本人，或已绑定该学生的 parent/teacher（S2-3 规则，admin 不绕过）
+- 类型：同步
+- 出参：`data` = NoteOut（含 `content_md`）
+- 错误：`404/40400`「笔记不存在」（含已软删）；`403/40300`「无权访问该资源」
+
+### PATCH /api/v1/notes/{note_id}
+- 权限：仅本人且 `student`
+- 类型：同步（部分更新）
+- 入参：`title` / `content_md` / `subject_id` / `tags` / `folder` 任选；只改传入字段，`content_md` 变则重算 `content_text`；`subject_id` / `tags` / `folder` 传 `null` 表示清空
+- 出参：`data` = NoteOut
+- 错误：`404/40400`；`403/40300`「无权修改该资源」；`422/42200` 字段为空 / 学科不存在
+
+### DELETE /api/v1/notes/{note_id}
+- 权限：仅本人且 `student`
+- 类型：同步（软删除）
+- 出参：`204` 无响应体（置 `deleted_at=now()`，行保留）
+- 错误：`404/40400`；`403/40300`「无权删除该资源」
+
+### 笔记对象
+
+- NoteSummary：`id` / `title` / `subject_id` / `tags` / `folder` / `created_at` / `updated_at`
+- NoteOut = NoteSummary + `content_md` + `source_file_id`
+- `content_text`（检索用）与 `deleted_at` **永不返回**
 
 ## 3. 文件上传与解析
 
@@ -243,7 +274,7 @@
 | 模块 | 缺口 | 定稿任务 |
 |---|---|---|
 | 认证 | 登出 / refresh / token 吊销策略 | 后续（S2-2 已交付注册/登录/me；无状态 JWT 暂无吊销） |
-| 笔记 | 单篇详情 / 更新 / 删除、笔记本（folder）管理 | S2-5 |
+| 笔记 | 笔记本（folder）管理、回收站恢复、按学生列笔记（家长视角） | 后续（S2-5 已交付建/列表/详情/更新/软删） |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
 | 错题 | 列表 / 统计看板 | S4-2 / S4-8 |
 | 复习 | 计划手动调整 | S5-5 |

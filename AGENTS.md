@@ -115,6 +115,7 @@ eval/{datasets,configs,results}
 - 后端认证样例：backend/app/core/security.py + backend/app/api/deps.py（Argon2id 口令哈希；PyJWT HS256，`sub`=user_id 字符串；HTTPBearer 取 token；`get_current_user` 回表取角色为权威；错误统一 `AuthError`→40100；S2-3 在其上叠权限依赖）
 - 权限样例：backend/app/core/permissions.py（`require_role` 工厂校验角色名；`require_student_access` 用于 `/students/{student_id}/...` 路径；service 用 `ensure_student_access`；本人或已绑定 parent/teacher 放行，admin 不绕过；越权 403/40300）
 - 分页样例：backend/app/utils/pagination.py + backend/app/schemas/common.py 的 `PageData`（`{items,total,page,page_size}` 套 `Envelope`；fastapi-pagination 只负责 count + limit/offset；`apply_sort` 白名单防注入；非法字段 422/42200）
+- 笔记模块样例：backend/app/models/note.py + backend/app/services/note_service.py + backend/app/api/v1/notes.py（写时派生 `content_text`；软删 `deleted_at` 全查询过滤；`build_notes_query` 固定 user_id + deleted_at；标签用 `tags @> ARRAY[tag]`；排序走 S2-4 白名单；越权 403 / 不存在 404）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
 - RAG 检索器样例：backend/app/ai/rag/retriever.py（向量 + 全文 + RRF；user_id 过滤下推；RRF 纯函数只认排名；`retrieve_hybrid_reranked()` 保留 fused 全量，失败回退 top-k）
