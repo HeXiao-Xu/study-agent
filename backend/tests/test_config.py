@@ -128,3 +128,38 @@ def test_llm_key_explicit_wins_and_repr_hides(monkeypatch) -> None:
     s = Settings(_env_file=None)
     assert s.llm_api_key == "sk-test-llm-explicit"
     assert "sk-test-llm-explicit" not in repr(s)
+
+
+def test_auth_defaults(monkeypatch) -> None:
+    for name in ("AUTH_SECRET_KEY", "AUTH_ALGORITHM", "AUTH_ACCESS_TOKEN_EXPIRE_MINUTES"):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings(_env_file=None)
+    assert s.auth_secret_key == ""
+    assert s.auth_algorithm == "HS256"
+    assert s.auth_access_token_expire_minutes == 1440
+
+
+def test_auth_secret_hidden_from_repr(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_SECRET_KEY", "sk-test-auth-secret")
+    s = Settings(_env_file=None)
+    assert s.auth_secret_key == "sk-test-auth-secret"
+    assert "sk-test-auth-secret" not in repr(s)
+
+
+def test_auth_prod_requires_long_secret(monkeypatch) -> None:
+    from pydantic import ValidationError
+
+    monkeypatch.setenv("ENV", "prod")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "too-short")
+    try:
+        Settings(_env_file=None)
+    except ValidationError as exc:
+        assert "AUTH_SECRET_KEY" in str(exc)
+    else:
+        raise AssertionError("prod 环境短密钥应被拒绝")
+
+
+def test_auth_prod_accepts_long_secret(monkeypatch) -> None:
+    monkeypatch.setenv("ENV", "prod")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "x" * 32)
+    assert Settings(_env_file=None).auth_secret_key == "x" * 32

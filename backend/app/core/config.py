@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     qa_refuse_threshold: float = 0.45
     qa_citation_max_retries: int = 1
 
+    # --- 认证（S2-2；密钥只放 .env，禁止提交）---
+    auth_secret_key: str = Field(default="", repr=False)
+    auth_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    auth_access_token_expire_minutes: int = 1440
+
     @model_validator(mode="after")
     def _fallback_dashscope_key(self) -> "Settings":
         """空值回退：.env 里显式写 `KEY=` 也算已设置，不能依赖默认值。"""
@@ -102,6 +107,13 @@ class Settings(BaseSettings):
             self.llm_api_key = self.dashscope_api_key
         if not self.llm_base_url:
             self.llm_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        return self
+
+    @model_validator(mode="after")
+    def _validate_auth_secret(self) -> "Settings":
+        """prod 环境不允许短密钥；dev 允许空值（由 create_app 启动时再拒绝，便于纯单测）。"""
+        if self.env == "prod" and len(self.auth_secret_key) < 32:
+            raise ValueError("AUTH_SECRET_KEY 长度至少 32 个字符（prod 环境）")
         return self
 
     @property

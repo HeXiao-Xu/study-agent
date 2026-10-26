@@ -23,6 +23,7 @@ CODE_BAD_REQUEST = 40000
 CODE_UNAUTHORIZED = 40100
 CODE_FORBIDDEN = 40300
 CODE_NOT_FOUND = 40400
+CODE_CONFLICT = 40900
 CODE_VALIDATION = 42200
 CODE_RATE_LIMIT = 42900
 CODE_INTERNAL = 50000
@@ -32,6 +33,7 @@ _HTTP_TO_CODE = {
     401: CODE_UNAUTHORIZED,
     403: CODE_FORBIDDEN,
     404: CODE_NOT_FOUND,
+    409: CODE_CONFLICT,
     429: CODE_RATE_LIMIT,
 }
 
@@ -77,6 +79,11 @@ class AuthError(AppError):
 class ForbiddenError(AppError):
     def __init__(self, message: str = "无权访问") -> None:
         super().__init__(message, code=CODE_FORBIDDEN, http_status=403)
+
+
+class ConflictError(AppError):
+    def __init__(self, message: str = "资源冲突") -> None:
+        super().__init__(message, code=CODE_CONFLICT, http_status=409)
 
 
 class InvalidParamError(AppError):
