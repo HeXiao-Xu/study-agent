@@ -2364,3 +2364,14 @@ git commit -m "docs(s2-12): 笔记列表与编辑器验收记录"
 - **Placeholder scan**：无 TBD/TODO；Task 3 的临时编辑页在 Task 4 明确替换。
 - **Type consistency**：`NoteCreatePayload`/`NoteUpdatePayload`、`DraftState`、`ListQueryState`、`registerImage(id,url)`、`image-uploaded {id,url}` 在各任务间一致。
 - **已知计划内偏差**：`NoteListView` 测试用 `input` 或 `ElInput` 触发防抖，若 Element Plus 版本差异按测试失败信息调整；`md-editor-v3` 的 blob 预览在 Task 4 Step 7 做探针，不允许假设。
+
+---
+
+## 执行记录（2026-10-27）
+
+- 计划提交 `e334cf2`；实施提交：`1ff82ae` 后端图片契约、`9bd5033` 前端 API/类型/工具、`aa1ef6d` 列表/路由/导航、`4479991` 编辑页/草稿、`1f232be` 时间与新笔记状态。
+- 测试：前端 **39 passed / 10 files**（新增 22）；后端 **506 passed**；`npm run build` 通过（编辑页 405 KB / gzip 140 KB）。
+- 真实联调结果见 `docs/spec/s2-12-notes-ui.md` §15；关键证据：note 37 / file 8、`note-file://8`、刷新后 `.katex=1` 且图片 `naturalWidth=64`、草稿 key 恢复/清除、列表 12→2→12→1→6→删除 11、console error 0、无横向滚动。
+- 偏差：① 新建保存路由被 leave guard 误拦 → `finally` 中 `saving=false` 后回调；② 列表时间改本地时区；③ 空白新笔记状态改“新笔记”；④ 行点击单测改为对 `ElTable` 发 `row-click`；⑤ headless 下 md-editor 裁剪弹窗不可用，走“上传图片”下拉 + `DOM.setFileInputFiles`。
+- 清理：验收用户/笔记/文件/任务/MinIO 对象全部删除，计数 0；临时 CDP 脚本与截图未入库。
+- 未做项：阅读页、文件夹、标签筛选、版本历史、回收站、移动端、服务端草稿、图片压缩/缩略图、删除联动。

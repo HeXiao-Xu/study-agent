@@ -379,6 +379,22 @@
 - 验证：`npm run test:run` 17/17；`npm run build` 零 TS 错误；真实 Chrome 1440×900 走通注册→自动登录→刷新保持→退出→未登录 `redirect`→重新登录回跳→伪造 token 401→404/403；布局实测 248/56/1160，主色 `rgb(59,91,219)`，console error 0；验收账号已删除。
 - 已知不足（不粉饰）：6 个模块仍占位；教师/家长同学生导航；无手机/深色/i18n/搜索；token localStorage 有 XSS 风险且无 refresh；主包 1.0 MB（gzip 330 KB）；截图尚未人工目视评审，样式细节待用户确认。
 
+## D-032 笔记列表与 Markdown 编辑器（S2-12）
+
+- 背景：S2-5 已有笔记 CRUD、S2-6/8 已有文件上传与解析，但前端 `/notes` 仍是占位页；S2-12 要交付列表、筛选、编辑、公式与图片。spec 见 `docs/spec/s2-12-notes-ui.md`。
+- 决策 1（列表形态）：`el-table` 表格而非卡片，列=标题/学科/标签/更新时间/操作；桌面 1440 优先，不做移动卡片降级。
+- 决策 2（筛选）：关键词 `q` + 学科 + 排序（最近更新/创建/标题）+ 分页（10/20/50）；URL query 为唯一状态源，`q` 300ms 防抖，筛选变化回第 1 页；后端继续走 S2-4 白名单排序，不新造接口。
+- 决策 3（打开方式）：点行/编辑直接进 `/notes/:id/edit`，不做只读阅读页；新建 `/notes/new`；保存后新建页 replace 到编辑页，避免返回栈残留。
+- 决策 4（编辑器）：`md-editor-v3@7.1.0` + `katex@0.19.1`，编辑页懒加载；工具栏含标题/列表/代码/表格/图片/KaTeX/预览/保存；`:no-mermaid`，不做 Mermaid；不引 ECharts 等额外依赖。
+- 决策 5（草稿）：只做 localStorage 本地草稿 + 手动保存，不做服务端自动保存/每 800ms PATCH（避免重复触发 `kp.align`）；键 `study-agent:note-draft:v1:new|<id>`；800ms 防抖写入；离开/刷新前二次确认；打开时若有草稿弹“恢复/丢弃”，保存成功清草稿；用 `baseUpdatedAt` 与详情 `updated_at` 不等判陈旧，陈旧草稿直接丢弃。
+- 决策 6（图片存储）：正文存稳定 token `![alt](note-file://<id>)`；加载时按 id Bearer 取 blob，`URL.createObjectURL` 替换预览，保存/写草稿时替换回 token；对象 URL 在卸载/重载/应用草稿时 `revokeObjectURL`；不用 base64 入正文，不存 MinIO endpoint/预签名 URL。
+- 决策 7（上传与取图契约）：`POST /files?parse=false` 只接受 `image/*`，新记录直接 `parse_status=done/100/finished_at` 且不入队；`GET /files/{id}/image` 走 `get_file_status` 的本人/家长/教师权限，返回原字节 + `Content-Type`/`ETag=sha256`/`Cache-Control: private, max-age=300`/`nosniff`/inline；非图片 422，不泄露对象存储地址。
+- 决策 8（图片上传交互）：图片按钮是下拉，真实用户选“上传图片”打开文件选择；上传成功回调 `onUploadImg` 的 blob URL 插入编辑器，同时 `image-uploaded` 通知表单登记 URL→token 映射，避免保存时把 `blob:` 写进库。
+- 决策 9（校验）：标题必填 ≤200、正文必填 ≤200000、标签 ≤20 个且单个 ≤30；与后端 Pydantic 对齐；校验失败不发请求，错误就地展示。
+- 决策 10（测试）：新增 Vitest 22 条（列表 5、编辑器 5、草稿 4、图片 5、查询 3），既有 17 条不回归，共 39；后端新增 6 条文件契约，全量 506；真实 Chrome/CDP 必须验证刷新后图片仍渲染，上传 201 本身不算通过。
+- 决策 11（已知代价）：token 在导出到其它 Markdown 工具时是断链；图片 endpoint 一次读内存、无压缩/缩略图；草稿只在本浏览器且只按 `baseUpdatedAt` 判旧；无阅读页/文件夹/标签筛选/版本/回收站；删除笔记不删文件；编辑页 chunk 约 405 KB（gzip 140 KB）；教师/家长仍无工作区入口。
+- 验证：`npm run test:run` **39/39**、`npm run build` 通过、pytest **506/506**；真实 1440×900 新建含公式与 64×64 PNG 的笔记，保存后 DB 为 `note-file://8`，刷新后 `.katex=1`、`img.naturalWidth=64`；草稿→离开取消/确认→重开恢复→保存清草稿；列表 12→翻页 2→20/页 12→关键词 1→学科 6→删除 11；console error 0、无横向滚动；验收数据与 MinIO 对象清理回 0。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |

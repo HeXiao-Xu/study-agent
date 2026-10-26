@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-11 前端应用骨架（设计 token、`MainLayout`、登录/注册页、路由守卫与 401 回跳、6 个占位页；Vitest 17/17；真实 Chrome 走通注册→登录→刷新→退出→401→404/403，侧栏 248 / 顶栏 56 / 内容 1160 实测）
-- 下一步：S2-12 前端笔记列表与编辑器
+- 最近完成：S2-12 前端笔记列表与编辑器（表格列表 + 关键词/学科/排序/分页 + 删除；`md-editor-v3` + KaTeX 编辑页；图片 `parse=false` 上传 + Bearer blob 鉴权取图 + `note-file://<id>` 稳定 token；本地草稿与离开/刷新确认；Vitest 39/39、pytest 506/506；真实 Chrome 1440×900 验证含公式/图片笔记保存后刷新仍渲染、草稿恢复、列表筛选分页删除）
+- 下一步：S2-13 前端上传与解析状态
 - 已知阻塞：无
 
 ## 任务清单
@@ -42,7 +42,7 @@
 - [x] S2-9 知识点树 CRUD + 导入
 - [x] S2-10 知识点对齐与待确认队列
 - [x] S2-11 前端登录/布局/路由守卫
-- [ ] S2-12 前端笔记列表与编辑器
+- [x] S2-12 前端笔记列表与编辑器
 - [ ] S2-13 前端上传与解析状态
 - [ ] S2-14 前端知识点树管理
 
@@ -132,8 +132,23 @@
 | 34 | 6 个业务模块目前都是统一占位页；教师/家长登录后看到与学生相同的导航（S2-11 遗留） | 演示时“系统很空”，家长/教师视角未区分 | S2-12–S2-14 逐个替换；角色页等对应模块有数据后再加 `meta.roles` |
 | 35 | token 存 localStorage，无 CSP/HttpOnly，无刷新 token（S2-11 沿用 S2-2） | XSS 可读 token；令牌到期前无法主动失效 | 部署层加 CSP；refresh/吊销见遗留 3 |
 | 36 | Element Plus 全局注册，构建主包 1.0 MB（gzip 330 KB）（S2-11 实测） | 首次加载偏慢，内网演示可接受 | 有性能要求时改按需引入/分包，别在功能卡里顺手重构 |
+| 37 | 草稿只存当前浏览器 localStorage，无服务端自动保存；陈旧判断只比 `baseUpdatedAt`（S2-12） | 换设备/清缓存丢失；同毫秒并发更新可能漏判 | 需要多端草稿或实时协作时再做服务端草稿 |
+| 38 | 笔记只有列表 + 直接编辑页，无只读阅读页、文件夹、标签筛选、版本历史、回收站（S2-12） | 长文阅读/整理能力弱；误删无法前端恢复 | 需求出现时补阅读页与文件夹/标签筛选 |
+| 39 | 图片以 `note-file://<id>` 存在 Markdown 正文，脱离本应用导出会破图；取图一次读入内存、无压缩/缩略图、删笔记不删图（S2-12） | 导出不通用；大图多图有内存压力；孤儿文件占存储 | 导出前做 token→公开 URL 转换；文件管理卡补压缩/删除联动 |
+| 40 | 编辑页懒加载 chunk 约 405 KB（gzip 140 KB），KaTeX/md-editor 体积大（S2-12 实测） | 首次进入编辑页偏慢，内网可接受 | 有性能要求时拆 KaTeX/CodeMirror 或预加载 |
+| 41 | 教师/家长不能进笔记工作区（路由 `roles:['student']`），其读取能力未做前端入口（S2-12 沿用 S2-11） | 家长/教师视角仍空白 | 家长/教师端卡再设计入口与只读模式 |
 
 ## 变更日志
+
+### 2026-10-27（S2-12）
+- S2-12 完成（spec `docs/spec/s2-12-notes-ui.md` + plan `docs/plan/s2-12-notes-ui.md`，用户确认后实施）。交付：`views/notes/{NoteListView,NoteEditView,useNoteList,useNoteEditor,listQuery}`、`components/notes/{TagInput,MarkdownEditor}`、`api/{notes,files,kp}.ts`、`types/{notes,files,common,kp}.ts`、`utils/{noteDraft,noteImages}.ts`；路由 `/notes`、`/notes/new`、`/notes/:id/edit` 与 `meta.nav` 侧栏/面包屑高亮；后端 `POST /files?parse=false` 与 `GET /files/{id}/image`
+- 拍板（D-032，2026-10-27 用户确认）：表格列表、直接编辑页、本地草稿 + 手动保存、`md-editor-v3` + KaTeX 懒加载、图片 `note-file://<id>` + Bearer blob 预览、`parse=false` + 鉴权取图接口、关键词/学科/排序/分页筛选；不引入 base64 图片、不做服务端自动保存
+- 验收证据：前端 `npm run test:run` **39 passed / 10 files**；`npm run build` 通过（编辑页 chunk 405 KB / gzip 140 KB）；后端 pytest **506 passed**（基线 500 + 6 条图片契约）
+- 真实联调（Chrome 155 headless + CDP，1440×900，真实 Postgres/Redis/MinIO）：注册 `s212_e2e_*` → 新建笔记（标题+正文+块级公式）→ 工具栏“上传图片”选 64×64 PNG → 预览 `.katex=1`、`img.naturalWidth=64`；保存 URL 变 `/notes/37/edit`；DB `content_md` 含 `note-file://8`，不含 MinIO endpoint/`X-Amz`；刷新后标题/公式/图片仍在（blob 重新换取，`naturalWidth=64`）；改标题 1.3s 后草稿写入 localStorage，侧栏离开弹确认，取消内容仍在，再离开回列表；重开弹“恢复草稿”，恢复后标题为草稿值，保存后草稿 key 删除；列表 12 条默认 10/页、翻页 2 条、20/页 12 条、关键词 1 条、学科筛选 6 条、标题排序、删除确认后 11 条；图片接口实测 200 + `image/png`/ETag/nosniff/private max-age=300；console error 0；`scrollWidth=innerWidth=1418`
+- 实测抓修：① 新建保存后 `onCreated` 在 `saving=true` 时触发路由，被 `onBeforeRouteLeave` 误拦（单测发现），改为 `finally` 中 `saving=false` 后再回调；② 列表时间按 UTC 原样展示，改为浏览器本地时区；③ 新建空白笔记状态显示“已保存”，改为“新笔记”
+- 清理：验收笔记 12 篇、文件 1 个、异步任务 13 条、用户 1 个与 MinIO 对象 `uploads/17/...` 全部删除，计数回 0；临时 CDP 脚本与截图不入库
+- 文档同步：API.md §3、DECISIONS D-032、PROGRESS、实施计划 S2-12 勾选、spec §15/plan 执行记录；SCHEMA 无变更
+- 已知不足：见遗留 37–41；图片 token 导出不通用、取图一次读内存、无压缩、草稿仅本地、无阅读页/文件夹/标签筛选/版本/回收站、编辑包偏大、教师/家长无入口
 
 ### 2026-10-27（S2-11）
 - S2-11 完成（spec `docs/spec/s2-11-frontend-shell.md` + plan `docs/plan/s2-11-frontend-shell.md`，用户确认后实施）。交付：`styles/tokens.css` + `base.css`（设计 token 与 Element Plus 变量覆盖）、`layouts/MainLayout.vue`、`components/layout/{SideNav,TopBar}.vue`、`components/common/{PageHeader,EmptyState,StatusPage}.vue`、`views/{LoginView,ComingSoonView,ForbiddenView,NotFoundView}.vue`、`router/{index,guard,meta}.ts`、`stores/auth.ts`（token+user+fetchMe）、`api/auth.ts`、`types/auth.ts`、`utils/redirect.ts`；Vitest 配置与 17 条测试

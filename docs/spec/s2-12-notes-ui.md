@@ -376,4 +376,21 @@ Chrome headless + CDP，1440×900，真实 Postgres/Redis/MinIO：
 
 ## 15. 执行记录
 
-（实施后回填：commit、测试数、浏览器实测结果、偏差。）
+- 实施日期：2026-10-27；spec 提交 `9691a10`，plan 提交 `e334cf2`。
+- 代码提交：`1ff82ae`（后端图片契约）、`9bd5033`（API/类型/工具）、`aa1ef6d`（列表/路由/导航）、`4479991`（编辑页/草稿）、`1f232be`（本地时间与新笔记状态）、`58222a0`（清空筛选取消关键词防抖）；文档收尾提交见本次 HEAD。
+- 测试：前端 `npm run test:run` **39 passed / 10 files**（新增 22：列表 5、编辑页 5、草稿 4、图片 5、查询 3；既有 17 不回归）；`npm run build` 通过，编辑页 chunk 405 KB / gzip 140 KB。后端 pytest **506 passed**（基线 500 + 6 条图片契约：`parse=false` 成功/非图片、取图成功/越权/非图片/不存在）。
+- 真实联调（Chrome 155 headless + CDP，1440×900，真实 Postgres/Redis/MinIO）：
+  - 新建“函数单调性验收”，正文含 `# 单调性`、`$$\\int_0^1 x^2 dx$$`；工具栏“图片”下拉 →“上传图片”选 64×64 PNG；预览 `.katex=1`、`img.naturalWidth=64`。
+  - 保存 → `/notes/37/edit`；DB `content_md` 为 `...![](note-file://8)`，无 MinIO endpoint / `X-Amz`；文件 `id=8, mime=image/png, parse_status=done, parse_progress=100, parse_finished_at` 有值，`parse.document` 任务 0 条。
+  - 刷新 → 标题/公式/图片仍在，图片经 Bearer blob 重新渲染（`naturalWidth=64`）；编辑页无横向滚动（`scrollWidth=innerWidth=1418`）。
+  - 草稿：改标题等 1.3s → localStorage `study-agent:note-draft:v1:37` 存在；点侧栏“文件”弹离开确认，取消后内容仍在；再离开回列表；重开弹“恢复草稿”，恢复后标题为草稿值，保存后 key 删除。
+  - 列表：12 条默认 10/页 → 第 2 页 2 条；20/页 12 条；关键词“分页验收 11” 1 条；学科“高中数学” 6 条；标题排序 URL `sort=title`；删除确认后 11 条。
+  - 取图接口实测 200 + `image/png` + ETag + `nosniff` + `private, max-age=300`；console error 0。
+  - 截图：`web/.tmp-screens/*.png`（未入版本库，收尾删除）；验收数据：笔记 12、文件 1、异步任务 13、用户 1、MinIO `uploads/17/...` 全部清理，计数回 0。
+- 与 plan 的偏差（均已实测并补测试/记录）：
+  1. 新建保存时 `onCreated` 原先在 `saving=true` 内触发，被 `onBeforeRouteLeave` 误判“正在保存”而拦截；改为 `finally` 置 `saving=false` 后回调（`NoteEditView.spec` 抓到）。
+  2. 列表更新时间原按 UTC 字符串截断，改为浏览器本地时区格式化。
+  3. 新建空白笔记原显示“已保存”，改为“新笔记”。
+  4. 列表行点击单测在 jsdom 下不触发 Element Plus 行事件，测试改为对 `ElTable` 发 `row-click`；浏览器真实流程仍用行/编辑按钮验证。
+  5. `md-editor-v3` 图片按钮是下拉（“添加链接/上传图片/裁剪上传”），CDP 先点“上传图片”再对隐藏 input 调 `DOM.setFileInputFiles`；裁剪弹窗在 headless 下不可用，未走裁剪路径。
+- 未做项：无阅读页、文件夹、标签筛选、版本历史、回收站、移动端、服务端草稿/自动保存、图片压缩/缩略图、删除笔记联动删图；教师/家长无工作区入口。均与 §13 一致。
