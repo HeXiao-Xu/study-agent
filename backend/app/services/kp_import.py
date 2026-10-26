@@ -185,9 +185,10 @@ def import_tree(
             select(KnowledgePoint).where(KnowledgePoint.subject_id == subject.id)
         )
     )
-    referenced: set[str] = set(session.scalars(select(NoteKp.kp_id)))
-    referenced.update(session.scalars(select(KnowledgeEdge.src_kp_id)))
-    referenced.update(session.scalars(select(KnowledgeEdge.dst_kp_id)))
+    referenced_ids: set[int] = set(session.scalars(select(NoteKp.kp_id)))
+    referenced_ids.update(session.scalars(select(KnowledgeEdge.src_kp_id)))
+    referenced_ids.update(session.scalars(select(KnowledgeEdge.dst_kp_id)))
+    referenced = referenced_codes_for(existing, referenced_ids)
     plan = plan_sync(existing, flat, referenced_codes=referenced, mode=mode)
     if dry_run:
         return ImportResult(stats=_stats(plan), skipped=plan.skipped)
@@ -220,6 +221,12 @@ def import_tree(
         session.delete(row)
     session.commit()
     return ImportResult(stats=_stats(plan), skipped=plan.skipped)
+
+
+def referenced_codes_for(
+    existing: list[KnowledgePoint], referenced_ids: set[int]
+) -> set[str]:
+    return {row.code for row in existing if row.id in referenced_ids}
 
 
 def _stats(plan: SyncPlan) -> ImportStats:

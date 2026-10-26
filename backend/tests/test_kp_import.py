@@ -13,6 +13,7 @@ from app.services.kp_import import (
     flatten_tree,
     load_tree_file,
     plan_sync,
+    referenced_codes_for,
 )
 
 
@@ -169,3 +170,7 @@ def test_plan_sync_overwrite_skips_parent_with_kept_child() -> None:
     plan = plan_sync(existing, flat, referenced_codes=set(), mode="overwrite")
     assert [row.code for row in plan.deletes] == []
     assert ("MATH-A", "has_children") in plan.skipped
+
+def test_referenced_codes_for_maps_ids_to_codes() -> None:
+    existing = [_kp("MATH", 1), _kp("MATH-A", 2, parent_id=1, level=2)]
+    assert referenced_codes_for(existing, {2, 999}) == {"MATH-A"}
