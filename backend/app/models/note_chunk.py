@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     BigInteger,
+    ForeignKey,
     Identity,
     Index,
     Integer,
@@ -33,8 +34,16 @@ class NoteChunk(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
-    note_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    note_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("notes.id", name="fk_note_chunks_note_id_notes", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", name="fk_note_chunks_user_id_users"),
+        nullable=False,
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -42,6 +51,10 @@ class NoteChunk(Base):
     heading_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
     tsv: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
-    source_file_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_file_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("files.id", name="fk_note_chunks_source_file_id_files"),
+        nullable=True,
+    )
     page_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bbox_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
