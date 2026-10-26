@@ -2124,3 +2124,17 @@ git commit -m "docs(s2-11): 前端骨架决策、进度与验收记录"
 - Element Plus 表单校验在 jsdom 中异步：测试统一 `await flushPromises()` 两次；若仍不稳定，改为直接调用 `formRef.validate()` 的组件暴露方法（需 `defineExpose`），在 plan 执行记录中说明。
 - `MainLayout` 的 `<transition mode="out-in">` 在测试中可能产生空档：测试挂载后 `await flushPromises()`，必要时 stub `transition`。
 - 真实浏览器截图若环境无浏览器自动化，由用户目视确认并写记录，不伪造截图。
+
+## 执行记录
+
+- 任务 1–4 均按计划完成，commits：`0bc7745`、`6f89bbd`、`5f4a809`、`c394d4e`；文档同步提交单独一条。
+- 自动化：17/17 tests、build 通过。
+- 真实联调：注册→自动登录→刷新→退出→redirect→401→404/403 全通；布局 248/56/1160；console error 0；测试账号已删。
+- 偏差：
+  1. `api/auth.ts` 路径加 `/api/v1` 前缀（`API_PREFIX`），因为 `VITE_API_BASE` 是 host；plan 里写的是 `/auth/login`。
+  2. `vitest.config.ts` 增 `server.deps.inline: ['element-plus']`；否则 Element Plus 的 async-validator 默认导入在 Vitest 下失效，校验恒 true（已用临时独立 spec 定位）。
+  3. `src/test/setup.ts` 增内存 localStorage stub；Node 25 自带实现覆盖 jsdom 且无 `clear()`。
+  4. 登录页空表单测试等待 150ms，绕开 Element Plus 100ms 错误态防抖。
+  5. 新增 `components/common/StatusPage.vue` 供 403/404 复用，替代 plan 中的两份重复样式。
+  6. MainLayout 测试的路由父级改为 `<router-view />`，避免直接挂载 + 路由再渲染导致 12 个导航项。
+- 截图：登录、主布局、404、403 已生成在临时目录，未纳入仓库；待用户目视确认。

@@ -355,4 +355,9 @@ npm run build
 
 ## 13. 执行记录
 
-（实施后回填：commit、测试数、浏览器实测结果、偏差。）
+- 实施 commits：`0bc7745`（token/测试基建）、`6f89bbd`（认证与守卫）、`5f4a809`（登录页/401）、`c394d4e`（布局与路由）、文档提交见 git log。
+- 自动化：`npm run test:run` **17 passed / 5 files**；`npm run build` 成功、零 TS 错误。
+- 真实联调（Chrome 155 headless，1440×900，CDP）：注册 `s211_e2e_*` → 自动登录 `/notes`；刷新后昵称「测试学生S211」/角色「学生」保持；退出后 token 清空；未登录 `/notes` → `/login?redirect=/notes`；重新登录回 `/notes`；伪造 token → 401 清 token 回登录（带 redirect）；`/not-exist` 404、`/403` 403；console error 0；验收账号已删除。
+- 布局实测：侧栏 248px、顶栏 56px、内容 1160px、左边距 264px；主色 `rgb(59,91,219)`；登录卡片 380px。
+- 偏差：① API 加 `/api/v1` 前缀（`VITE_API_BASE` 是 host）；② Vitest inline Element Plus 修复校验恒 true；③ Node 25 localStorage 用内存 stub；④ 登录页错误断言等 100ms 防抖；⑤ 403/404 共用 `StatusPage`；⑥ MainLayout 测试路由父级改 `<router-view />` 避免双挂载。
+- 未完成：截图尚无人工目视评审，样式细节待用户确认。

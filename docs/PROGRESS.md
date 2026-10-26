@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-10 笔记/文档 → 知识点对齐（`ai/align` 纯函数打分 + LLM 候选内抽取、`kp_align_service`、`kp.align` 任务、4 个 `/kp/align` 接口、笔记/解析自动入队；pytest 500/500；真实 30 条笔记自动关联精确率 28/28、待确认 8 条、批量确认/忽略/重跑全流程实测）
-- 下一步：S2-11 前端登录页 + 布局 + 路由守卫
+- 最近完成：S2-11 前端应用骨架（设计 token、`MainLayout`、登录/注册页、路由守卫与 401 回跳、6 个占位页；Vitest 17/17；真实 Chrome 走通注册→登录→刷新→退出→401→404/403，侧栏 248 / 顶栏 56 / 内容 1160 实测）
+- 下一步：S2-12 前端笔记列表与编辑器
 - 已知阻塞：无
 
 ## 任务清单
@@ -41,7 +41,7 @@
 - [x] S2-8 文档解析 Worker
 - [x] S2-9 知识点树 CRUD + 导入
 - [x] S2-10 知识点对齐与待确认队列
-- [ ] S2-11 前端登录/布局/路由守卫
+- [x] S2-11 前端登录/布局/路由守卫
 - [ ] S2-12 前端笔记列表与编辑器
 - [ ] S2-13 前端上传与解析状态
 - [ ] S2-14 前端知识点树管理
@@ -129,8 +129,19 @@
 | 31 | 对齐阈值 0.75/0.55 基于 text-embedding-v4 分数分布（S2-10 遗留） | 换 Embedding 模型需重新校准，可能大量进待确认或大量丢弃 | 换模型时用标注集重跑 ROC 选阈值 |
 | 32 | `note_kps` 无时间列/审计表，忽略即删除；并发重跑同一笔记可能 pkey 冲突（S2-10 遗留） | 无法按时间排序/追溯，忽略项重跑可能再现 | 需要时补 `created_at/updated_at` 迁移与审计表 |
 | 33 | 对齐 LLM 失败即任务失败，无纯算法兜底；未写 `llm_call_logs`（S2-10 遗留） | 无 Key/额度时对齐不可用；成本只能看结构化日志 | S3-7 建表后接入；如需降级再设计兜底分数 |
+| 34 | 6 个业务模块目前都是统一占位页；教师/家长登录后看到与学生相同的导航（S2-11 遗留） | 演示时“系统很空”，家长/教师视角未区分 | S2-12–S2-14 逐个替换；角色页等对应模块有数据后再加 `meta.roles` |
+| 35 | token 存 localStorage，无 CSP/HttpOnly，无刷新 token（S2-11 沿用 S2-2） | XSS 可读 token；令牌到期前无法主动失效 | 部署层加 CSP；refresh/吊销见遗留 3 |
+| 36 | Element Plus 全局注册，构建主包 1.0 MB（gzip 330 KB）（S2-11 实测） | 首次加载偏慢，内网演示可接受 | 有性能要求时改按需引入/分包，别在功能卡里顺手重构 |
 
 ## 变更日志
+
+### 2026-10-27（S2-11）
+- S2-11 完成（spec `docs/spec/s2-11-frontend-shell.md` + plan `docs/plan/s2-11-frontend-shell.md`，用户确认后实施）。交付：`styles/tokens.css` + `base.css`（设计 token 与 Element Plus 变量覆盖）、`layouts/MainLayout.vue`、`components/layout/{SideNav,TopBar}.vue`、`components/common/{PageHeader,EmptyState,StatusPage}.vue`、`views/{LoginView,ComingSoonView,ForbiddenView,NotFoundView}.vue`、`router/{index,guard,meta}.ts`、`stores/auth.ts`（token+user+fetchMe）、`api/auth.ts`、`types/auth.ts`、`utils/redirect.ts`；Vitest 配置与 17 条测试
+- 拍板（D-031，2026-10-27 用户确认）：桌面优先（1440/248/56/1160）、克制研究工作台视觉、全应用骨架 + 占位页、登录+学生注册、壳+基础组件层、允许新增测试依赖 vitest/@vue/test-utils/jsdom；守卫 fail-closed；注册成功自动登录；401 带 `redirect` 回跳
+- 验收证据：`npm run test:run` **17 passed / 5 files**；`npm run build` 零 TS 错误；真实 Chrome 1440×900（CDP）注册 `s211_e2e_*` → 自动登录 `/notes`；刷新后昵称/角色保持；退出后 token 清空；未登录访问 `/notes` → `/login?redirect=/notes`，登录后回 `/notes`；把 token 改坏后刷新 → 401 清 token 回登录；`/not-exist` 404、`/403` 403、`document.title` 正确；布局实测侧栏 248、顶栏 56、内容 1160、左边距 264；主色 `rgb(59,91,219)`；console error 0；验收账号已从库中删除
+- 与 plan 的偏差（已记录在 plan 执行记录）：① `VITE_API_BASE` 是 host 而非 `/api/v1`，在 `http.ts` 增 `API_PREFIX`，auth API 走 `/api/v1/auth/*`（否则请求会打到 `/auth/login` 404）；② Vitest 需 `server.deps.inline: ['element-plus']`，否则 async-validator 默认导入退化为非构造函数、表单校验恒 true；③ Node 25 自带 localStorage 抢注 jsdom 实现，测试 setup 用内存实现替代；④ Element Plus 错误态有 100ms 防抖，登录页空表单测试等待 150ms；⑤ 403/404 共用 `StatusPage` 组件（plan 原写两份重复样式），减少重复；⑥ plan 的 MainLayout 测试直接挂载组件时，路由父组件又渲染一次 MainLayout，测试路由父级改为 `<router-view />`
+- 已知事项（不粉饰）：6 个模块仍是占位页；教师/家长与学生同导航；无手机/深色模式/i18n/全局搜索；token 存 localStorage；主包 1.0 MB；真实浏览器截图已生成但**尚未经人工目视评审**（结构度量与 DOM 文案已核对），样式细节待用户确认
+- 文档同步：spec §13、plan 执行记录、DECISIONS D-031、PROGRESS、`docs/AI协作开发实施计划.md` 勾选 S2-9/S2-11；无后端接口/SCHEMA 变更
 
 ### 2026-10-27（S2-10）
 - S2-10 完成（spec `docs/spec/s2-10-kp-align.md` + plan `docs/plan/s2-10-kp-align.md`，用户确认后实施）。交付：`app/ai/align/{scoring,extractor}.py` + `ai/prompts/kp_align_v1.md`（固定权重打分、候选内 LLM 抽取、严格 JSON + 2 次重试）、`app/services/kp_align_service.py`（KP 向量补全、top-10 召回、分类落库、待确认列表/确认/忽略）、`app/schemas/kp_align.py`、`app/tasks/kp_align.py`（注册 `kp.align`）、`api/v1/kp.py` 4 个 `/kp/align` 接口、`notes.py` 写后自动入队、`parse_document.py` 解析完成后独立 Session 入队、`data/align_demo_notes.json`（30 条验收笔记）。

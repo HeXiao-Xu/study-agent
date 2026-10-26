@@ -362,6 +362,23 @@
 - 验证（真实 DashScope Embedding + qwen-plus + Postgres + Redis + ARQ Worker）：注册 `align_student`，30 条验收笔记全部 `POST /notes`（note_id 7–36），30 个 `kp.align` 任务 **succeeded=30 / failed=0**；`knowledge_points.embedding` 补齐 108/108；`note_kps` 36 行 = 自动 28 + 待确认 8。按链接人工核对 28 条自动关联全部与笔记主题一致 → **自动关联精确率 28/28 = 100%**，覆盖 25/30 条笔记；5 条（集合运算/复数/直线与圆/抛物线/导数与单调性）LLM 各命中 1 个候选但最终分 <0.55 被丢弃（`candidates=10, matched=1, auto=0, dropped=10`），属阈值偏严而非错链。待确认队列 `GET` 返回 8 条，批量确认 3 条（15/118、17/155、19/120）→ DB `manual+confirmed=3`，批量忽略 2 条（20/206、26/209）→ 删除成功，剩余待确认 3；`note_kps` 最终 34 行（ai true 28 / ai false 3 / manual true 3）。手动重跑 note 15：任务成功 `auto=1, matched=2, dropped=9`，manual 行保留、ai 行被替换。清理 notes/note_kps/async_tasks/users 后 pytest 复跑 500/500。
 - 已知不足（不粉饰）：树先验只是标签/标题近似；关键词无别名表/同义词，召回漏（本次 5/30 完全未关联）；阈值基于 text-embedding-v4 分布，换模型需重校准；LLM 失败即任务失败，无纯算法兜底；待确认无时间列/无审计，忽略后重跑可能再来；文档笔记解析失败则不对齐；并发重跑同一笔记可能 pkey 冲突（任务失败重试）；未写 `llm_call_logs`（S3-7 建表后再接）。
 
+## D-031 前端应用骨架与登录（S2-11）
+
+- 背景：S0-6 只有 `/debug` 验收页；S2-2 的注册/登录/`me` 接口已可用，但没有登录页、布局和守卫；S2-12–S2-14 需要统一视觉与壳。spec 见 `docs/spec/s2-11-frontend-shell.md`。
+- 决策 1（设备与视觉）：桌面优先，按 1440 设计；侧栏 248px、顶栏 56px、内容最大 1160px、页面留白 32px；暖白 `#F7F8FA` + 深墨 `#1F2933` + 靛蓝 `#3B5BDB`，1px 分割线、卡片圆角 10px、只保留 1px 阴影，不做后台模板感（用户逐项确认）。
+- 决策 2（范围）：一次交付全应用骨架（6 个一级导航 + 顶栏 + 用户区），未完成模块统一 `ComingSoonView` 并标计划任务号；不放假表格/假统计；不做首页仪表盘、手机适配、深色模式、i18n、全局搜索。
+- 决策 3（实现方式）：设计 token + `MainLayout` + 基础组件（`PageHeader`/`EmptyState`/`StatusPage`），不引入 Tailwind/新运行时依赖；Element Plus 继续全局注册（S0-6 既有决策）。
+- 决策 4（导航）：两位序号 + 文字，不引入 `@element-plus/icons-vue`（非直接依赖）；active 用浅主色底 + 3px 左侧主色条 + `aria-current="page"`。
+- 决策 5（登录/注册）：同页自定义文字 tab；学生可自助注册，注册成功自动用同账号登录；校验与 API.md §1 一致（用户名 3–50 无空白、密码 8–128、昵称 ≤50、年级 ≤20）；错误由 `http.ts` 统一 toast，表单只做 loading 与字段校验。
+- 决策 6（登录态）：token 持久化 localStorage；user 只存内存，刷新后 `GET /auth/me` 回填；角色以服务端为权威；`fetchMe` 用动态 import 避免 `http → store → api → http` 静态环。
+- 决策 7（守卫）：判定抽成纯函数 `resolveAccess({isPublic,hasToken,user,roles,redirectPath})`；`beforeEach` 只负责取数与跳转；要求 roles 但 user 未回填时 **fail-closed 403**；未登录跳 `/login?redirect=<fullPath>`；已登录访问 `/login` 回 `/notes`；403/404 公开。
+- 决策 8（安全回跳）：`safeRedirect` 只接受以单个 `/` 开头、不以 `//` 开头、不含反斜杠的站内路径，否则回 `/notes`；401 时清 token 并带当前 `fullPath` 回登录，登录页不重复跳。
+- 决策 9（接口前缀）：`VITE_API_BASE` 在开发环境是 host（S0-6 的 `/health` 依赖它），所以 `http.ts` 导出 `API_PREFIX='/api/v1'`，业务 API 显式拼前缀；不在本卡改环境变量语义。
+- 决策 10（测试）：经用户确认新增 devDependencies `vitest@4.1.12`、`@vue/test-utils@2.5.1`、`jsdom@29.1.1`，不进入生产包；测试放 `src/**/*.spec.ts` 由 `vue-tsc -b` 一并类型检查；共 17 条（守卫 5、redirect 3、store 3、登录页 3、布局 3）。
+- 决策 11（测试环境三坑）：Element Plus 必须 `server.deps.inline`，否则 async-validator 默认导入退化、校验恒 true；Node 25 自带 localStorage 会盖住 jsdom 且无 `clear()`，setup 用内存实现；错误态有 100ms 防抖，断言前等待。
+- 验证：`npm run test:run` 17/17；`npm run build` 零 TS 错误；真实 Chrome 1440×900 走通注册→自动登录→刷新保持→退出→未登录 `redirect`→重新登录回跳→伪造 token 401→404/403；布局实测 248/56/1160，主色 `rgb(59,91,219)`，console error 0；验收账号已删除。
+- 已知不足（不粉饰）：6 个模块仍占位；教师/家长同学生导航；无手机/深色/i18n/搜索；token localStorage 有 XSS 风险且无 refresh；主包 1.0 MB（gzip 330 KB）；截图尚未人工目视评审，样式细节待用户确认。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |
