@@ -1,0 +1,351 @@
+{
+  "notes": [
+    {
+      "key": "set-ops",
+      "title": "集合的交并补运算",
+      "content_md": "集合的交集、并集、补集是集合运算的核心。已知全集 U={1,2,3,4,5}，A={1,3,5}，B={2,3}，则 A∩B={3}，A∪B={1,2,3,5}，∁U(A∪B)={4}。做题时先看元素是否属于集合，再按定义逐项判断，注意空集是任何集合的子集。",
+      "tags": [
+        "集合"
+      ],
+      "expected_codes": [
+        "MATH-SET-03"
+      ]
+    },
+    {
+      "key": "logic-cond",
+      "title": "充分条件与必要条件判断",
+      "content_md": "若 p 则 q 为真，则 p 是 q 的充分条件，q 是 p 的必要条件。例如 x>2 是 x>0 的充分不必要条件；三角形为等边三角形是三角形为等腰三角形的充分不必要条件。判断时先写出命题，再尝试举反例，小范围推大范围，大范围不能推小范围。",
+      "tags": [
+        "集合与常用逻辑用语"
+      ],
+      "expected_codes": [
+        "MATH-SET-04"
+      ]
+    },
+    {
+      "key": "ineq-basic",
+      "title": "基本不等式求最值",
+      "content_md": "基本不等式：对正数 a、b，有 a+b≥2√(ab)，当且仅当 a=b 时取等号。求 x+1/x（x>0）的最小值，由基本不等式得最小值为 2。使用前必须验证一正、二定、三相等，特别是等号成立条件。",
+      "tags": [
+        "一元二次函数、方程和不等式"
+      ],
+      "expected_codes": [
+        "MATH-QUAD-02"
+      ]
+    },
+    {
+      "key": "func-domain",
+      "title": "函数定义域与值域的求法",
+      "content_md": "求函数定义域要满足分母不为零、偶次根号下非负、对数真数为正。例如 y=1/(x-1) 的定义域是 x≠1；y=√(x+2) 的定义域是 x≥-2。值域可借助单调性、换元或图象观察，注意定义域优先原则。",
+      "tags": [
+        "函数"
+      ],
+      "expected_codes": [
+        "MATH-FUNC-01-01",
+        "MATH-FUNC-01"
+      ]
+    },
+    {
+      "key": "func-monotonic",
+      "title": "函数单调性的判断与证明",
+      "content_md": "判断函数单调性可以用定义法：任取 x1<x2，比较 f(x1) 与 f(x2)。证明 f(x)=2x+1 在 R 上单调递增：f(x1)-f(x2)=2(x1-x2)<0，所以 f(x1)<f(x2)。也可用导数判断，导数大于零的区间上函数单调递增。",
+      "tags": [
+        "函数"
+      ],
+      "expected_codes": [
+        "MATH-FUNC-02",
+        "MATH-FUNC-02-01"
+      ]
+    },
+    {
+      "key": "func-parity",
+      "title": "函数的奇偶性及其图象特征",
+      "content_md": "若对定义域内任意 x，有 f(-x)=f(x)，则 f 为偶函数，图象关于 y 轴对称；若 f(-x)=-f(x)，则 f 为奇函数，图象关于原点对称。判断奇偶性先看定义域是否关于原点对称，例如 f(x)=x²+1 是偶函数，f(x)=x³ 是奇函数。",
+      "tags": [
+        "函数"
+      ],
+      "expected_codes": [
+        "MATH-FUNC-03"
+      ]
+    },
+    {
+      "key": "exp-log",
+      "title": "指数函数与对数函数的性质",
+      "content_md": "指数函数 y=a^x（a>0 且 a≠1）恒过点 (0,1)，a>1 时单调递增，0<a<1 时单调递减。对数函数 y=log_a x 恒过点 (1,0)，与指数函数互为反函数。比较 log_2 3 与 log_2 5，因为底数 2>1，所以 log_2 3<log_2 5。",
+      "tags": [
+        "函数"
+      ],
+      "expected_codes": [
+        "MATH-FUNC-06",
+        "MATH-FUNC-07"
+      ]
+    },
+    {
+      "key": "trig-identity",
+      "title": "三角恒等变换公式的应用",
+      "content_md": "两角和与差公式：sin(α±β)=sinαcosβ±cosαsinβ，cos(α±β)=cosαcosβ∓sinαsinβ。二倍角公式：sin2α=2sinαcosα，cos2α=cos²α-sin²α。化简 sin15°cos15° 时可用二倍角公式得 1/2 sin30°=1/4。",
+      "tags": [
+        "三角函数"
+      ],
+      "expected_codes": [
+        "MATH-TRIG-04",
+        "MATH-TRIG-04-02"
+      ]
+    },
+    {
+      "key": "trig-graph",
+      "title": "三角函数图象与性质",
+      "content_md": "正弦函数 y=sin x 的周期为 2π，在 [-π/2+2kπ, π/2+2kπ] 上单调递增，最大值为 1，最小值为 -1。余弦函数 y=cos x 是偶函数，图象关于 y 轴对称。画图时先确定周期、振幅、相位，再用五点法描点。",
+      "tags": [
+        "三角函数"
+      ],
+      "expected_codes": [
+        "MATH-TRIG-05"
+      ]
+    },
+    {
+      "key": "solve-triangle",
+      "title": "正弦定理与余弦定理解三角形",
+      "content_md": "正弦定理：a/sinA=b/sinB=c/sinC=2R。余弦定理：a²=b²+c²-2bc cosA。已知两边及其夹角求第三边用余弦定理；已知两角及一边求其他边用正弦定理。解三角形时注意大边对大角，避免出现无解或两解的情况。",
+      "tags": [
+        "三角函数"
+      ],
+      "expected_codes": [
+        "MATH-TRIG-07",
+        "MATH-TRIG-07-01",
+        "MATH-TRIG-07-02"
+      ]
+    },
+    {
+      "key": "vector-dot",
+      "title": "平面向量数量积的运算",
+      "content_md": "平面向量数量积定义为 a·b=|a||b|cosθ。若 a=(x1,y1)，b=(x2,y2)，则 a·b=x1x2+y1y2。数量积为 0 是两向量垂直的充要条件。例如 a=(1,2)，b=(2,-1)，a·b=0，所以 a⊥b。",
+      "tags": [
+        "平面向量与复数"
+      ],
+      "expected_codes": [
+        "MATH-VEC-03"
+      ]
+    },
+    {
+      "key": "complex",
+      "title": "复数的四则运算",
+      "content_md": "复数 z=a+bi，其中 a 为实部，b 为虚部，i²=-1。加减法实部虚部分别相加减；乘法按多项式展开后合并 i²；除法通过分母实数化。例如 (1+2i)(3-i)=3-i+6i-2i²=5+5i。共轭复数用于化简分母。",
+      "tags": [
+        "平面向量与复数"
+      ],
+      "expected_codes": [
+        "MATH-VEC-05"
+      ]
+    },
+    {
+      "key": "seq-ap",
+      "title": "等差数列的通项与前 n 项和",
+      "content_md": "等差数列的通项公式 a_n=a_1+(n-1)d，前 n 项和 S_n=n(a_1+a_n)/2=na_1+n(n-1)d/2。若 a_1=3，d=2，则 a_5=11，S_5=5×(3+11)/2=35。判断等差数列可看相邻两项差是否为常数。",
+      "tags": [
+        "数列"
+      ],
+      "expected_codes": [
+        "MATH-SEQ-02",
+        "MATH-SEQ-02-01",
+        "MATH-SEQ-02-02"
+      ]
+    },
+    {
+      "key": "seq-gp",
+      "title": "等比数列的通项与求和",
+      "content_md": "等比数列的通项公式 a_n=a_1 q^(n-1)，前 n 项和 S_n=a_1(1-q^n)/(1-q)（q≠1）。若 a_1=2，q=3，则 a_4=54。使用求和公式前要讨论公比是否为 1，等比中项满足 b²=ac，注意同号条件。",
+      "tags": [
+        "数列"
+      ],
+      "expected_codes": [
+        "MATH-SEQ-03",
+        "MATH-SEQ-03-01",
+        "MATH-SEQ-03-02"
+      ]
+    },
+    {
+      "key": "seq-sum",
+      "title": "数列求和的常用方法",
+      "content_md": "数列求和常见方法有公式法、错位相减法、裂项相消法和倒序相加法。形如 n·2^n 的数列适用错位相减；形如 1/[n(n+1)] 的数列可裂项为 1/n-1/(n+1)。求和后要检验首项与项数，避免漏项。",
+      "tags": [
+        "数列"
+      ],
+      "expected_codes": [
+        "MATH-SEQ-04"
+      ]
+    },
+    {
+      "key": "solid-parallel",
+      "title": "线面平行的判定与性质",
+      "content_md": "线面平行判定：平面外一条直线与此平面内一条直线平行，则该直线与此平面平行。性质：若直线与平面平行，经过该直线的平面与此平面相交，则直线与交线平行。证明时注意写清“线在面外、线在面内、两线平行”三个条件。",
+      "tags": [
+        "立体几何"
+      ],
+      "expected_codes": [
+        "MATH-GEO-03"
+      ]
+    },
+    {
+      "key": "solid-perp",
+      "title": "线面垂直的判定与性质",
+      "content_md": "线面垂直判定：一条直线与平面内两条相交直线都垂直，则该直线与此平面垂直。性质：垂直于同一平面的两条直线平行。证明线面垂直时先找平面内两条相交直线，再分别证明线线垂直，常用勾股定理或等腰三角形三线合一。",
+      "tags": [
+        "立体几何"
+      ],
+      "expected_codes": [
+        "MATH-GEO-04"
+      ]
+    },
+    {
+      "key": "solid-angle",
+      "title": "空间角与距离的求法",
+      "content_md": "异面直线所成角通过平移转化为相交直线夹角，范围是 (0°,90°]。直线与平面所成角是斜线与它在平面内射影的夹角。二面角可用定义法或空间向量法求解。建系时选择两两垂直的三条直线，写清各点坐标再计算。",
+      "tags": [
+        "立体几何"
+      ],
+      "expected_codes": [
+        "MATH-GEO-06"
+      ]
+    },
+    {
+      "key": "line-circle",
+      "title": "直线与圆的位置关系",
+      "content_md": "判断直线与圆的位置关系可比较圆心到直线的距离 d 与半径 r：d<r 相交，d=r 相切，d>r 相离。直线 3x+4y-5=0 与圆 x²+y²=1 的圆心距离为 1，等于半径，所以相切。相交时弦长用勾股定理计算。",
+      "tags": [
+        "解析几何"
+      ],
+      "expected_codes": [
+        "MATH-ANA-01",
+        "MATH-ANA-02"
+      ]
+    },
+    {
+      "key": "ellipse",
+      "title": "椭圆的标准方程与几何性质",
+      "content_md": "椭圆标准方程 x²/a²+y²/b²=1（a>b>0），其中 c²=a²-b²，离心率 e=c/a，且 0<e<1。焦点在 x 轴上时焦点为 (±c,0)。椭圆上任意一点到两焦点距离之和为 2a，这是椭圆定义的核心。",
+      "tags": [
+        "解析几何"
+      ],
+      "expected_codes": [
+        "MATH-ANA-03",
+        "MATH-ANA-03-01"
+      ]
+    },
+    {
+      "key": "hyperbola",
+      "title": "双曲线的定义与渐近线",
+      "content_md": "双曲线标准方程 x²/a²-y²/b²=1，满足 c²=a²+b²，渐近线方程为 y=±(b/a)x。双曲线上一点到两焦点距离之差的绝对值为 2a。离心率 e=c/a>1，e 越大开口越开阔。注意与椭圆的 a、b、c 关系区分。",
+      "tags": [
+        "解析几何"
+      ],
+      "expected_codes": [
+        "MATH-ANA-04",
+        "MATH-ANA-04-01"
+      ]
+    },
+    {
+      "key": "parabola",
+      "title": "抛物线的标准方程与焦点",
+      "content_md": "抛物线 y²=2px（p>0）的焦点为 (p/2,0)，准线为 x=-p/2，抛物线上一点到焦点与到准线的距离相等。求抛物线 y²=8x 的焦点，得 (2,0)。解题时优先用定义转化距离，可简化计算。",
+      "tags": [
+        "解析几何"
+      ],
+      "expected_codes": [
+        "MATH-ANA-05",
+        "MATH-ANA-05-01"
+      ]
+    },
+    {
+      "key": "deriv-basic",
+      "title": "导数的基本公式与运算法则",
+      "content_md": "基本求导公式：(x^n)'=nx^(n-1)，(sin x)'=cos x，(e^x)'=e^x，(ln x)'=1/x。导数的四则运算满足 (u±v)'=u'±v'，(uv)'=u'v+uv'。例如求 f(x)=x³+2x 的导数，得 f'(x)=3x²+2。",
+      "tags": [
+        "导数及其应用"
+      ],
+      "expected_codes": [
+        "MATH-DER-01",
+        "MATH-DER-01-01"
+      ]
+    },
+    {
+      "key": "deriv-monotonic",
+      "title": "利用导数判断函数单调性",
+      "content_md": "在区间内若 f'(x)>0，则 f(x) 单调递增；若 f'(x)<0，则 f(x) 单调递减。求 f(x)=x²-4x 的单调区间：f'(x)=2x-4，令 f'(x)>0 得 x>2，所以递增区间为 (2,+∞)，递减区间为 (-∞,2)。",
+      "tags": [
+        "导数及其应用"
+      ],
+      "expected_codes": [
+        "MATH-DER-02"
+      ]
+    },
+    {
+      "key": "deriv-extreme",
+      "title": "导数求函数极值与最值",
+      "content_md": "函数在导数为零且左右导数异号的点取得极值。求 f(x)=x³-3x 的极值：f'(x)=3x²-3，令其为零得 x=±1；x=-1 处取极大值 2，x=1 处取极小值 -2。闭区间最值还要比较端点函数值。",
+      "tags": [
+        "导数及其应用"
+      ],
+      "expected_codes": [
+        "MATH-DER-03"
+      ]
+    },
+    {
+      "key": "prob-classic",
+      "title": "古典概型的概率计算",
+      "content_md": "古典概型要求样本空间有限且每个基本事件等可能，概率 P(A)=A 包含的基本事件数/基本事件总数。掷一枚均匀骰子，出现偶数点的概率为 3/6=1/2。计算时先明确样本空间，再数清目标事件包含的基本事件个数。",
+      "tags": [
+        "概率与统计"
+      ],
+      "expected_codes": [
+        "MATH-PROB-02"
+      ]
+    },
+    {
+      "key": "prob-conditional",
+      "title": "条件概率与事件独立性",
+      "content_md": "条件概率 P(B|A)=P(AB)/P(A)（P(A)>0）。若 P(AB)=P(A)P(B)，则事件 A、B 相互独立。例如连续抛两次硬币，第二次正面与第一次正面独立。注意“互斥”与“独立”不是同一概念。",
+      "tags": [
+        "概率与统计"
+      ],
+      "expected_codes": [
+        "MATH-PROB-03"
+      ]
+    },
+    {
+      "key": "random-variable",
+      "title": "离散型随机变量的分布列与期望",
+      "content_md": "离散型随机变量的分布列满足每个概率非负且总和为 1。期望 E(X)=Σx_i p_i，方差 D(X)=Σ(x_i-E(X))²p_i。二项分布 X~B(n,p) 时 E(X)=np，D(X)=np(1-p)。解题先列分布列再求期望。",
+      "tags": [
+        "概率与统计"
+      ],
+      "expected_codes": [
+        "MATH-PROB-04",
+        "MATH-PROB-04-01",
+        "MATH-PROB-04-02"
+      ]
+    },
+    {
+      "key": "regression",
+      "title": "变量间的相关关系与回归分析",
+      "content_md": "散点图可直观判断两个变量是否具有相关关系。线性回归方程 ŷ=b̂x+â，其中回归系数用最小二乘法估计。相关系数 r 的绝对值越接近 1，线性相关程度越强。注意回归分析只能说明相关，不能直接说明因果关系。",
+      "tags": [
+        "概率与统计"
+      ],
+      "expected_codes": [
+        "MATH-PROB-07"
+      ]
+    },
+    {
+      "key": "binomial",
+      "title": "二项式定理与展开式通项",
+      "content_md": "二项式定理：(a+b)^n=ΣC(n,k)a^(n-k)b^k。展开式通项 T_(k+1)=C(n,k)a^(n-k)b^k。求 (x+2)^5 中 x³ 的系数，令 5-k=3 得 k=2，系数为 C(5,2)×2²=40。注意区分二项式系数与项的系数。",
+      "tags": [
+        "计数原理"
+      ],
+      "expected_codes": [
+        "MATH-COUNT-03"
+      ]
+    }
+  ]
+}
