@@ -321,3 +321,12 @@
 - 与 plan 的偏差（已同步 plan 执行记录）：① 解析器在 Windows 上失败时仍持有临时文件句柄，`unlink` 抛 WinError 32 会掩盖原始错误，改为 best-effort 清理 + WARNING（追加 `fix(s2-8)`，多 1 条测试，故总数 425 而非 424）；② 既有 S1-1 测试 `test_facade_unsupported_ext` 用的 `.txt` 现在合法，改用 `.xlsx` 并注明 S2-8 契约变更；③ Docling 首轮加载模型约 3 分钟（182s），二次 90s，仍在 300s 超时内
 - 已知事项（不粉饰）：大文件无分页续跑（遗留 22）；图片/扫描件待 OCR（23）；文档笔记与文件无删除联动（24）；重试期间状态抖动（25）；进度为阶段值、Docling 首轮慢（26）；ARQ 控制台日志 `↻` 在 GBK 终端报 UnicodeEncodeError（不影响 JSON 日志与任务）
 - 文档同步：API.md（§3 上传副作用 + parse-status 字段/状态机）、SCHEMA.md（§4.1 四列 + §10.2 四值）、AGENTS.md（§9.2 解析约定与 handler commit 例外、§9.6 锚点）、DECISIONS D-028、PROGRESS、实施计划勾选、S1-1 spec ParserName、spec/plan 执行记录
+
+
+### 2026-10-30（S2-14）
+- S2-14 完成（按 §10 全流程：spec `docs/spec/s2-14-kp-ui.md` + plan `docs/plan/s2-14-kp-ui.md`，均经用户确认）。交付：`PUT /api/v1/kp/order`（原子改父+重算 level+源/目标兄弟归一，204）；`PendingAlignOut.note_excerpt`（300 字+省略号）；前端 `types/kp.ts`、`api/kp.ts`、`views/kp/{treeUtils,Tree,PendingAlign,usePendingAlign,KnowledgeView}`、`components/kp/KpNodeDialog.vue`；`/knowledge` 两 tab；教师/管理员默认落点；学生只读；Enter/Backspace 单卡队列。
+- 验收证据：pytest **524 passed, 1 warning**（基线 512 + 12）；Vitest **82 passed / 19 files**（基线 56 + 26）；`npm run build` 退出 0。真实 1440×900 浏览器：teacher 登录落 `/knowledge`，新增→改名→跨级拖到「函数」下（DB parent 117/level 3）→删除，搜索与刷新正确；20 条真实待确认连续 Enter，confirm 资源计数 20、DB 20 行 `manual+confirmed`、队列 20→0 无旧卡；Backspace 忽略 1 条计数 1；student 登录落 `/notes`，`/knowledge` 只读、无管理按钮/不可拖拽、待确认空态；关键流程 console error 0，两 tab `scrollWidth=innerWidth=1418` 无横向溢出。
+- 实测抓修：Element Plus `dragend` 先移除源节点再 emit，`dragging.parent` 不可靠；改为从 `dropNode` 移动后的 `childNodes` 取目标兄弟全集，补树页测试。修 Element 树类型 `FilterValue`/`TreeNodeData` 对齐。
+- 清理：删除 21 条临时笔记、21 条 `note_kps`、2 个临时账号、全部 `S214%` 知识点；临时残留 0，学科 7 仍 108 知识点，原有 3 条笔记/1 个用户保留。
+- 已知事项（不粉饰）：搜索只做当前学科前端过滤；无批量确认/撤销/历史/并发冲突提示；根节点锁定仅前端；待确认一次一对；<1024 视口沿用全局横向滚动（遗留 48）；截图未做人工像素级目视，布局结论来自 DOM 断言。
+- 文档同步：API.md（§4 排序接口 + 摘要字段）、DECISIONS D-034、PROGRESS、实施计划勾选、spec/plan 执行记录；无迁移/SCHEMA/新依赖。

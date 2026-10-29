@@ -422,3 +422,19 @@
 
 > 已定项：#1 FastAPI（→D-001）、#2 数学（→D-002）、#6 软著不做（成果为答辩 PPT、演示视频与系统截图包）。
 > 2026-10-15：附录 F 全部 7 项拍板完毕，决策悬空清零归档。
+
+
+## D-034 前端知识点树管理（S2-14）
+
+- 背景：S2-9 已有知识点树 CRUD 与 108 节点高中数学导入，S2-10 已有对齐与待确认 API，但 `/knowledge` 仍是 `ComingSoonView`；S2-14 要交付可用的树管理与待确认工作台。spec 见 `docs/spec/s2-14-kp-ui.md`。
+- 决策 1（页面与角色）：`/knowledge` 单页两 tab「知识点树 / 待确认对齐」；教师/管理员可新增、改名、改描述/权重、拖拽、删除，学生只读；根节点「高中数学」前端锁定（不可拖、不可删，可改可加子节点）。教师/管理员无 redirect 登录默认 `/knowledge`，学生/家长仍 `/notes`；显式合法 `redirect` 优先，开放重定向拦截保留。
+- 决策 2（树交互）：`el-tree` + 当前学科前端搜索（名称/编码）；`allow-drag` 禁止改根和搜索态拖拽；跨级移动与同级排序统一走一个原子接口，不做前端乐观排序，失败重载树。
+- 决策 3（原子排序）：新增 `PUT /api/v1/kp/order`，入参 `parent_id`（可空=根）、`ordered_ids`（目标父级完整子节点集，1–200）、`moved_id`（可选，必须在列表内）；单事务完成“改父+重算后代 level+源兄弟归一+目标 order_no 重写”，204；校验重复/缺兄弟/跨学科/环/超 4 级。不能靠多次 PATCH 拼出可回滚的顺序。
+- 决策 4（摘要）：`GET /kp/align/pending` 的 `PendingAlignOut` 增加 `note_excerpt`，从 `note.content_text` 去首尾空白后取前 300 字，超出补 `…`；字段默认空串，旧构造/旧客户端不破；不加列、不查完整正文。
+- 决策 5（待确认）：一次一张卡，左侧笔记标题+摘要，右侧候选知识点+编码+置信度；`Enter` 确认、`Backspace` 忽略；busy 锁防重复，确认/忽略后本地推进，队列空自动重查；状态被并发改变（`confirmed/deleted` 非 1 或 `skipped>0`）告警并重载。只在该 tab 挂载键盘监听。
+- 决策 6（实现）：前端新增 `types/kp.ts`、`api/kp.ts`、`views/kp/{treeUtils,Tree,PendingAlign,usePendingAlign,KnowledgeView}`、`components/kp/KpNodeDialog.vue`；后端只动 `schemas/kp.py`、`services/kp_service.py`、`api/v1/kp.py`、`schemas/kp_align.py` 及测试；不新增依赖/迁移/SCHEMA 变更。
+- 决策 7（测试）：后端新增 12 条（排序 service 6 + API 4 + 摘要 2），全量 **524 passed, 1 warning**；前端新增 26 条（树工具 5、表单 3、树页 5、待确认 6、页面壳 3、redirect 3、登录 1），全量 **82 passed / 19 files**；`npm run build` 退出 0。真实浏览器另验，不以单测代替。
+- 决策 8（真实联调抓修）：Element Plus 在 `dragend` 里先 `draggingNode.node.remove()` 再 emit `node-drop`，真实 Chromium 下 `dragging.parent` 已不可靠；首版按 `dragging.parent.childNodes` 取顺序，跨级移动时会退化到旧树/空列表。改为从 `dropNode`（移动后目标节点）的 `childNodes` 取完整兄弟顺序，并补树页测试。另修 `FilterNodeMethodFunction`/`AllowDragFunction`/`NodeDropType` 的 Element 类型对齐（`FilterValue`/`TreeNodeData`）。
+- 决策 9（已知代价）：搜索仅当前学科前端过滤；无跨学科/全文/服务端搜索；无批量确认、撤销、操作历史、并发编辑冲突提示；根节点锁定只在前端；拖拽失败靠重载恢复；待确认一次一对请求，20 条可接受但不适合上千条；<1024 视口仍受全局 `body min-width:1024px` 影响（遗留 48）。
+- 验证（真实浏览器 1440×900，CDP DOM + 网络/资源计数）：teacher `s214_teacher` 登录落 `/knowledge`，树 108 节点；新增子节点 `S214子节点增量测试` → 改名 `S214子节点已编辑` → 拖到「函数」下（DB `parent_id=117, level=3`）→ 删除；搜索「函数」只显示匹配路径；教师新建/删除 `S214最终检查` 复验。待确认造 20 条真实 `note_kps`（`confidence=0.660, source=ai, confirmed=false`），连续 Enter 20 次：卡片严格 20→0、无旧卡，`/kp/align/confirm` 资源计数 **20**，DB 20 行全部 `manual+confirmed`；另造 1 条按 Backspace：`/kp/align/reject` 计数 1、队列回空。student `s214_student` 登录落 `/notes`，访问 `/knowledge` 显示只读、无新增/编辑/删除、可拖拽节点 0；待确认空态正常。两角色关键流程 console error 0，两 tab `scrollWidth=innerWidth=1418` 无横向溢出。清理 21 条临时笔记+21 条 `note_kps`+2 个临时用户+全部 `S214%` 知识点，临时残留 0；学科 7 知识点仍 108，原有 3 条笔记/1 个用户保留。
+- 已知不足（不粉饰）：本轮截图未做人工像素级目视走查，布局结论来自 DOM 尺寸/文本断言；教师/家长导航仍复用学生视图（历史问题）；没有真机触屏拖拽验证。

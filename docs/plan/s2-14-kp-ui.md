@@ -80,7 +80,7 @@
   - `reorder_children(session, *, parent_id, ordered_ids, moved_id=None) -> None`
   - `PUT /api/v1/kp/order -> 204`
 
-- [ ] **Step 1: 写后端失败测试**
+- [x] **Step 1: 写后端失败测试**
 
 在 `backend/tests/test_kp_service.py` 末尾追加：
 
@@ -246,7 +246,7 @@ def test_reorder_kp_rejects_empty_order(client: TestClient) -> None:
     assert resp.status_code == 422
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd backend
@@ -255,7 +255,7 @@ cd backend
 
 Expected: 新用例失败；`KpOrderIn` 不存在、`PUT /kp/order` 404/405、`reorder_children` 不存在。
 
-- [ ] **Step 3: 增加 schema**
+- [x] **Step 3: 增加 schema**
 
 `backend/app/schemas/kp.py` 末尾追加：
 
@@ -268,7 +268,7 @@ class KpOrderIn(BaseModel):
     moved_id: int | None = Field(default=None, ge=1)
 ```
 
-- [ ] **Step 4: 实现 service**
+- [x] **Step 4: 实现 service**
 
 `backend/app/services/kp_service.py` 在 `delete_kp` 后、`_subtree_height` 前增加：
 
@@ -363,7 +363,7 @@ def reorder_children(
     session.commit()
 ```
 
-- [ ] **Step 5: 增加路由**
+- [x] **Step 5: 增加路由**
 
 `backend/app/api/v1/kp.py`：
 
@@ -390,7 +390,7 @@ def reorder_kp(
     )
 ```
 
-- [ ] **Step 6: 跑后端测试**
+- [x] **Step 6: 跑后端测试**
 
 ```bash
 cd backend
@@ -399,7 +399,7 @@ cd backend
 
 Expected: 全绿；旧 S2-9 用例不回归。
 
-- [ ] **Step 7: 更新 API.md**
+- [x] **Step 7: 更新 API.md**
 
 在 `docs/API.md` §4 的 `DELETE /kp/{kp_id}` 后增加：
 
@@ -414,7 +414,7 @@ Expected: 全绿；旧 S2-9 用例不回归。
 - 说明：`ordered_ids` 必须包含目标父级的全部子节点；跨父级移动时源父级剩余节点会归一化
 ```
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add backend/app/schemas/kp.py backend/app/services/kp_service.py \
@@ -438,7 +438,7 @@ git commit -m "feat(s2-14): 知识点批量排序与移动接口"
   - `PendingAlignOut.note_excerpt: str`（空串默认，最长 301 字符含省略号）
   - `GET /kp/align/pending` 响应新增字段。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/test_align_api.py` 的 import 中加入 `from types import SimpleNamespace`，然后追加：
 
@@ -487,7 +487,7 @@ def test_pending_align_out_keeps_short_excerpt() -> None:
     assert resp.json()["data"]["items"][0]["note_excerpt"] == "函数单调性笔记摘要"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd backend
@@ -496,7 +496,7 @@ cd backend
 
 Expected: 新用例失败；`note_excerpt` 字段不存在。
 
-- [ ] **Step 3: 实现 schema**
+- [x] **Step 3: 实现 schema**
 
 `backend/app/schemas/kp_align.py` 把 import 改为：
 
@@ -521,7 +521,7 @@ from pydantic import AliasPath, BaseModel, ConfigDict, Field, field_validator
         return f"{text[:300]}…"
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 ```bash
 cd backend
@@ -530,7 +530,7 @@ cd backend
 
 Expected: 全绿；既有 pending 分页/权限不回归。
 
-- [ ] **Step 5: 更新 API.md**
+- [x] **Step 5: 更新 API.md**
 
 `docs/API.md` §4 的 `GET /kp/align/pending` 返回示例增加：
 
@@ -552,7 +552,7 @@ Expected: 全绿；既有 pending 分页/权限不回归。
 - `note_excerpt`：笔记正文去首尾空白后前 300 字；超出部分以 `…` 结尾；空正文为空串
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/schemas/kp_align.py backend/tests/test_align_api.py docs/API.md
@@ -578,7 +578,7 @@ git commit -m "feat(s2-14): 待确认对齐返回笔记摘要"
   - `getKpTree`, `createKp`, `updateKp`, `deleteKp`, `reorderKp`, `listPendingAlign`, `confirmAlign`, `rejectAlign`
   - `defaultRedirectForRole(role)`, `safeRedirect(raw, fallback?)`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/utils/redirect.spec.ts` 改为：
 
@@ -655,7 +655,7 @@ it('sends a teacher to knowledge when no redirect is present', async () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd web
@@ -664,7 +664,7 @@ npm run test:run -- src/utils/redirect.spec.ts src/views/LoginView.spec.ts
 
 Expected: `defaultRedirectForRole` 不存在、教师落点仍是 `/notes`。
 
-- [ ] **Step 3: 写类型**
+- [x] **Step 3: 写类型**
 
 `web/src/types/kp.ts` 改为：
 
@@ -748,7 +748,7 @@ export interface AlignBatchResult {
 
 保留 `SubjectOut` 别名，避免现有导入断裂。
 
-- [ ] **Step 4: 写 API 封装**
+- [x] **Step 4: 写 API 封装**
 
 `web/src/api/kp.ts` 改为：
 
@@ -824,7 +824,7 @@ export async function rejectAlign(items: AlignPair[]): Promise<AlignBatchResult>
 }
 ```
 
-- [ ] **Step 5: 改登录落点**
+- [x] **Step 5: 改登录落点**
 
 `web/src/utils/redirect.ts` 改为：
 
@@ -862,7 +862,7 @@ import { defaultRedirectForRole, safeRedirect } from '@/utils/redirect'
     await router.replace(safeRedirect(route.query.redirect, fallback))
 ```
 
-- [ ] **Step 6: 跑前端测试**
+- [x] **Step 6: 跑前端测试**
 
 ```bash
 cd web
@@ -871,7 +871,7 @@ npm run test:run -- src/utils/redirect.spec.ts src/views/LoginView.spec.ts
 
 Expected: 全绿；既有 `safeRedirect` 测试不变。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add web/src/types/kp.ts web/src/api/kp.ts web/src/utils/redirect.ts \
@@ -896,7 +896,7 @@ git commit -m "feat(s2-14): 知识点 API 类型与角色登录落点"
   - `findKpNode(nodes, id)`, `flattenKpNodes(nodes)`, `collectSiblingIds(nodes, parentId)`, `subtreeHeight(node)`, `dropParentId(dropNode, type)`, `canDropNode(dragNode, dropNode, type)`
   - `KpNodeDialog` props `{modelValue, mode, node?, parentId?, parentName?, saving?}`；emit `update:modelValue`、`submit(KpDialogPayload)`
 
-- [ ] **Step 1: 写 treeUtils 失败测试**
+- [x] **Step 1: 写 treeUtils 失败测试**
 
 `web/src/views/kp/treeUtils.spec.ts`：
 
@@ -972,7 +972,7 @@ describe('treeUtils', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd web
@@ -981,7 +981,7 @@ npm run test:run -- src/views/kp/treeUtils.spec.ts
 
 Expected: 模块不存在。
 
-- [ ] **Step 3: 实现 treeUtils**
+- [x] **Step 3: 实现 treeUtils**
 
 `web/src/views/kp/treeUtils.ts`：
 
@@ -1031,7 +1031,7 @@ export function canDropNode(
 }
 ```
 
-- [ ] **Step 4: 写表单失败测试**
+- [x] **Step 4: 写表单失败测试**
 
 `web/src/components/kp/KpNodeDialog.spec.ts`：
 
@@ -1103,7 +1103,7 @@ describe('KpNodeDialog', () => {
 })
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 ```bash
 cd web
@@ -1112,7 +1112,7 @@ npm run test:run -- src/components/kp/KpNodeDialog.spec.ts
 
 Expected: 组件不存在。
 
-- [ ] **Step 6: 实现 KpNodeDialog**
+- [x] **Step 6: 实现 KpNodeDialog**
 
 `web/src/components/kp/KpNodeDialog.vue`：
 
@@ -1264,7 +1264,7 @@ async function submit(): Promise<void> {
 
 注意：`parent_id` 由 `Tree` 在提交时结合 `dialogParent` 覆盖，组件不依赖 `parentName` 推断；保留表单展示即可。
 
-- [ ] **Step 7: 跑测试**
+- [x] **Step 7: 跑测试**
 
 ```bash
 cd web
@@ -1273,7 +1273,7 @@ npm run test:run -- src/views/kp/treeUtils.spec.ts src/components/kp/KpNodeDialo
 
 Expected: 全绿；如 Element Plus 表单校验异步未落，追加 `await flushPromises()`，不要用固定长 sleep。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add web/src/views/kp/treeUtils.ts web/src/views/kp/treeUtils.spec.ts \
@@ -1293,7 +1293,7 @@ git commit -m "feat(s2-14): 知识点树工具与编辑表单"
 - Consumes: Task 3 API、Task 4 `KpNodeDialog`/`treeUtils`、`useAuthStore`、`ElTree`、`ElMessageBox`。
 - Produces: `<Tree :subject="math" />`；内部完成加载、搜索、CRUD、拖拽、错误/空态。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/kp/Tree.spec.ts`：
 
@@ -1450,7 +1450,7 @@ describe('Tree', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd web
@@ -1459,7 +1459,7 @@ npm run test:run -- src/views/kp/Tree.spec.ts
 
 Expected: `Tree.vue` 不存在。
 
-- [ ] **Step 3: 实现 Tree.vue**
+- [x] **Step 3: 实现 Tree.vue**
 
 `web/src/views/kp/Tree.vue`：
 
@@ -1850,7 +1850,7 @@ onMounted(load)
 </style>
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 ```bash
 cd web
@@ -1859,7 +1859,7 @@ npm run test:run -- src/views/kp/Tree.spec.ts
 
 Expected: 全绿；若 `ElTree` 组件名在测试中解析不到，改用 `wrapper.find('.el-tree')` 后触发 `node-drop` 不可行时，用 `wrapper.vm` 暴露 `onNodeDrop` 测试（仅测试辅助，不改变生产逻辑）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/kp/Tree.vue web/src/views/kp/Tree.spec.ts
@@ -1881,7 +1881,7 @@ git commit -m "feat(s2-14): 知识点树 CRUD 与拖拽"
   - `usePendingAlign()` 返回 `{ queue, total, current, loading, busy, error, load, confirmCurrent, rejectCurrent }`
   - `<PendingAlign />` 自动加载、监听 Enter/Backspace、显示摘要与候选知识点。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/kp/PendingAlign.spec.ts`：
 
@@ -1993,7 +1993,7 @@ describe('PendingAlign', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd web
@@ -2002,7 +2002,7 @@ npm run test:run -- src/views/kp/PendingAlign.spec.ts
 
 Expected: 组件不存在。
 
-- [ ] **Step 3: 实现 composable**
+- [x] **Step 3: 实现 composable**
 
 `web/src/views/kp/usePendingAlign.ts`：
 
@@ -2073,7 +2073,7 @@ export function usePendingAlign() {
 }
 ```
 
-- [ ] **Step 4: 实现 PendingAlign.vue**
+- [x] **Step 4: 实现 PendingAlign.vue**
 
 `web/src/views/kp/PendingAlign.vue`：
 
@@ -2284,7 +2284,7 @@ onUnmounted(() => {
 </style>
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 ```bash
 cd web
@@ -2293,7 +2293,7 @@ npm run test:run -- src/views/kp/PendingAlign.spec.ts
 
 Expected: 全绿；20 条连续确认只发 20 次确认请求，结束后显示空态。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add web/src/views/kp/usePendingAlign.ts \
@@ -2314,7 +2314,7 @@ git commit -m "feat(s2-14): 待确认对齐单卡队列与键盘操作"
 - Consumes: `listSubjects`, `Tree`, `PendingAlign`, `PageHeader`、`EmptyState`。
 - Produces: `/knowledge` 页面，两个 tab，学科选择。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/kp/KnowledgeView.spec.ts`：
 
@@ -2387,7 +2387,7 @@ describe('KnowledgeView', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd web
@@ -2396,7 +2396,7 @@ npm run test:run -- src/views/kp/KnowledgeView.spec.ts
 
 Expected: 页面不存在。
 
-- [ ] **Step 3: 实现 KnowledgeView**
+- [x] **Step 3: 实现 KnowledgeView**
 
 `web/src/views/kp/KnowledgeView.vue`：
 
@@ -2531,7 +2531,7 @@ onMounted(loadSubjects)
 </style>
 ```
 
-- [ ] **Step 4: 改路由**
+- [x] **Step 4: 改路由**
 
 `web/src/router/index.ts` 把 knowledge 路由改为：
 
@@ -2544,7 +2544,7 @@ onMounted(loadSubjects)
         },
 ```
 
-- [ ] **Step 5: 跑前端测试与构建**
+- [x] **Step 5: 跑前端测试与构建**
 
 ```bash
 cd web
@@ -2555,7 +2555,7 @@ npm run build
 
 Expected: 页面测试通过；全套 Vitest 全绿；`vue-tsc + vite build` 退出 0。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add web/src/views/kp/KnowledgeView.vue \
@@ -2579,7 +2579,7 @@ git commit -m "feat(s2-14): 知识库页面与路由"
 - Consumes: 前七个任务交付物；真实 PostgreSQL/Redis/前端 dev server。
 - Produces: 可复现的验收证据、D-034、进度记录、清理后的环境。
 
-- [ ] **Step 1: 跑全量自动测试**
+- [x] **Step 1: 跑全量自动测试**
 
 ```bash
 cd backend
@@ -2591,7 +2591,7 @@ npm run build
 
 Expected: 后端全绿（基线 512 + 本任务新增）；前端全绿（基线 56 + 本任务新增）；build 退出 0。
 
-- [ ] **Step 2: 准备临时 teacher/student 与验收数据**
+- [x] **Step 2: 准备临时 teacher/student 与验收数据**
 
 先启动后端/前端（依赖本地 Postgres、Redis；本任务 CRUD 不需要 ARQ Worker）：
 
@@ -2623,7 +2623,7 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
 
 把返回的 `access_token` 记为 `$TEACHER_TOKEN`；学生同理 `$STUDENT_TOKEN`。
 
-- [ ] **Step 3: 真实 CRUD/拖拽/权限联调**
+- [x] **Step 3: 真实 CRUD/拖拽/权限联调**
 
 1. 浏览器 1440×900 打开 `http://127.0.0.1:5173/knowledge`，用 teacher 登录（无 redirect 应落到 `/knowledge`）。
 2. 新增子节点“验收-函数临时”（编码 `S214-TMP-01`）→ 改名“验收-函数临时2” → 改权重 0.3 → 拖到另一父级 → 同级拖拽 → 刷新页面，确认父子关系/顺序保持。
@@ -2641,7 +2641,7 @@ curl -s http://127.0.0.1:8000/api/v1/kp/tree?subject=math \
    - 直接 `curl -X PUT /kp/order` 用 student token 应返回 403。
 6. 检查浏览器 console error 为 0，1440×900 无横向滚动。
 
-- [ ] **Step 4: 准备 20 条临时待确认并验收键盘队列**
+- [x] **Step 4: 准备 20 条临时待确认并验收键盘队列**
 
 在 `backend` 用下面的一次性 Python 脚本为 `s214_student` 创建 20 条测试笔记 + `note_kps` 待确认行；`confidence` 取 0.66，`source='ai'`，`confirmed=false`，`kp_id` 选当前真实存在的 level 3 知识点。标题/正文必须是明显假的“验收临时笔记-XX”，不得写真实学生信息：
 
@@ -2719,7 +2719,7 @@ PY
 3. 重新准备 1 条，按 `Backspace`，确认忽略成功、队列清空。
 4. 检查 `note_kps` 中临时行已按确认/忽略规则处理；记录实际数字。
 
-- [ ] **Step 5: 清理临时数据**
+- [x] **Step 5: 清理临时数据**
 
 用一次性脚本/API 删除临时数据。下面脚本先删 `note_kps`/临时笔记，再删临时用户，最后删验收创建的 `S214-*` 知识点：
 
@@ -2799,7 +2799,7 @@ PY
 
 Expected: `users 0`、`notes 0`、`kps 0`。
 
-- [ ] **Step 6: 更新文档**
+- [x] **Step 6: 更新文档**
 
 `docs/DECISIONS.md` 追加：
 
@@ -2820,7 +2820,7 @@ Expected: `users 0`、`notes 0`、`kps 0`。
 
 `docs/PROGRESS.md` 在 S2-13 后追加 S2-14 小节，写清交付、测试数字、验收命令、已知限制。`docs/AI协作开发实施计划.md` 把 `[ ] S2-14` 改为 `[x] S2-14`。spec 末尾追加“执行记录”。plan 每个任务勾选并追加验证记录。
 
-- [ ] **Step 7: 最终检查与提交**
+- [x] **Step 7: 最终检查与提交**
 
 ```bash
 cd /e/BiShe-AIStudy/study-agent
@@ -2839,3 +2839,10 @@ git commit -m "docs(s2-14): 知识点树管理验收记录"
 ```
 
 不执行 `git push`；由用户推送。
+
+## 执行记录（2026-10-30）
+
+- Task 1–2 后端：`PUT /kp/order` + `note_excerpt` 已实现，新增 12 条测试，pytest 524 passed / 1 warning；API.md 已同步。
+- Task 3–7 前端：类型/API、登录落点、树工具/表单/树页、待确认队列、页面壳与路由已实现；Vitest 82 passed / 19 files，build 退出 0。
+- Task 8 真实验收：teacher/student 临时账号、20 条真实待确认行、跨级拖拽、搜索、CRUD、20 次 Enter + 1 次 Backspace、console error 0、无横向溢出；临时数据已清理。
+- 偏离：Tree 的 node-drop 顺序从 `dropNode` 的 `childNodes` 读取（Element 在 emit 前已移除源节点，`dragging.parent` 不可靠）；KpNodeDialog 测试用 ElDialog stub 绕开 teleport；Element 树回调类型按官方 `FilterValue`/`TreeNodeData` 对齐。

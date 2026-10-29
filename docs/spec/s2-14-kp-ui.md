@@ -345,14 +345,14 @@ KnowledgeView
 
 ## 9. 验收标准
 
-- [ ] `/knowledge` 不再是占位页。
-- [ ] 学生只能读树；教师/管理员能新增、改名、移动、删除。
-- [ ] 拖拽跨级/同级后刷新，顺序和父子关系与操作一致。
-- [ ] 待确认卡片左侧有 300 字摘要，右侧有候选知识点/置信度。
-- [ ] Enter/Backspace 可连续处理；20 条连续确认无卡死、无重复请求。
-- [ ] 教师/管理员无 redirect 登录后进入 `/knowledge`，不出现 `/notes` 403。
-- [ ] `pytest` 全绿、Vitest 全绿、`npm run build` 通过。
-- [ ] API.md/DECISIONS/PROGRESS/实施计划/spec/plan 执行记录同步。
+- [x] `/knowledge` 不再是占位页。
+- [x] 学生只能读树；教师/管理员能新增、改名、移动、删除。
+- [x] 拖拽跨级/同级后刷新，顺序和父子关系与操作一致。
+- [x] 待确认卡片左侧有 300 字摘要，右侧有候选知识点/置信度。
+- [x] Enter/Backspace 可连续处理；20 条连续确认无卡死、无重复请求。
+- [x] 教师/管理员无 redirect 登录后进入 `/knowledge`，不出现 `/notes` 403。
+- [x] `pytest` 全绿、Vitest 全绿、`npm run build` 通过。
+- [x] API.md/DECISIONS/PROGRESS/实施计划/spec/plan 执行记录同步。
 
 ## 10. 已知限制
 
@@ -363,3 +363,12 @@ KnowledgeView
 - 拖拽失败依赖重新加载恢复，不做前端乐观回滚动画。
 - 没有拖拽撤销、操作历史、并发编辑冲突提示。
 - 教师账号目前需手工创建/临时创建，注册页只创建学生（沿用 S2-2）。
+
+## 11. 执行记录（2026-10-30）
+
+- 后端：新增 `KpOrderIn`、`kp_service.reorder_children`、`PUT /api/v1/kp/order`；`PendingAlignOut.note_excerpt` 300 字截断。新增 12 条测试，pytest **524 passed, 1 warning**。
+- 前端：新增知识点树工具/表单/树页/待确认队列/页面壳与路由；教师/管理员默认 `/knowledge`。新增 26 条测试，Vitest **82 passed / 19 files**，build 退出 0。
+- 真实浏览器（1440×900，CDP DOM + 资源计数）：teacher 登录落 `/knowledge`；新增/改名/跨级拖拽/删除/搜索通过，跨级后 DB `parent_id=117, level=3`；20 条真实待确认按 Enter，confirm 资源 20 次、DB 20 行 `manual+confirmed`、队列无旧卡；Backspace 忽略 1 条；student 登录落 `/notes`，`/knowledge` 只读、0 个可拖拽节点、待确认空态；关键流程 console error 0，两 tab `scrollWidth=innerWidth=1418`。
+- 实测偏离：① Element Plus `dragend` 先移除源节点，`dragging.parent` 不可靠，改为从 `dropNode` 的 `childNodes` 取目标兄弟全集（已补测试）；② `KpNodeDialog` 测试因 ElDialog teleport 使用 `ElDialog` stub，产品代码不变；③ Element 树回调参数按 `FilterValue`/`TreeNodeData` 对齐类型。
+- 清理：21 条临时笔记 + 21 条 `note_kps` + 2 个临时用户 + 全部 `S214%` 知识点删除，临时残留 0；学科 7 仍 108 知识点，原有 3 条笔记/1 个用户保留。
+- 已知限制：搜索仅当前学科前端过滤；无批量确认/撤销/历史/冲突提示；根节点锁定仅前端；待确认一次一对；<1024 视口沿用全局横向滚动（遗留 48）；截图未做人工像素级目视，布局结论来自 DOM 断言。

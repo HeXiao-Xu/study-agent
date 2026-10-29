@@ -125,7 +125,7 @@ eval/{datasets,configs,results}
 - 文件上传样例：backend/app/services/file_service.py（`sanitize_filename` 砍路径穿越、`detect_type` + `check_magic` 双校验、流式 sha256、`uq(user_id, sha256)` 去重、并发冲突复用赢家、库失败补偿删对象）
 - 异步任务样例：backend/app/tasks/{registry,runner,queue,worker}.py + backend/app/services/task_service.py（注册表 import 副作用；提交先落库再入队；runner 状态机与指数退避；同步 handler 走 `asyncio.to_thread`；Worker 启动时 `setup_logging`）
 - 文档解析 Worker 样例：backend/app/tasks/parse_document.py（下载到临时文件 → 复用解析门面 → chunk → upsert 文档笔记 → index_chunks；阶段进度 10/50/80/100；失败先 commit 再 raise；Windows 临时文件清理 best-effort）
-- 知识点树样例：backend/app/models/knowledge_point.py + backend/app/services/kp_service.py + backend/app/api/v1/kp.py（一次查询内存组树；level 由父推导；移动校验环/子树高度；删除保护 409；写接口 `require_role("admin", "teacher")`；导入见 `services/kp_import.py` 的纯函数 `plan_sync` + CLI `scripts/import_kp_tree.py`）
+- 知识点树样例：backend/app/models/knowledge_point.py + backend/app/services/kp_service.py + backend/app/api/v1/kp.py（一次查询内存组树；level 由父推导；移动校验环/子树高度；删除保护 409；`PUT /kp/order` 单事务完成改父+源/目标兄弟归一；待确认摘要见 `schemas/kp_align.py`；写接口 `require_role("admin", "teacher")`；导入见 `services/kp_import.py` 的纯函数 `plan_sync` + CLI `scripts/import_kp_tree.py`）
 - ai 适配器样例：backend/app/ai/parse/pdf_docling.py（可替换适配器，duck-typing 便于 mock；契约见同目录 base.py，统一出入参 models.py，门面 __init__.py 集中降级决策）
 - 知识点对齐样例：backend/app/ai/align/{scoring,extractor}.py + backend/app/services/kp_align_service.py + backend/app/tasks/kp_align.py（纯函数打分/分类；LLM 候选内抽取 + 严格 JSON + 2 次重试；向量补全一次批量；重跑保留 manual；待确认列表 `paginate_query` + `AliasPath` 展平；批量确认/忽略按 owner 过滤并计 skipped）
 - ai Embedding 适配器样例：backend/app/ai/embedding/openai_compat.py（同一抽象 base.py；门面 __init__.py 按配置切换厂商；本地实现 local.py 仅占位）
