@@ -5,7 +5,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 
 import { login, register } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
-import { safeRedirect } from '@/utils/redirect'
+import { defaultRedirectForRole, safeRedirect } from '@/utils/redirect'
 
 type Mode = 'login' | 'register'
 
@@ -71,7 +71,8 @@ async function onSubmit(): Promise<void> {
     })
     auth.setSession(session.access_token, session.user)
     ElMessage.success('欢迎回来')
-    await router.replace(safeRedirect(route.query.redirect))
+    const fallback = defaultRedirectForRole(session.user.role)
+    await router.replace(safeRedirect(route.query.redirect, fallback))
   } catch {
     if (mode.value === 'register') mode.value = 'login'
   } finally {

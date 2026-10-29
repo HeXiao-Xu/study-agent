@@ -36,6 +36,7 @@ async function mountLogin(path = '/login') {
     routes: [
       { path: '/login', component: LoginView },
       { path: '/notes', component: { template: '<div>notes</div>' } },
+      { path: '/knowledge', component: { template: '<div>knowledge</div>' } },
     ],
   })
   await router.push(path)
@@ -86,4 +87,26 @@ describe('LoginView', () => {
     expect(auth.token).toBe('token-1')
     expect(router.currentRoute.value.path).toBe('/notes')
   })
+})
+
+const teacherSession: TokenOut = {
+  ...session,
+  user: {
+    ...session.user,
+    id: 2,
+    username: 'teacher_kp',
+    nickname: '测试教师',
+    role: 'teacher',
+  },
+}
+
+it('sends a teacher to knowledge when no redirect is present', async () => {
+  vi.mocked(login).mockResolvedValue(teacherSession)
+  const { wrapper, router } = await mountLogin('/login')
+  await wrapper.find('input[name="username"]').setValue('teacher_kp')
+  await wrapper.find('input[name="password"]').setValue('Password123!')
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  await flushPromises()
+  expect(router.currentRoute.value.path).toBe('/knowledge')
 })
