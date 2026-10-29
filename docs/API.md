@@ -262,12 +262,14 @@
 - 出参：`Envelope[PageData[PendingAlignOut]]`：
 
   ```json
-  {"items": [{"note_id": 3, "note_title": "函数单调性笔记", "kp_id": 12,
-              "kp_name": "函数的单调性", "kp_code": "MATH-FUNC-02", "confidence": 0.68}],
+  {"items": [{"note_id": 3, "note_title": "函数单调性笔记",
+              "note_excerpt": "函数单调性：设函数 f(x) 在区间 D 上……",
+              "kp_id": 12, "kp_name": "函数的单调性", "kp_code": "MATH-FUNC-02",
+              "confidence": 0.68}],
    "total": 1, "page": 1, "page_size": 20}
   ```
 
-- 备注：只列 `source='ai' AND confirmed=false` 且 `confidence` 在 `[0.55, 0.75)` 的行；笔记已软删不返回；固定排序 `note_id DESC, kp_id`
+- 备注：只列 `source='ai' AND confirmed=false` 且 `confidence` 在 `[0.55, 0.75)` 的行；笔记已软删不返回；固定排序 `note_id DESC, kp_id`；`note_excerpt` 为正文去首尾空白后前 300 字，超出以 `…` 结尾，空正文为空串
 - 错误：`422/42200` 分页/筛选参数非法
 
 ### POST /api/v1/kp/align/confirm

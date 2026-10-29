@@ -1,6 +1,7 @@
 """S2-10 对齐接口：TestClient + FakeSession/依赖覆盖。"""
 from __future__ import annotations
 
+from types import SimpleNamespace
 from collections.abc import Iterator
 from datetime import datetime, timezone
 
@@ -137,6 +138,7 @@ def test_pending_list_returns_page(client: TestClient, monkeypatch: pytest.Monke
                     kp_id=12,
                     confidence=0.68,
                     note_title="函数单调性笔记",
+                    note_excerpt="函数单调性笔记摘要",
                     kp_name="函数的单调性",
                     kp_code="MATH-FUNC-02",
                 )
@@ -149,6 +151,7 @@ def test_pending_list_returns_page(client: TestClient, monkeypatch: pytest.Monke
     resp = client.get("/api/v1/kp/align/pending", headers=_headers(user))
     assert resp.status_code == 200
     assert resp.json()["data"]["items"][0]["kp_code"] == "MATH-FUNC-02"
+    assert resp.json()["data"]["items"][0]["note_excerpt"] == "函数单调性笔记摘要"
 
 
 def test_pending_list_filters_note_id(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -207,3 +210,34 @@ def test_confirm_empty_items_returns_422(client: TestClient) -> None:
         "/api/v1/kp/align/confirm", json={"items": []}, headers=_headers(user)
     )
     assert resp.status_code == 422
+
+def test_pending_align_out_truncates_note_excerpt() -> None:
+    row = SimpleNamespace(
+        note_id=3,
+        kp_id=12,
+        confidence=0.68,
+        note=SimpleNamespace(
+            title="函数单调性笔记",
+            content_text="  " + "知" * 350 + "  ",
+        ),
+        knowledge_point=SimpleNamespace(name="函数的单调性", code="MATH-FUNC-02"),
+    )
+
+    out = PendingAlignOut.model_validate(row)
+
+    assert out.note_excerpt == "知" * 300 + "…"
+    assert len(out.note_excerpt) == 301
+
+
+def test_pending_align_out_keeps_short_excerpt() -> None:
+    row = SimpleNamespace(
+        note_id=3,
+        kp_id=12,
+        confidence=0.68,
+        note=SimpleNamespace(title="短笔记", content_text="  函数图像  "),
+        knowledge_point=SimpleNamespace(name="函数", code="MATH-FUNC"),
+    )
+
+    out = PendingAlignOut.model_validate(row)
+
+    assert out.note_excerpt == "函数图像"
