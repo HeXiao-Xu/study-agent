@@ -372,3 +372,5 @@ KnowledgeView
 - 实测偏离：① Element Plus `dragend` 先移除源节点，`dragging.parent` 不可靠，改为从 `dropNode` 的 `childNodes` 取目标兄弟全集（已补测试）；② `KpNodeDialog` 测试因 ElDialog teleport 使用 `ElDialog` stub，产品代码不变；③ Element 树回调参数按 `FilterValue`/`TreeNodeData` 对齐类型。
 - 清理：21 条临时笔记 + 21 条 `note_kps` + 2 个临时用户 + 全部 `S214%` 知识点删除，临时残留 0；学科 7 仍 108 知识点，原有 3 条笔记/1 个用户保留。
 - 已知限制：搜索仅当前学科前端过滤；无批量确认/撤销/历史/冲突提示；根节点锁定仅前端；待确认一次一对；<1024 视口沿用全局横向滚动（遗留 48）；截图未做人工像素级目视，布局结论来自 DOM 断言。
+
+- 后续补丁（2026-10-30）：教师/管理员点「笔记」「文件」显示「暂不支持查看」占位（`StudentOnlyView`），不跳 403；学生页面不变，前端全量 85 passed / 20 files。

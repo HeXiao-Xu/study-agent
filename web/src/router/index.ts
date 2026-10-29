@@ -24,8 +24,8 @@ const router = createRouter({
         {
           path: 'notes',
           name: 'notes',
-          component: () => import('@/views/notes/NoteListView.vue'),
-          meta: { title: '笔记', nav: 'notes', roles: ['student'] },
+          component: () => import('@/views/notes/NotesEntryView.vue'),
+          meta: { title: '笔记', nav: 'notes' },
         },
         {
           path: 'notes/new',
@@ -42,8 +42,8 @@ const router = createRouter({
         {
           path: 'files',
           name: 'files',
-          component: () => import('@/views/files/FileListView.vue'),
-          meta: { title: '文件', nav: 'files', roles: ['student'] },
+          component: () => import('@/views/files/FilesEntryView.vue'),
+          meta: { title: '文件', nav: 'files' },
         },
         {
           path: 'knowledge',
