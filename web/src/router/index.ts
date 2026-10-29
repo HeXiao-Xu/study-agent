@@ -48,12 +48,8 @@ const router = createRouter({
         {
           path: 'knowledge',
           name: 'knowledge',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '知识库',
-            task: 'S2-14',
-            description: '浏览知识点树，处理待确认的笔记对齐。',
-          },
+          component: () => import('@/views/kp/KnowledgeView.vue'),
+          meta: { title: '知识库', nav: 'knowledge' },
         },
         {
           path: 'qa',
