@@ -16,8 +16,11 @@ from app.core.security import create_access_token
 from app.core.storage import get_storage
 from app.main import app
 from app.models.file import File
+from app.models.note_chunk import NoteChunk
 from app.models.user import User
 from app.models.user_relation import UserRelation
+from app.schemas.common import PageData
+from app.schemas.files import FileSummaryOut
 from app.services import file_service
 from app.tasks.parse_document import TASK_PARSE_DOCUMENT
 from app.tasks.queue import get_task_queue
@@ -37,10 +40,13 @@ class FakeSession:
         user: User | None = None,
         record: File | None = None,
         relation: int | None = None,
+        chunks: list[NoteChunk] | None = None,
     ) -> None:
         self.user = user
         self.record = record
         self.relation = relation
+        self.chunks = chunks or []
+        self.last_statement: object | None = None
         self.added: list[object] = []
         self.commits = 0
 
@@ -51,6 +57,10 @@ class FakeSession:
         if entity is UserRelation:
             return self.relation
         return self.record
+
+    def scalars(self, statement: object):
+        self.last_statement = statement
+        return iter(self.chunks)
 
     def get(self, entity: type, pk: int):
         return self.record if entity is File else None
@@ -127,6 +137,18 @@ def _record(*, owner_id: int = 1, status: str = "pending") -> File:
     record.id = 11
     record.created_at = datetime.now(timezone.utc)
     return record
+
+
+def _chunk(index: int, *, owner_id: int = 1, source_file_id: int = 11) -> NoteChunk:
+    return NoteChunk(
+        note_id=1,
+        user_id=owner_id,
+        chunk_index=index,
+        content=f"第 {index} 块",
+        token_count=10,
+        embedding=[0.0] * 1024,
+        source_file_id=source_file_id,
+    )
 
 
 def _headers(user: User) -> dict[str, str]:
@@ -239,6 +261,7 @@ def test_parse_status_returns_pending(client: TestClient) -> None:
         "parse_status": "pending",
         "parse_progress": 0,
         "error_msg": None,
+        "chunk_count": 0,
     }
 
 
@@ -256,6 +279,87 @@ def test_parse_status_other_user_returns_403(client: TestClient) -> None:
     resp = client.get("/api/v1/files/11/parse-status", headers=_headers(user))
     assert resp.status_code == 403
     assert resp.json()["code"] == 40300
+
+
+def test_parse_status_includes_chunk_count(client: TestClient) -> None:
+    user = _user()
+    record = _record(status="done")
+    record.parse_result_json = {"chunks": 4}
+    _wire(FakeSession(user=user, record=record))
+    resp = client.get("/api/v1/files/11/parse-status", headers=_headers(user))
+    assert resp.status_code == 200
+    assert resp.json()["data"]["chunk_count"] == 4
+
+
+def test_list_files_returns_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    record = _record(status="done")
+    record.parse_result_json = {"chunks": 4}
+    session = FakeSession(user=user, record=record)
+    _wire(session)
+
+    def fake_paginate(session_, stmt, params, *, item_model):
+        sql = str(stmt)
+        assert "files.user_id" in sql
+        assert "ORDER BY files.created_at DESC" in sql
+        return PageData(
+            items=[item_model.model_validate(record)],
+            total=1,
+            page=params.page,
+            page_size=params.page_size,
+        )
+
+    monkeypatch.setattr(file_service, "paginate_query", fake_paginate)
+    resp = client.get("/api/v1/files", headers=_headers(user))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert set(data) == {"items", "total", "page", "page_size"}
+    assert data["items"][0]["filename"] == "试卷.pdf"
+    assert data["items"][0]["chunk_count"] == 4
+
+
+def test_list_files_requires_token(client: TestClient) -> None:
+    _wire(FakeSession())
+    resp = client.get("/api/v1/files")
+    assert resp.status_code == 401
+    assert resp.json()["code"] == 40100
+
+
+def test_chunks_returns_ordered_preview(client: TestClient) -> None:
+    user = _user()
+    session = FakeSession(
+        user=user,
+        record=_record(status="done"),
+        chunks=[_chunk(0), _chunk(1)],
+    )
+    _wire(session)
+    resp = client.get("/api/v1/files/11/chunks?limit=2", headers=_headers(user))
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert [item["chunk_index"] for item in data] == [0, 1]
+    assert data[0]["content"] == "第 0 块"
+    sql = str(session.last_statement)
+    assert "ORDER BY note_chunks.chunk_index" in sql
+    assert "LIMIT" in sql.upper()
+
+
+def test_chunks_other_user_returns_403(client: TestClient) -> None:
+    user = _user(2, username="student_b")
+    _wire(FakeSession(user=user, record=_record(owner_id=1), relation=None))
+    resp = client.get("/api/v1/files/11/chunks", headers=_headers(user))
+    assert resp.status_code == 403
+    assert resp.json()["code"] == 40300
+
+
+def test_chunks_missing_returns_404(client: TestClient) -> None:
+    user = _user()
+    _wire(FakeSession(user=user, record=None))
+    resp = client.get("/api/v1/files/99/chunks", headers=_headers(user))
+    assert resp.status_code == 404
+    assert resp.json()["code"] == 40400
+
 
 def test_upload_enqueues_parse_task(client: TestClient) -> None:
     user = _user()

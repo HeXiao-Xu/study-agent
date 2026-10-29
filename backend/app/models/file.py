@@ -67,3 +67,11 @@ class File(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    @property
+    def chunk_count(self) -> int:
+        """解析结果里的切片数；未完成或脏数据一律按 0 处理。"""
+        raw = (self.parse_result_json or {}).get("chunks")
+        if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
+            return raw
+        return 0

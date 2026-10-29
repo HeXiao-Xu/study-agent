@@ -137,6 +137,16 @@
   - `403/40300`：非 student
   - `500/50000`：「文件存储不可用」（MinIO 异常，不泄露 endpoint）
 
+### GET /api/v1/files
+- 权限：登录用户，仅本人文件
+- 类型：同步（分页）
+- 入参：`page`（默认 1）、`page_size`（默认 20，1–100）
+- 排序：固定 `created_at DESC, id DESC`
+- 出参：`Envelope[PageData[FileSummaryOut]]`
+- FileSummaryOut：`id` / `filename` / `mime` / `size` / `parse_status` /
+  `parse_progress` / `error_msg` / `chunk_count` / `created_at` / `parse_finished_at`
+- 备注：`chunk_count` 从 `parse_result_json.chunks` 派生；未完成或无结果时为 0
+
 ### GET /api/v1/files/{file_id}/image
 - 权限：本人，或已绑定该学生的 parent/teacher（admin 不绕过）
 - 类型：同步，返回二进制
@@ -149,11 +159,21 @@
 ### GET /api/v1/files/{file_id}/parse-status
 - 权限：本人或已绑定该学生的 parent/teacher（admin 不绕过）
 - 类型：同步
-- 出参：`Envelope[FileStatusOut]`：`id` / `filename` / `parse_status` / `parse_progress` / `error_msg`
+- 出参：`Envelope[FileStatusOut]`：`id` / `filename` / `parse_status` / `parse_progress` / `error_msg` / `chunk_count`
 - 状态机（S2-8 定稿）：`pending` → `parsing` → `done` / `failed`
 - `parse_progress`：阶段值 `0`（未开始）/`10`（已开始）/`50`（解析完成）/`80`（切片完成）/`100`（入库完成）
 - `error_msg`：仅 `failed` 非空，格式 `异常类型: 原因`，≤500 字
-- 轮询建议：每 1–2s 一次，直到 `done`/`failed`；不做 SSE/WebSocket
+- `chunk_count`：解析结果中的切片数；未完成或脏数据为 0
+- 轮询建议：前端每 3s 一次，直到 `done`/`failed`；单次上传最多轮询 5 分钟，不做 SSE/WebSocket
+- 错误：`404/40400`「文件不存在」；`403/40300`「无权访问该资源」
+
+### GET /api/v1/files/{file_id}/chunks
+- 权限：本人，或已绑定该学生的 parent/teacher（admin 不绕过）
+- 类型：同步
+- 入参：`limit`（默认 3，1–20）
+- 出参：`Envelope[ChunkPreviewOut[]]`，按 `chunk_index` 升序
+- ChunkPreviewOut：`chunk_index` / `content` / `token_count`
+- 备注：S2-13 只用于列表页预览前 3 条；未解析完成返回空数组
 - 错误：`404/40400`「文件不存在」；`403/40300`「无权访问该资源」
 
 ## 3.5 异步任务（S2-7 定稿）
@@ -392,7 +412,7 @@
 |---|---|---|
 | 认证 | 登出 / refresh / token 吊销策略 | 后续（S2-2 已交付注册/登录/me；无状态 JWT 暂无吊销） |
 | 笔记 | 笔记本（folder）管理、回收站恢复、按学生列笔记（家长视角） | 后续（S2-5 已交付建/列表/详情/更新/软删） |
-| 文件 | 文件列表 / 下载 / 删除、签名 URL 接口（S2-12 笔记插图用） | 后续（S2-6 已交付上传/去重/解析状态；`presigned_get_url` 只在存储层） |
+| 文件 | 下载 / 删除、签名 URL 接口 | 后续（S2-13 已交付列表/解析状态/切片预览） |
 | 异步任务 | 任务列表 / 取消 / 重跑、running 心跳回收、SSE 状态推送 | 后续（S2-7 已交付提交/轮询/重试；S3-5 定流式） |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
 | 错题 | 列表 / 统计看板 | S4-2 / S4-8 |

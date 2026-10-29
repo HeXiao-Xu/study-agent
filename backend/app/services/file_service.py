@@ -25,7 +25,11 @@ from app.core.exceptions import (
 from app.core.permissions import ensure_student_access
 from app.core.storage import ObjectStorage
 from app.models.file import File
+from app.models.note_chunk import NoteChunk
 from app.models.user import User
+from app.schemas.common import PageData
+from app.schemas.files import FileSummaryOut
+from app.utils.pagination import PageParams, paginate_query
 
 MAX_FILENAME_LENGTH = 200
 _CHUNK_SIZE = 1024 * 1024
@@ -191,3 +195,32 @@ def read_image(session: Session, *, file_id: int, viewer: User) -> File:
     if not record.mime.startswith("image/"):
         raise InvalidParamError("不是图片文件")
     return record
+
+
+def list_files(
+    session: Session, *, owner: User, params: PageParams
+) -> PageData[FileSummaryOut]:
+    """只列本人文件；固定创建时间倒序，避免深分页顺序漂移。"""
+    stmt = (
+        select(File)
+        .where(File.user_id == owner.id)
+        .order_by(File.created_at.desc(), File.id.desc())
+    )
+    return paginate_query(session, stmt, params, item_model=FileSummaryOut)
+
+
+def list_chunks(
+    session: Session, *, file_id: int, viewer: User, limit: int
+) -> list[NoteChunk]:
+    """切片预览复用文件权限；只查该文件产出的切片。"""
+    record = get_file_status(session, file_id=file_id, viewer=viewer)
+    stmt = (
+        select(NoteChunk)
+        .where(
+            NoteChunk.source_file_id == record.id,
+            NoteChunk.user_id == record.user_id,
+        )
+        .order_by(NoteChunk.chunk_index.asc())
+        .limit(limit)
+    )
+    return list(session.scalars(stmt))

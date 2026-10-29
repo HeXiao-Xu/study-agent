@@ -14,11 +14,18 @@ from app.core.permissions import require_role
 from app.core.storage import ObjectStorage, get_storage
 from app.models.enums import ParseStatus
 from app.models.user import User
-from app.schemas.common import Envelope
-from app.schemas.files import FileOut, FileStatusOut, FileUploadOut
+from app.schemas.common import Envelope, PageData
+from app.schemas.files import (
+    ChunkPreviewOut,
+    FileOut,
+    FileStatusOut,
+    FileSummaryOut,
+    FileUploadOut,
+)
 from app.services import file_service, task_service
 from app.tasks.parse_document import TASK_PARSE_DOCUMENT
 from app.tasks.queue import TaskQueue, get_task_queue
+from app.utils.pagination import PageParams, page_params
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -63,6 +70,20 @@ def upload_file(
 
 
 @router.get(
+    "",
+    response_model=Envelope[PageData[FileSummaryOut]],
+    summary="文件列表（仅本人）",
+)
+def list_files(
+    params: PageParams = Depends(page_params),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[PageData[FileSummaryOut]]:
+    page = file_service.list_files(session, owner=current_user, params=params)
+    return Envelope(trace_id=get_trace_id(), data=page)
+
+
+@router.get(
     "/{file_id}/parse-status",
     response_model=Envelope[FileStatusOut],
     summary="查询解析状态",
@@ -74,6 +95,26 @@ def get_parse_status(
 ) -> Envelope[FileStatusOut]:
     record = file_service.get_file_status(session, file_id=file_id, viewer=current_user)
     return Envelope(trace_id=get_trace_id(), data=FileStatusOut.model_validate(record))
+
+
+@router.get(
+    "/{file_id}/chunks",
+    response_model=Envelope[list[ChunkPreviewOut]],
+    summary="切片预览",
+)
+def list_file_chunks(
+    file_id: int,
+    limit: int = Query(3, ge=1, le=20, description="返回切片条数"),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[list[ChunkPreviewOut]]:
+    chunks = file_service.list_chunks(
+        session, file_id=file_id, viewer=current_user, limit=limit
+    )
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=[ChunkPreviewOut.model_validate(chunk) for chunk in chunks],
+    )
 
 
 @router.get(
