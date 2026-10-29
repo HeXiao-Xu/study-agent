@@ -63,7 +63,7 @@ function onCommand(command: string | number | object): void {
   align-items: center;
   justify-content: space-between;
   height: var(--app-topbar-height);
-  padding: 0 32px;
+  padding: 0 24px;
   background: rgba(247, 248, 250, 0.88);
   border-bottom: 1px solid var(--app-border);
   backdrop-filter: blur(8px);

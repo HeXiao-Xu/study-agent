@@ -46,9 +46,9 @@ const { roleLabel, user } = storeToRefs(auth)
 }
 
 .app-content {
-  max-width: var(--app-content-max);
-  padding: 32px;
-  margin: 0 auto;
+  width: 100%;
+  padding: 24px;
+  margin: 0;
 }
 
 .user-card {
