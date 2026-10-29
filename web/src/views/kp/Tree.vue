@@ -173,7 +173,8 @@ async function removeNode(node: KpNode): Promise<void> {
 
 interface DragNode {
   data: TreeNodeData
-  parent?: { childNodes?: DragNode[] } | null
+  parent?: DragNode | null
+  childNodes?: DragNode[]
 }
 
 function allowDrag(node: DragNode): boolean {
@@ -199,8 +200,9 @@ async function onNodeDrop(
   busy.value = true
   try {
     const parentId = dropParentId(dropNode.data as KpNode, type)
+    const targetParent = type === 'inner' ? dropNode : dropNode.parent
     const orderedIds =
-      dragging.parent?.childNodes?.map((node) => (node.data as KpNode).id) ??
+      targetParent?.childNodes?.map((node) => (node.data as KpNode).id) ??
       collectSiblingIds(tree.value?.nodes ?? [], parentId)
     await reorderKp({
       parent_id: parentId,

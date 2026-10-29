@@ -124,7 +124,13 @@ describe('Tree', () => {
           ],
         },
       },
-      { data: treeData.nodes[0] },
+      {
+        data: treeData.nodes[0],
+        childNodes: [
+          { data: treeData.nodes[0].children[0] },
+          { data: { ...root, id: 3, name: '新节点', code: 'MATH-NEW' } },
+        ],
+      },
       'inner',
       new Event('drop'),
     )
