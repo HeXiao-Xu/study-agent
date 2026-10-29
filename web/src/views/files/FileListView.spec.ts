@@ -1,9 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import FileListView from './FileListView.vue'
-import { listFileChunks, listFiles } from '@/api/files'
+import { getFileStatus, listFileChunks, listFiles } from '@/api/files'
 
 vi.mock('@/api/files', () => ({
   listFiles: vi.fn(),
@@ -30,7 +30,6 @@ function mountPage() {
       plugins: [ElementPlus],
       stubs: {
         FileUploader: true,
-        teleport: true,
       },
     },
   })
@@ -40,6 +39,11 @@ describe('FileListView', () => {
   beforeEach(() => {
     vi.mocked(listFiles).mockReset()
     vi.mocked(listFileChunks).mockReset()
+    vi.mocked(getFileStatus).mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders files with size, status and chunk count', async () => {
@@ -90,6 +94,32 @@ describe('FileListView', () => {
     expect(listFiles).toHaveBeenLastCalledWith({ page: 2, page_size: 10 })
   })
 
+  it('polls historical active files until they finish', async () => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    })
+    vi.mocked(listFiles).mockResolvedValue({
+      items: [{ ...row, parse_status: 'parsing', parse_progress: 50, chunk_count: 0 }],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    })
+    vi.mocked(getFileStatus).mockResolvedValue({
+      ...row,
+      parse_status: 'done',
+      parse_progress: 100,
+      chunk_count: 3,
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.text()).toContain('解析中 50%')
+    vi.advanceTimersByTime(3_000)
+    await flushPromises()
+    expect(getFileStatus).toHaveBeenCalledWith(11)
+    expect(wrapper.text()).toContain('已完成')
+    wrapper.unmount()
+  })
+
   it('opens the chunk drawer with the first three chunks', async () => {
     vi.mocked(listFiles).mockResolvedValue({
       items: [row],
@@ -105,6 +135,7 @@ describe('FileListView', () => {
     const wrapper = mountPage()
     await flushPromises()
     await wrapper.find('[data-testid="preview-chunks"]').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 80))
     await flushPromises()
     expect(listFileChunks).toHaveBeenCalledWith(11, 3)
     expect(wrapper.text()).toContain('第一块')

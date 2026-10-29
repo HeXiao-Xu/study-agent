@@ -4,6 +4,7 @@ export const ACCEPTED_EXTENSIONS = ['pdf', 'docx', 'md', 'txt'] as const
 export const ACCEPT_ATTR = '.pdf,.docx,.md,.txt'
 export const POLL_INTERVAL_MS = 3_000
 export const POLL_TIMEOUT_MS = 5 * 60 * 1_000
+export const PAGE_SIZES = [10, 20, 50]
 
 export const STATUS_LABELS: Record<ParseStatus, string> = {
   pending: '待解析',

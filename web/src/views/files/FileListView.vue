@@ -7,6 +7,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import FileUploader from '@/components/files/FileUploader.vue'
 import type { ChunkPreview, FileSummary, ParseStatus } from '@/types/files'
 import {
+  PAGE_SIZES,
   POLL_INTERVAL_MS,
   POLL_TIMEOUT_MS,
   STATUS_LABELS,
@@ -98,6 +99,12 @@ async function load(): Promise<void> {
 
 async function onPageChange(next: number): Promise<void> {
   page.value = next
+  await load()
+}
+
+async function onSizeChange(size: number): Promise<void> {
+  pageSize.value = size
+  page.value = 1
   await load()
 }
 
@@ -240,11 +247,13 @@ onUnmounted(stopRowPolling)
     <div v-if="total > 0" class="pager">
       <el-pagination
         background
-        layout="total, prev, pager, next"
+        layout="total, sizes, prev, pager, next"
         :current-page="page"
         :page-size="pageSize"
+        :page-sizes="PAGE_SIZES"
         :total="total"
         @current-change="onPageChange"
+        @size-change="onSizeChange"
       />
     </div>
 
