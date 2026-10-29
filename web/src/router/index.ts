@@ -42,12 +42,8 @@ const router = createRouter({
         {
           path: 'files',
           name: 'files',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '文件',
-            task: 'S2-13',
-            description: '上传 PDF / Word / 图片，解析成可检索的笔记与切片。',
-          },
+          component: () => import('@/views/files/FileListView.vue'),
+          meta: { title: '文件', nav: 'files', roles: ['student'] },
         },
         {
           path: 'knowledge',
