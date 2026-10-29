@@ -253,7 +253,20 @@ Chrome/CDP，1440×900，真实 Postgres/Redis/MinIO/ARQ：
 
 ## 10. 执行记录
 
-（实施后回填：commit、测试数、浏览器实测、偏差。）
+- 提交：`00f762a feat(s2-13): 文件列表与切片预览接口` → `2e5e8e3 feat(s2-13): 文件 API 与格式化常量` → `6c34aab feat(s2-13): 文件上传队列与解析轮询` → `ea6d7b9 feat(s2-13): 文件拖拽上传组件` → `76d7b2c feat(s2-13): 文件列表与切片预览页` → `1e4d1aa fix(s2-13): 恢复每页条数并覆盖列表历史轮询`
+- 自动测试：pytest **512 passed, 1 warning**（基线 506 + 6 条列表/块数/切片契约）；Vitest **56 passed / 14 files**（新增 17：常量 4、队列 5、上传组件 2、列表 6）；`npm run build` 通过。
+- 真实联调（2026-10-29，Chrome 155 + CDP，1440×900；真实 Postgres/Redis/MinIO/ARQ Worker；`PARSE_FORCE_PYMUPDF=true`）：
+  - 注册一次性学生 `s213_e2e_88038676`，进入 `/files`；选择 6 页 ASCII 试卷 PDF（7,958 bytes）。
+  - 上传队列出现真实进度，随后 `完成 · 7 块`；`GET /files` 返回 `id=11, parse_status=done, parse_progress=100, chunk_count=7`，`parse_finished_at` 比 `created_at` 晚约 5.3s。
+  - 刷新页面后文件仍在，状态/块数不变；抽屉显示 `#1/#2/#3`，对应 9/79/78 tokens。
+  - 选 `.png` 后前端提示“仅支持 PDF / Word / Markdown / TXT”，未发上传请求；console error 0、exception 0；1440 视口 `scrollWidth=innerWidth=1440`。
+- 偏差/实测抓修：
+  1. 列表测试最初给 `teleport` 打 stub，Element Plus `ElSelect` 递归更新报 9–12 个 unhandled errors；去掉 stub、等待抽屉渲染后消失，分页恢复为与笔记页一致的 10/20/50。
+  2. 首次 E2E 脚本按 `s213-acceptance.pdf` 断言，实际文件名 `tmp-s213-paper.pdf`，重跑新账号完成；产品无问题。
+  3. 824px 视口出现横向滚动，定位为全局 `base.css` 的 `body min-width:1024px`（既有设计），1440px 正常；记为遗留 48，不在本卡改全局布局。
+  4. 本次英文 PDF 触发 S2-10 `kp.align` 失败：`evidence` 超过 200 字 Pydantic 校验失败（`async_tasks` status=failed）；文件解析/切片不受影响。该问题属 S2-10，已记入 PROGRESS 遗留 47，未在本卡擅自修改。
+- 清理：验收账号 id 20/21、2 个文件、2 篇文档笔记、14 条切片、4 条异步任务、2 个 MinIO 对象全部删除，计数回 0；临时 PDF/PNG/截图/CDP 脚本/Chrome profile 删除。
+- 文档同步：API.md §3/§12、DECISIONS D-033、PROGRESS（含遗留 42–48）、实施计划 S2-13 勾选；SCHEMA 无变更（`chunk_count` 为只读派生属性）。
 
 ## 11. 已知限制
 
@@ -264,3 +277,5 @@ Chrome/CDP，1440×900，真实 Postgres/Redis/MinIO/ARQ：
 - 轮询最多 5 分钟；超时后需手动刷新，后台解析可能仍在继续。
 - 串行上传，多文件时后面的文件要等待。
 - 文件列表无搜索/状态筛选，只按上传时间倒序和分页。
+- 页面沿用全局 `body min-width:1024px`；小于 1024 的窗口会整页横向滚动（1440 正常），不在本卡改全局布局。
+- 本次英文 PDF 验收发现 S2-10 `kp.align` 的 `evidence` 超 200 字会校验失败（文件解析不受影响）；已在 PROGRESS 遗留 47 记录，未在本卡越界修复。

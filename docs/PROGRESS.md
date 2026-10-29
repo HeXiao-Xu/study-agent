@@ -6,8 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）——阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S2-12 前端笔记列表与编辑器（表格列表 + 关键词/学科/排序/分页 + 删除；`md-editor-v3` + KaTeX 编辑页；图片 `parse=false` 上传 + Bearer blob 鉴权取图 + `note-file://<id>` 稳定 token；本地草稿与离开/刷新确认；Vitest 39/39、pytest 506/506；真实 Chrome 1440×900 验证含公式/图片笔记保存后刷新仍渲染、草稿恢复、列表筛选分页删除）
-- 下一步：S2-13 前端上传与解析状态
+- 最近完成：S2-13 前端文件上传与解析状态（文档拖拽/点选、串行队列、真实进度、3s 轮询/5min 超时、失败重传、持久列表、分页、切片前 3 条抽屉；pytest 512/512、Vitest 56/56；真实 Chrome 1440×900 + ARQ Worker 验证上传 → 解析 → 完成 7 块 → 刷新持久化 → 抽屉前 3 条）
+- 下一步：S2-14 前端知识点树管理
 - 已知阻塞：无
 
 ## 任务清单
@@ -43,7 +43,7 @@
 - [x] S2-10 知识点对齐与待确认队列
 - [x] S2-11 前端登录/布局/路由守卫
 - [x] S2-12 前端笔记列表与编辑器
-- [ ] S2-13 前端上传与解析状态
+- [x] S2-13 前端上传与解析状态
 - [ ] S2-14 前端知识点树管理
 
 ### 阶段 3：RAG 问答上线（M2）
@@ -137,8 +137,25 @@
 | 39 | 图片以 `note-file://<id>` 存在 Markdown 正文，脱离本应用导出会破图；取图一次读入内存、无压缩/缩略图、删笔记不删图（S2-12） | 导出不通用；大图多图有内存压力；孤儿文件占存储 | 导出前做 token→公开 URL 转换；文件管理卡补压缩/删除联动 |
 | 40 | 编辑页懒加载 chunk 约 405 KB（gzip 140 KB），KaTeX/md-editor 体积大（S2-12 实测） | 首次进入编辑页偏慢，内网可接受 | 有性能要求时拆 KaTeX/CodeMirror 或预加载 |
 | 41 | 教师/家长不能进笔记工作区（路由 `roles:['student']`），其读取能力未做前端入口（S2-12 沿用 S2-11） | 家长/教师视角仍空白 | 家长/教师端卡再设计入口与只读模式 |
+| 42 | 文件页只接受 `.pdf/.docx/.md/.txt`，图片仍走笔记编辑器独立入口，扫描件/图片 OCR 未支持（S2-13） | 图片资料无法在文件页解析 | OCR 卡再接；先把图片当笔记插图用 |
+| 43 | 无文件下载、删除、签名 URL 接口；生成笔记/切片与文件无删除联动（S2-13 沿用 S2-6） | 文件只增不减，误传无法前端清理 | 文件管理卡补删除/下载与关联清理 |
+| 44 | 失败重试只保留当前页面会话里的原始 `File`；刷新后历史 failed 文件没有重试按钮（S2-13） | 刷新后只能重新选文件，体验断档 | 需要时增加服务端重解析接口或持久化任务 |
+| 45 | 切片只预览前 3 条，无完整切片分页/搜索（S2-13） | 长文档只能看开头 | 后续文件详情页/切片管理卡补全量列表 |
+| 46 | 上传队列不跨刷新保存，上传中不能取消；列表轮询 5 分钟后停止，超时需手动刷新（S2-13） | 离开页面丢队列；后台可能仍在解析 | 需要时用 Pinia/IndexedDB 持久化并加取消 |
+| 47 | S2-10 `kp.align` 对英文长 `evidence` 超 200 字会 Pydantic 校验失败（S2-13 验收英文 PDF 时 `kp.align` failed，解析本身 succeeded） | 英文材料不触发对齐；不影响文件/切片 | 在 extractor 落库前截断/压缩 evidence，另卡修复 |
+| 48 | 文件宽度沿用全局 `body min-width:1024px`；小于 1024 的窗口会出现整页横向滚动（S2-13 实测 824px；1440px 正常） | 窄屏/分屏体验差 | 移动端适配卡统一处理，不在 S2-13 改全局布局 |
 
 ## 变更日志
+
+### 2026-10-29（S2-13）
+- S2-13 完成（spec `docs/spec/s2-13-files-ui.md` + plan `docs/plan/s2-13-files-ui.md`，用户确认后实施）。交付：后端 `File.chunk_count`、`FileSummaryOut`/`ChunkPreviewOut`、`GET /files`、`GET /files/{id}/chunks`，`parse-status` 增 `chunk_count`；前端 `types/files.ts`、`api/files.ts`、`views/files/{constants,useFileUploads,FileListView}`、`components/files/FileUploader.vue`，`/files` 路由替换占位页
+- 拍板（D-033，2026-10-29 用户确认）：文件历史用持久后端列表；切片显示块数 + 前 3 条；失败重试由前端重传原始 `File`（不做服务端重试接口）；文件页只收文档类型；列表固定 `created_at DESC, id DESC`；轮询 3s、单文件上限 5min；上传串行
+- 验收证据：pytest **512 passed, 1 warning**（基线 506 + 6 条列表/块数/切片契约）；Vitest **56 passed / 14 files**（新增 17：常量 4、队列 5、上传组件 2、列表 6）；`npm run build` 通过
+- 真实联调（Chrome 155 + CDP，1440×900，真实 Postgres/Redis/MinIO/ARQ Worker，`PARSE_FORCE_PYMUPDF=true` 加速 PDF）：注册 `s213_e2e_88038676` → `/files` 选择 7.8KB、6 页 ASCII 试卷 PDF → 上传 → **完成 · 7 块**；API `GET /files` 返回 `id=11, done, 100, chunk_count=7`；刷新后列表仍在且仍为 7 块；切片抽屉显示 #1–#3（9/79/78 tokens）；重新选 `.png` 被前端拒绝（“仅支持 PDF…”）且不发请求；console error 0、exception 0；1440 视口 `scrollWidth=innerWidth=1440`
+- 实测抓修：① 列表页测试给 `teleport` 打 stub 导致 Element Plus `ElSelect` 递归更新（9–12 个 unhandled errors），去掉 stub 并等待抽屉渲染后消失；② 首次 E2E 脚本按错误文件名断言，实际文件名为 `tmp-s213-paper.pdf`，重跑新账号完成（产品无问题）；③ 824px 窄视口横向溢出来自全局 `body min-width:1024px`，1440px 正常，记为遗留 48
+- 清理：两个验收账号（id 20/21）、2 个文件、2 篇文档笔记、14 条切片、4 条异步任务、2 个 MinIO 对象全部删除，计数回 0；临时 PDF/PNG/截图/CDP 脚本/Chrome profile 删除
+- 文档同步：API.md §3 + §12、DECISIONS D-033、PROGRESS、实施计划 S2-13 勾选、spec §10、plan 执行记录；SCHEMA 无变更（`chunk_count` 为只读派生属性）
+- 已知不足：见遗留 42–48；文档类型限制、无删除/下载、失败仅当前会话可重试、只预览 3 条、队列不跨刷新、轮询 5min 上限、S2-10 英文长 evidence 对齐失败、<1024 全局横向滚动
 
 ### 2026-10-27（S2-12）
 - S2-12 完成（spec `docs/spec/s2-12-notes-ui.md` + plan `docs/plan/s2-12-notes-ui.md`，用户确认后实施）。交付：`views/notes/{NoteListView,NoteEditView,useNoteList,useNoteEditor,listQuery}`、`components/notes/{TagInput,MarkdownEditor}`、`api/{notes,files,kp}.ts`、`types/{notes,files,common,kp}.ts`、`utils/{noteDraft,noteImages}.ts`；路由 `/notes`、`/notes/new`、`/notes/:id/edit` 与 `meta.nav` 侧栏/面包屑高亮；后端 `POST /files?parse=false` 与 `GET /files/{id}/image`

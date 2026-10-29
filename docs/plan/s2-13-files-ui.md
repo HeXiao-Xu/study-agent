@@ -2174,3 +2174,19 @@ git commit -m "docs(s2-13): 文件工作台验收记录"
 - **Placeholder scan**：无 TBD/TODO；所有代码/测试/命令均为可执行内容。
 - **Type consistency**：`UploadTask` 字段在 Task 3/4/5 一致；`FileSummary`/`FileStatus`/`ChunkPreview` 与后端 schema 字段一致；`listFileChunks(id, 3)` 与页面测试一致。
 - **已知风险**：Task 3 的 fake timer 测试若因异步 tick 时序失败，按失败信息调整 `flushPromises`/推进时间，不改变生产逻辑；真实验收需 Worker 与 `PARSE_FORCE_PYMUPDF=true`，否则 Docling 可能超过 5 分钟。
+
+---
+
+## 执行记录
+
+- 执行方式：用户在 plan 确认后选 **A. 本会话执行**；直接在 `main` 上沿用项目既有工作流，未另建 worktree。
+- Task 1 `00f762a`：`File.chunk_count`、`FileSummaryOut`/`ChunkPreviewOut`、`GET /files`、`GET /files/{id}/chunks`、`parse-status.chunk_count`；测试 26 passed；后端全量 512 passed。
+- Task 2 `2e5e8e3`：前端类型、`uploadDocument`/`listFiles`/`getFileStatus`/`listFileChunks`、格式化与轮询常量；4 条测试通过，build 通过。
+- Task 3 `6c34aab`：`useFileUploads` 串行队列、Axios 进度、3s 轮询、5min 超时、失败重试；5 条测试通过。
+- Task 4 `ea6d7b9`：`FileUploader.vue` 拖拽/点选、队列、进度、重试、清空已完成；2 条测试通过。
+- Task 5 `76d7b2c`：`FileListView.vue`、`/files` 路由、分页、历史轮询、切片抽屉；5 条测试通过；前端全量 55 passed、build 通过。
+- 修复 `1e4d1aa`：去掉测试里的 `teleport` stub（它导致 Element Plus `ElSelect` 递归更新），恢复与笔记页一致的 10/20/50 每页条数，并补 1 条列表历史轮询测试；前端全量 **56 passed / 14 files**。
+- Task 6：真实验收使用 Chrome 155 + CDP、1440×900、真实 Postgres/Redis/MinIO、临时 ARQ Worker（`PARSE_FORCE_PYMUPDF=true`）。验收 PDF 6 页/7,958 bytes，上传后 `done/100/7 块`，刷新持久化，抽屉前 3 条；非法 PNG 被前端拒绝；console error 0；1440 无横向溢出。
+- 实测偏差：首次 E2E 脚本断言文件名写错（实际 `tmp-s213-paper.pdf`）后重跑新账号；824px 横向溢出来自全局 `body min-width:1024px`，记为遗留 48；英文 PDF 触发 S2-10 `kp.align` evidence 超 200 字失败，记为遗留 47，未越界修改。
+- 清理：2 个验收账号（id 20/21）、2 文件、2 文档笔记、14 切片、4 异步任务、2 MinIO 对象全部删除，计数回 0；临时 PDF/PNG/截图/CDP 脚本/Chrome profile 删除。
+- 最终：pytest **512/512**、Vitest **56/56**、`npm run build` 通过；文档同步 API.md、DECISIONS D-033、PROGRESS、实施计划、spec §10；用户负责 push。

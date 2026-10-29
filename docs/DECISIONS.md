@@ -395,6 +395,22 @@
 - 决策 11（已知代价）：token 在导出到其它 Markdown 工具时是断链；图片 endpoint 一次读内存、无压缩/缩略图；草稿只在本浏览器且只按 `baseUpdatedAt` 判旧；无阅读页/文件夹/标签筛选/版本/回收站；删除笔记不删文件；编辑页 chunk 约 405 KB（gzip 140 KB）；教师/家长仍无工作区入口。
 - 验证：`npm run test:run` **39/39**、`npm run build` 通过、pytest **506/506**；真实 1440×900 新建含公式与 64×64 PNG 的笔记，保存后 DB 为 `note-file://8`，刷新后 `.katex=1`、`img.naturalWidth=64`；草稿→离开取消/确认→重开恢复→保存清草稿；列表 12→翻页 2→20/页 12→关键词 1→学科 6→删除 11；console error 0、无横向滚动；验收数据与 MinIO 对象清理回 0。
 
+## D-033 前端文件上传与解析状态（S2-13）
+
+- 背景：S2-6 已有上传/解析状态、S2-8 已有解析 Worker，但前端 `/files` 仍是占位页；S2-13 要交付文件工作台。spec 见 `docs/spec/s2-13-files-ui.md`。
+- 决策 1（历史列表）：新增 `GET /api/v1/files`，只返回本人文件，固定 `created_at DESC, id DESC`；出参 `PageData[FileSummaryOut]`，含 `chunk_count`，不做搜索/状态筛选。
+- 决策 2（块数）：`chunk_count` 从 `parse_result_json.chunks` 派生，不给 `files` 加列、不加迁移；未完成/脏数据按 0。`GET /files/{id}/parse-status` 同步增加该字段。
+- 决策 3（切片预览）：新增 `GET /files/{id}/chunks?limit=3`（1–20），按 `chunk_index` 升序，复用文件权限；前端只展示前 3 条，不做完整切片分页。
+- 决策 4（类型）：文件页只收 `.pdf/.docx/.md/.txt`；图片继续走 S2-12 笔记编辑器独立入口，文件页不接图片/OCR。
+- 决策 5（上传队列）：前端串行上传；每文件真实 Axios upload progress；上传后立即查一次状态，`pending/parsing` 每 3s 轮询，单文件最多 5min；终态刷新列表。不新增 SSE/WebSocket。
+- 决策 6（失败重试）：前端保留本次会话的原始 `File`，失败卡片“重试”重新上传；不新增服务端重试/重解析接口，刷新后历史 failed 不能一键重试。
+- 决策 7（列表轮询）：页面打开时若列表中有 `pending/parsing` 行，每 3s 批量查 `parse-status` 并原地更新；5min 后停止，避免无限请求。
+- 决策 8（页面交互）：上传区支持拖拽/点选、多文件、拒绝类型提示、队列进度/状态/重试、清空已完成；列表列=文件名/类型大小/状态/切片数/上传时间/操作；失败行提示错误；完成行可开抽屉预览。
+- 决策 9（分页）：与笔记页一致 `el-pagination`（10/20/50、总数、页码）；翻页请求 `page`/`page_size`；不做 URL query 同步。
+- 决策 10（测试与验收）：后端新增 6 条契约、前端新增 17 条（常量 4、队列 5、上传组件 2、列表 6）；真实 Chrome 1440 + ARQ Worker 验收，不以 mock 代替上传链路。
+- 决策 11（已知代价）：无文件下载/删除/签名 URL；失败重试仅当前会话；只预览 3 条；队列不跨刷新；轮询有 5min 上限；`chunk_count` 无独立列/索引；<1024 视口沿用全局 `body min-width:1024px` 横向滚动。
+- 验证：pytest **512/512**；Vitest **56/56**；build 通过；真实 PDF 上传 → done/100/7 块 → 刷新持久化 → 抽屉 #1–#3；非法 PNG 前端拒绝；console error 0；1440 无横向溢出；验收账号/文件/笔记/切片/任务/MinIO 对象清理回 0。
+
 ## 待与导师拍板（方案附录 F 摘录）
 
 | # | 决策项 | 备选 | 方案建议 | 状态 |
