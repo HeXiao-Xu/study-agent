@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElTree } from 'element-plus'
+import type { FilterValue, TreeNodeData } from 'element-plus'
 
 import { createKp, deleteKp, getKpTree, reorderKp, updateKp } from '@/api/kp'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -70,10 +71,11 @@ function onCollapse(data: KpNode): void {
   expandedIds.value.delete(data.id)
 }
 
-function filterNode(value: string, data: KpNode): boolean {
-  const text = value.trim().toLowerCase()
+function filterNode(value: FilterValue, data: TreeNodeData): boolean {
+  const text = String(value).trim().toLowerCase()
   if (!text) return true
-  return data.name.toLowerCase().includes(text) || data.code.toLowerCase().includes(text)
+  const node = data as KpNode
+  return node.name.toLowerCase().includes(text) || node.code.toLowerCase().includes(text)
 }
 
 function applyFilter(value: string): void {
@@ -170,17 +172,22 @@ async function removeNode(node: KpNode): Promise<void> {
 }
 
 interface DragNode {
-  data: KpNode
+  data: TreeNodeData
   parent?: { childNodes?: DragNode[] } | null
 }
 
 function allowDrag(node: DragNode): boolean {
-  return canManage.value && !keyword.value.trim() && node.data.parent_id !== null
+  const data = node.data as KpNode
+  return canManage.value && !keyword.value.trim() && data.parent_id !== null
 }
 
 function allowDrop(dragNode: DragNode, dropNode: DragNode, type: string): boolean {
   if (!canManage.value || keyword.value.trim()) return false
-  return canDropNode(dragNode.data, dropNode.data, type as DropType)
+  return canDropNode(
+    dragNode.data as KpNode,
+    dropNode.data as KpNode,
+    type as DropType,
+  )
 }
 
 async function onNodeDrop(
@@ -191,14 +198,14 @@ async function onNodeDrop(
   if (!canManage.value || busy.value) return
   busy.value = true
   try {
-    const parentId = dropParentId(dropNode.data, type)
+    const parentId = dropParentId(dropNode.data as KpNode, type)
     const orderedIds =
-      dragging.parent?.childNodes?.map((node) => node.data.id) ??
+      dragging.parent?.childNodes?.map((node) => (node.data as KpNode).id) ??
       collectSiblingIds(tree.value?.nodes ?? [], parentId)
     await reorderKp({
       parent_id: parentId,
       ordered_ids: orderedIds,
-      moved_id: dragging.data.id,
+      moved_id: (dragging.data as KpNode).id,
     })
     await load()
   } catch {
