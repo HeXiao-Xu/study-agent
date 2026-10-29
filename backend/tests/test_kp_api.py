@@ -13,6 +13,7 @@ from app.main import app
 from app.models.knowledge_point import KnowledgePoint
 from app.models.subject import Subject
 from app.models.user import User
+from app.services import kp_service
 
 
 class FakeSession:
@@ -226,3 +227,69 @@ def test_delete_leaf_returns_204(client: TestClient) -> None:
     _wire(FakeSession(user=user, get_map={1: _kp(1, "MATH", 1)}))
     resp = client.delete("/api/v1/kp/1", headers=_headers(user))
     assert resp.status_code == 204
+
+def test_reorder_kp_teacher_returns_204(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    _wire(FakeSession(user=user))
+    captured: dict[str, object] = {}
+
+    def fake_reorder(session, *, parent_id, ordered_ids, moved_id=None):
+        captured.update(
+            parent_id=parent_id,
+            ordered_ids=ordered_ids,
+            moved_id=moved_id,
+        )
+
+    monkeypatch.setattr(kp_service, "reorder_children", fake_reorder)
+    resp = client.put(
+        "/api/v1/kp/order",
+        json={"parent_id": 1, "ordered_ids": [3, 2], "moved_id": 3},
+        headers=_headers(user),
+    )
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert captured == {"parent_id": 1, "ordered_ids": [3, 2], "moved_id": 3}
+
+
+def test_reorder_kp_accepts_root_parent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    _wire(FakeSession(user=user))
+    captured: dict[str, object] = {}
+
+    def fake_reorder(session, *, parent_id, ordered_ids, moved_id=None):
+        captured.update(parent_id=parent_id, ordered_ids=ordered_ids)
+
+    monkeypatch.setattr(kp_service, "reorder_children", fake_reorder)
+    resp = client.put(
+        "/api/v1/kp/order",
+        json={"parent_id": None, "ordered_ids": [2, 1]},
+        headers=_headers(user),
+    )
+    assert resp.status_code == 204
+    assert captured["parent_id"] is None
+
+
+def test_reorder_kp_forbidden_for_student(client: TestClient) -> None:
+    user = _user(role="student")
+    _wire(FakeSession(user=user))
+    resp = client.put(
+        "/api/v1/kp/order",
+        json={"parent_id": 1, "ordered_ids": [2]},
+        headers=_headers(user),
+    )
+    assert resp.status_code == 403
+
+
+def test_reorder_kp_rejects_empty_order(client: TestClient) -> None:
+    user = _user()
+    _wire(FakeSession(user=user))
+    resp = client.put(
+        "/api/v1/kp/order",
+        json={"parent_id": 1, "ordered_ids": []},
+        headers=_headers(user),
+    )
+    assert resp.status_code == 422

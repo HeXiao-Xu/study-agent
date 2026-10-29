@@ -49,3 +49,10 @@ class KpUpdate(BaseModel):
     exam_weight: float | None = Field(default=None, ge=0, le=1)
     order_no: int | None = Field(default=None, ge=0)
     parent_id: int | None = Field(default=None, ge=1)
+
+class KpOrderIn(BaseModel):
+    """拖拽落库：目标父级 + 完整目标兄弟顺序，可顺带移动一个节点。"""
+
+    parent_id: int | None = Field(description="目标父节点；null 表示根级")
+    ordered_ids: list[int] = Field(min_length=1, max_length=200)
+    moved_id: int | None = Field(default=None, ge=1)

@@ -11,7 +11,7 @@ from app.core.permissions import require_role
 from app.models.note import Note
 from app.models.user import User
 from app.schemas.common import Envelope, PageData
-from app.schemas.kp import KpCreate, KpNodeOut, KpTreeOut, KpUpdate, SubjectOut
+from app.schemas.kp import KpCreate, KpNodeOut, KpOrderIn, KpTreeOut, KpUpdate, SubjectOut
 from app.schemas.kp_align import AlignBatchIn, AlignBatchOut, PendingAlignOut
 from app.schemas.tasks import TaskOut
 from app.services import kp_align_service, kp_service, task_service
@@ -75,6 +75,20 @@ def delete_kp(
     session: Session = Depends(get_db),
 ) -> None:
     kp_service.delete_kp(session, kp_id=kp_id)
+
+
+@router.put("/order", status_code=204, summary="批量排序/移动知识点")
+def reorder_kp(
+    payload: KpOrderIn,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> None:
+    kp_service.reorder_children(
+        session,
+        parent_id=payload.parent_id,
+        ordered_ids=payload.ordered_ids,
+        moved_id=payload.moved_id,
+    )
 
 @router.post(
     "/align/notes/{note_id}",

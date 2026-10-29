@@ -242,3 +242,93 @@ def test_delete_kp_blocks_children_references_then_deletes_leaf() -> None:
     kp_service.delete_kp(session, kp_id=1)  # type: ignore[arg-type]
     assert session.deleted == [kp]
     assert session.commits == 1
+
+def test_reorder_children_updates_sibling_order() -> None:
+    root = _kp(1, "MATH", 1, None)
+    first = _kp(2, "MATH-A", 2, 1, order_no=0)
+    second = _kp(3, "MATH-B", 2, 1, order_no=1)
+    third = _kp(4, "MATH-C", 2, 1, order_no=2)
+    session = FakeSession(rows=[root, first, second, third], get_map={1: root})
+
+    kp_service.reorder_children(
+        session,  # type: ignore[arg-type]
+        parent_id=1,
+        ordered_ids=[4, 2, 3],
+    )
+
+    assert [first.order_no, second.order_no, third.order_no] == [1, 2, 0]
+    assert session.commits == 1
+
+
+def test_reorder_children_moves_subtree_and_recalculates_levels() -> None:
+    root = _kp(1, "MATH", 1, None)
+    target = _kp(2, "MATH-FUNC", 2, 1)
+    moving = _kp(3, "MATH-GEO", 1, None, order_no=1)
+    child = _kp(4, "MATH-GEO-01", 2, 3)
+    sibling = _kp(5, "MATH-FUNC-01", 3, 2)
+    session = FakeSession(
+        rows=[root, target, moving, child, sibling],
+        get_map={2: target},
+    )
+
+    kp_service.reorder_children(
+        session,  # type: ignore[arg-type]
+        parent_id=2,
+        ordered_ids=[5, 3],
+        moved_id=3,
+    )
+
+    assert moving.parent_id == 2
+    assert moving.level == 3
+    assert child.level == 4
+    assert sibling.order_no == 0
+    assert moving.order_no == 1
+    assert root.order_no == 0
+    assert session.commits == 1
+
+
+def test_reorder_children_rejects_duplicate_ids() -> None:
+    with pytest.raises(InvalidParamError, match="不能重复"):
+        kp_service.reorder_children(
+            FakeSession(),  # type: ignore[arg-type]
+            parent_id=None,
+            ordered_ids=[1, 1],
+        )
+
+
+def test_reorder_children_rejects_incomplete_sibling_set() -> None:
+    root = _kp(1, "MATH", 1, None)
+    first = _kp(2, "MATH-A", 2, 1)
+    second = _kp(3, "MATH-B", 2, 1)
+    session = FakeSession(rows=[root, first, second], get_map={1: root})
+
+    with pytest.raises(InvalidParamError, match="全部子节点"):
+        kp_service.reorder_children(
+            session,  # type: ignore[arg-type]
+            parent_id=1,
+            ordered_ids=[2],
+        )
+
+
+def test_reorder_children_rejects_cycle() -> None:
+    root = _kp(1, "MATH", 1, None)
+    parent = _kp(2, "MATH-A", 2, 1)
+    child = _kp(3, "MATH-A-01", 3, 2)
+    session = FakeSession(rows=[root, parent, child], get_map={3: child})
+
+    with pytest.raises(InvalidParamError, match="子节点"):
+        kp_service.reorder_children(
+            session,  # type: ignore[arg-type]
+            parent_id=3,
+            ordered_ids=[2],
+            moved_id=2,
+        )
+
+
+def test_reorder_children_rejects_missing_parent() -> None:
+    with pytest.raises(NotFoundError, match="父节点不存在"):
+        kp_service.reorder_children(
+            FakeSession(),  # type: ignore[arg-type]
+            parent_id=99,
+            ordered_ids=[1],
+        )

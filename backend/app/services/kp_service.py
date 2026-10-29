@@ -167,6 +167,95 @@ def delete_kp(session: Session, *, kp_id: int) -> None:
     session.commit()
 
 
+
+def reorder_children(
+    session: Session,
+    *,
+    parent_id: int | None,
+    ordered_ids: list[int],
+    moved_id: int | None = None,
+) -> None:
+    """一次事务内移动节点并归一化目标兄弟顺序；前端不承担排序正确性。"""
+    ordered = list(ordered_ids)
+    if not ordered:
+        raise InvalidParamError("ordered_ids 不能为空")
+    if len(set(ordered)) != len(ordered):
+        raise InvalidParamError("ordered_ids 不能重复")
+    if moved_id is not None and moved_id not in ordered:
+        raise InvalidParamError("被移动节点必须包含在 ordered_ids 中")
+    if moved_id is not None and parent_id == moved_id:
+        raise InvalidParamError("父节点不能是自身")
+
+    parent: KnowledgePoint | None = None
+    if parent_id is not None:
+        parent = session.get(KnowledgePoint, parent_id)
+        if parent is None:
+            raise NotFoundError("父节点不存在")
+
+    ids = set(ordered)
+    if moved_id is not None:
+        ids.add(moved_id)
+    found = {
+        row.id: row
+        for row in session.scalars(
+            select(KnowledgePoint).where(KnowledgePoint.id.in_(ids))
+        )
+        if row.id in ids
+    }
+    if ids - set(found):
+        raise NotFoundError("知识点不存在")
+
+    first = next(iter(found.values()))
+    subject_id = parent.subject_id if parent is not None else first.subject_id
+    if any(row.subject_id != subject_id for row in found.values()):
+        raise InvalidParamError("知识点不属于同一学科")
+    if parent is not None and parent.subject_id != subject_id:
+        raise InvalidParamError("父节点不属于同一学科")
+
+    rows = list(
+        session.scalars(
+            select(KnowledgePoint).where(KnowledgePoint.subject_id == subject_id)
+        )
+    )
+    by_id = {row.id: row for row in rows}
+    if parent_id is not None and parent_id not in by_id:
+        raise NotFoundError("父节点不存在")
+    if any(kp_id not in by_id for kp_id in ids):
+        raise NotFoundError("知识点不存在")
+
+    old_parent_id: int | None = None
+    if moved_id is not None:
+        moved = by_id[moved_id]
+        old_parent_id = moved.parent_id
+        cursor = parent
+        while cursor is not None:
+            if cursor.id == moved.id:
+                raise InvalidParamError("不能移动到自己的子节点下")
+            cursor = by_id.get(cursor.parent_id)
+        new_level = 1 if parent is None else parent.level + 1
+        height = _subtree_height(rows, moved.id)
+        if new_level + height - 1 > MAX_LEVEL:
+            raise InvalidParamError(f"移动后子树超过 {MAX_LEVEL} 级")
+        moved.parent_id = parent_id
+        moved.level = new_level
+        _reassign_descendant_levels(rows, moved)
+
+    target_ids = {row.id for row in rows if row.parent_id == parent_id}
+    if target_ids != set(ordered):
+        raise InvalidParamError("ordered_ids 必须包含目标父级的全部子节点")
+
+    if moved_id is not None and old_parent_id != parent_id:
+        source_siblings = sorted(
+            (row for row in rows if row.parent_id == old_parent_id),
+            key=lambda row: (row.order_no, row.id),
+        )
+        for index, row in enumerate(source_siblings):
+            row.order_no = index
+
+    for index, kp_id in enumerate(ordered):
+        by_id[kp_id].order_no = index
+    session.commit()
+
 def _subtree_height(rows: list[KnowledgePoint], root_id: int) -> int:
     children: dict[int, list[KnowledgePoint]] = defaultdict(list)
     for row in rows:
