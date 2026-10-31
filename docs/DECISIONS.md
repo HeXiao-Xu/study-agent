@@ -526,3 +526,18 @@
   - 断连 `curl --max-time 3`：收到 meta + 20 delta 后超时（2776 bytes），DB 只有 user、无 assistant；日志出现 `qa_stream_disconnected`，上游未完成，连接已关闭。
 - 断连实现细节：同步 `StreamingResponse` 在 uvicorn 取消时不会主动关闭同步生成器；路由改为 async 生成器，`run_in_threadpool(next, events, None)` 逐事件读取，`finally: events.close()` 保证断连时关闭上游。
 - 已知限制：引用校验/重试归 S3-6；会话管理、前端归 S3-8；429 限流与 `llm_call_logs` 归 S3-7；未做并发压测。
+
+## D-040 拒答与引用校验（S3-6）
+
+- 背景：S3-5 只持久化合法 `[n]`，不做校验/重试/补丁；任务卡要求生成后校验引用、无引用知识陈述重试一次、仍失败加声明、拒答给建议。spec/plan 见 `docs/spec/s3-6-citation-check.md`、`docs/plan/s3-6-citation-check.md`。
+- 决策 1（输出策略）：先完整生成并校验，再按块发 `delta`；不再逐 token 推送。用首字延迟换“重试/前缀不先发后改”。`meta` 仍在检索后立即发。
+- 决策 2（检测粒度）：`services/citation_checker.py` 纯函数按段落/列表项/表格块检查；标题、代码块、纯公式块、补充声明、拒答文案跳过；块内任意合法 `[n]` 即视为已引用，越界编号单独记录。
+- 决策 3（重试与兜底）：有问题且 `qa_citation_max_retries>=1` 时用“原 Prompt + 上版回答 + 纠正指令”重试一次；第二轮仍无任何合法引用→拒答；有合法引用→去越界编号，只给未引用块加 `【以下为模型补充，未在你的资料中找到依据】`，保留回答。
+- 决策 4（拒答建议）：`done` 增加 `refusal_reason` 与 `suggestions:[{type:"rephrase"|"note",text,note_id}]`；正常回答 `[]`；建议不落库，重新加载后不保留。`refusal_reason` 取值 `no_context/low_score/empty_answer/no_valid_citation`。
+- 决策 5（范围）：只改 SSE 链路；`answer_question`/`scripts/ask.py` 保持 S1-6 的“非法引用重试后拒答”行为。无新表/迁移/依赖/配置。
+- 决策 6（断连）：`stream_events` 增加 `cancel_event`；静默生成阶段每收一个 chunk 检查，置位即关闭上游、不发 done、不落 assistant；路由 `finally` 置位并 best-effort close。
+- 决策 7（测试）：新增 20 条（checker 12、answerer 1、service 5、API 2）；基线 666 → **686 passed, 1 warning**；外部 LLM/DB 全部 mock。
+- 验收（真实 Postgres + DashScope `qwen-plus`，`test1` id=18，2026-11-01）：
+  - `scripts/citation_eval.py --user-id 18`：5 条无依据问题全部拒答（3 条 `low_score`、2 条 `no_valid_citation`），5 条部分覆盖问题全部保留并带补充前缀，**10/10 通过**。
+  - 真实 SSE 抽查（错位相减法步骤+历史）：`meta` 3.10s，首个 `delta` 15.06s，共 4 个 delta，`done` 15.10s；`tokens=2759`、`latency_ms=14672`、`suggestions=[]`；消息 32 落库 425 字、前缀 2 处、citations rank 1–3。
+- 已知限制：块级检测是启发式，不判断引用是否真正支持该句；首字延迟显著增加；建议固定文案且不落库；断连只能在下一次 chunk 到达时关闭上游，不保证立即停止计费。

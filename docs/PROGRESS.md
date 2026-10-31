@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-5 问答 API（SSE meta/delta/done/error）+ 会话/消息/引用落库；后端 **666 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-6 拒答与引用校验；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-6 拒答与引用校验（块级校验、一次重试、补充声明、结构化拒答建议）；后端 **686 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-7 缓存 + 调用日志 + 用量统计；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
 ## 任务清单
@@ -52,7 +52,7 @@
 - [x] S3-3 Query 改写与意图识别
 - [x] S3-4 上下文组装 + Prompt 版本管理
 - [x] S3-5 问答 API（SSE）+ 会话落库
-- [ ] S3-6 拒答与引用校验
+- [x] S3-6 拒答与引用校验
 - [ ] S3-7 缓存 + 调用日志 + 用量统计
 - [ ] S3-8 前端问答页（流式 + 引用跳转）★
 - [ ] S3-9 抽查扩展到线上链路 + 三种配置对照
@@ -165,12 +165,24 @@
 | 67 | `variables_json` 只校验类型/非空，不校验模板实际引用了哪些变量（S3-4） | 元数据可能和正文不一致 | 保存时用 Jinja2 AST 提取变量并与元数据比对 |
 | 68 | 多管理员并发激活同一 name 无重试，部分唯一索引冲突会失败（S3-4） | 并发切换可能一方报错 | 单管理员场景暂可接受；需要时加重试/串行化 |
 | 69 | 行级留痕只有 `created_by/created_at/updated_at`，无完整操作审计日志（S3-4） | 只能知道谁建，不能还原启用操作序列 | S3-7 `llm_call_logs`/运维审计补事件日志 |
-| 70 | S3-5 只持久化合法 `[n]` 子集，不做引用校验/重试/拒答补丁（S3-5） | 模型漏引或无依据陈述仍会入库 | S3-6 `citation_checker` 接管 |
+| 70 | S3-5 只持久化合法 `[n]` 子集，不做引用校验/重试/拒答补丁（S3-5） | 模型漏引或无依据陈述仍会入库 | S3-6 已由 `citation_checker` 接管 |
 | 71 | 会话只支持创建与续聊，无列表/删除/重命名接口（S3-5） | 前端无法管理历史会话 | S3-8 前端问答页一起补 |
 | 72 | SSE 无 429 限流，断连与错误路径无 `llm_call_logs` 落库（S3-5） | 高频请求与失败成本不可审计 | S3-7 统一限流 + 调用日志 |
 | 73 | 真实验收使用本机 DashScope `qwen-plus`，未做并发压测（S3-5） | 单路延迟 3.7–24.5s，并发表现未知 | 上线前按并发目标压测 |
+| 74 | 引用校验后输出，首字延迟从“立即”变为完整生成后（S3-6 实测 meta 3.10s、首个 delta 15.06s） | 前端需要更明显的 loading 态，长答案体感慢 | S3-8 前端补加载态；需要时再评估流式校验替代方案 |
+| 75 | 块级检测是启发式，不判断引用是否真正支持该句；列表/段落内只有末尾一个引用会视为整块已引用（S3-6） | 可能漏掉“引用与陈述不匹配”或段落内部分句子无依据 | 后续用 LLM 逐句归因或引用蕴含校验 |
+| 76 | 拒答建议固定文案，`note_id` 为 null，且不落库（S3-6） | 建议不个性化，刷新后丢失 | S3-8 如需历史建议，加列/JSONB 并与 kp 关联 |
+| 77 | 断连在静默生成阶段只能等下一次 chunk 到达才关闭上游（S3-6） | 立即停止计费无保证 | 需要时把 LLM 适配器改 async 取消 |
 
 ## 变更日志
+
+### 2026-11-01（S3-6）
+- S3-6 完成（spec `docs/spec/s3-6-citation-check.md` + plan `docs/plan/s3-6-citation-check.md`，用户确认后内联执行）。交付：`services/citation_checker.py`；`qa_service` 校验/重试/标注/聚合 token/cancel_event；`api/v1/qa.py` 断连取消；`schemas/qa.py` done 新字段；`scripts/citation_eval.py`
+- 拍板（D-040）：完整生成并校验后再按块发 delta；块级检查，只给未引用块加 `【以下为模型补充，未在你的资料中找到依据】`；两轮无合法引用才拒答；`done` 增加 `refusal_reason/suggestions`；只接 SSE，`answer_question` 保持 S1-6 行为
+- 测试：新增 20 条（checker 12、answerer 1、service 5、API 2），全量 **686 passed, 1 warning**
+- 验收（真实 Postgres + DashScope，`test1` id=18）：`scripts/citation_eval.py --user-id 18` **10/10 通过**；5 条无依据全拒答（3 `low_score`、2 `no_valid_citation`），5 条部分覆盖全部保留并带补充前缀
+- 真实 SSE（错位相减法步骤+历史）：`meta` 3.10s、首个 `delta` 15.06s、4 个 delta、`done` 15.10s；`tokens=2759`、`latency_ms=14672`；DB 消息 32 共 425 字、补充前缀 2 处、citations rank 1–3
+- 文档同步：API.md §5、DECISIONS D-040、PROGRESS、实施计划 S3-6 勾选、spec/plan 实施记录；无 SCHEMA/迁移/依赖变化
 
 ### 2026-10-31（S3-5）
 - S3-5 完成（spec `docs/spec/s3-5-qa-sse.md` + plan `docs/plan/s3-5-qa-sse.md`，用户确认后内联执行）。交付：`models/conversation.py`、`models/message.py`、`models/message_citation.py`、迁移 `0007_s3_5`、`ai/llm` 的 `chat_stream`、answerer 的 `prepare_answer/stream_answer`、`schemas/qa.py`、`services/qa_service.py`、`api/v1/qa.py`

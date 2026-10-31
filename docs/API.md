@@ -327,14 +327,17 @@
 
 - SSE 事件：
   - `meta`：`{conversation_id(字符串), user_message_id, citations:[{index,note_id,chunk_id,title,heading_path,page_no,snippet}]}`；`citations` 为全部上下文引用，编号供正文 `[n]` 使用
-  - `delta`：`{text:"..."}`；增量文本，0..N 个
-  - `done`：`{message_id, conversation_id(字符串), tokens, latency_ms, refused}`；`tokens`=回答+改写总 token，`latency_ms`=服务端总耗时
+  - `delta`：`{text:"..."}`；校验后的文本块，0..N 个；拼接后等于最终正文（含补充声明）。S3-6 起完整生成、校验/最多重试一次后才发 `delta`，首字延迟增加
+  - `done`：`{message_id, conversation_id(字符串), tokens, latency_ms, refused, refusal_reason, suggestions}`；`tokens`=所有 LLM 尝试（首轮+重试）的回答 token + 改写 token，`latency_ms`=服务端总耗时
+    - `refusal_reason`：`null` / `no_context` / `low_score` / `empty_answer` / `no_valid_citation`
+    - `suggestions`：`[{type:"rephrase"|"note", text, note_id}]`；正常回答为空数组，拒答固定返回换问法+补笔记两条
   - `error`：`{code:50000,message:"生成失败"}`；流中失败后连接关闭，不再发 `done`
 - 错误码：401 未登录 / 403 非 student / 404 会话不存在或不属于当前学生（40400，不泄露存在性）/ 422 入参非法（42200）/ 500 生成失败
 - 备注：
   - 先落 user 消息，正常结束后落 assistant + citations；断连时关闭上游 LLM，保留 user、不落 assistant。
   - 无检索依据时 `refused=true` 与固定拒答文案，不调用 LLM；chitchat 不检索。
   - chitchat/拒答也先发 `meta`（citations 为空），再发一次 `delta` 全文，再发 `done`。
+  - S3-6 引用校验：整篇无合法引用→重试一次；仍无合法引用→拒答；有合法引用但部分块无引用/含越界编号→去掉越界编号，只给未引用块加 `【以下为模型补充，未在你的资料中找到依据】`，保留回答。`message_citations` 只落最终正文中的合法 `[n]`。
   - 本轮不实现限流；429 暂不返回。
   - 检索链路与参数（方案 6.4）：向量 top-20 + 全文 top-20 → RRF（k=60）→ Rerank 取 top-6 → 上下文预算 4k–6k token；拒答阈值 τ=0.35（重排分归一化，需实测校准）；温度 0.3；多轮仅取最近 3 轮做 query 改写；缓存 (user_id, 规范化问题, scope) 24h
 

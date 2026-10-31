@@ -621,10 +621,11 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **实测（2026-10-31）**：真实 DashScope + Postgres，`test1` id=18；首问 meta 1 / delta 181 / done 1、24.480s、`done.tokens=1949`，assistant 落库 + 4 条 citations；追问 3.688s；断连只留 user；全量 **666 passed, 1 warning**
 - **坑**：SSE 在 Nginx 下必须 `proxy_buffering off`，否则流式变"一次性吐出"。**部署阶段一定会踩这个坑，提前写进 deploy/README.md**
 
-#### S3-6 拒答与引用校验
-- **产出**：`services/citation_checker.py`
+#### S3-6 拒答与引用校验 ✅
+- **产出**：`services/citation_checker.py`（已交付 `backend/app/services/citation_checker.py` + `scripts/citation_eval.py`）
 - **提示词要点**：生成后校验答案中 `[n]` 是否都在上下文；若存在"无引用的知识库陈述"则重试一次（最多一次），仍失败则给答案加"【以下为模型补充，未在你的资料中找到依据】"前缀；拒答分支返回建议（换个问法/去看看某个知识点）
 - **验收**：构造 5 个"笔记里没有"的问题，全部拒答；构造 5 个"部分有部分没有"的问题，缺失部分被正确标注
+- **实施记录（2026-11-01）**：spec `docs/spec/s3-6-citation-check.md`、plan `docs/plan/s3-6-citation-check.md`；真实 5+5 **10/10 通过**（5 条全拒答，5 条保留并带补充前缀）；后端 **686 passed, 1 warning**；真实 SSE 首个 delta 15.06s（校验后输出）。
 
 #### S3-7 缓存 + LLM 调用日志 + 用量统计
 - **产出**：`llm_call_logs` 表落库、`services/usage_service.py`、`/admin/usage` 接口
