@@ -105,6 +105,14 @@ class Settings(BaseSettings):
     retrieval_recall_k: int = 20
     retrieval_rerank_enabled: bool = True
 
+    # --- Query 改写（S3-3）---
+    query_rewrite_enabled: bool = True
+    query_rewrite_max_history_turns: int = 3
+    query_rewrite_history_content_chars: int = 300
+    query_rewrite_max_tokens: int = 400
+    query_rewrite_cache_ttl_seconds: int = 3600
+    query_rewrite_cache_size: int = 256
+
     # --- QA（S1-6）---
     qa_context_max_tokens: int = 4000
     qa_refuse_threshold: float = 0.45
