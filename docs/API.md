@@ -77,7 +77,7 @@
 - 类型：同步
 - 入参：`title`（1–200）、`content_md`（1–200000）、`subject_id`（可选，必须存在）、`tags`（可选，≤20 个、单个 ≤30 字、去重保序）、`folder`（可选，≤100）
 - 出参：`data` = NoteOut
-- 备注：服务端由 `content_md` 派生 `content_text`（去公式纯文本，不出参）；`source_file_id` 由解析流水线写，本接口不收
+- 备注：服务端由 `content_md` 派生 `content_text`（去公式纯文本，不出参）；`source_file_id` 由解析流水线写，本接口不收；**S3-1 起创建成功后 best-effort 入队 `index.note`**（队列不可用只记 WARNING，不影响 201）
 - 错误：`422/42200` 字段校验失败 / 学科不存在；`403/40300` 非 student
 
 ### GET /api/v1/notes
@@ -99,12 +99,14 @@
 - 类型：同步（部分更新）
 - 入参：`title` / `content_md` / `subject_id` / `tags` / `folder` 任选；只改传入字段，`content_md` 变则重算 `content_text`；`subject_id` / `tags` / `folder` 传 `null` 表示清空
 - 出参：`data` = NoteOut
+- 备注：**S3-1 起仅当请求体显式包含 `content_md` 时** best-effort 入队 `index.note`；只改标题/标签不重算向量
 - 错误：`404/40400`；`403/40300`「无权修改该资源」；`422/42200` 字段为空 / 学科不存在
 
 ### DELETE /api/v1/notes/{note_id}
 - 权限：仅本人且 `student`
 - 类型：同步（软删除）
 - 出参：`204` 无响应体（置 `deleted_at=now()`，行保留）
+- 备注：**S3-1 起同一事务删除该笔记全部 `note_chunks`**（检索链路不 join `notes`，靠此保证软删后不再被召回）
 - 错误：`404/40400`；`403/40300`「无权删除该资源」
 
 ### 笔记对象
@@ -411,6 +413,27 @@
 - 权限：admin ⚠（RBAC 细则 S2-3）
 - 类型：同步
 - 出参：用量统计（llm_call_logs 聚合：scene/model/tokens/cost/latency）
+
+### POST /api/v1/admin/index/rebuild（S3-1 定稿）
+- 权限：`admin`（其他角色 403/40300）
+- 类型：异步（**202**，立即返回 run_id；每篇未删除笔记一个 `index.note` 任务）
+- 入参：无
+- 出参：`Envelope[RebuildStart]`：`run_id`（32 位 hex）/ `total_notes` / `purged_chunks`
+- 行为：
+  - 先清掉“软删笔记仍残留”的 `note_chunks`（`purged_chunks` 为删除行数），提交后再建任务
+  - 任务 payload 固定 `{"note_id": <id>, "run_id": "<run_id>"}`，同一 run_id 聚合进度
+  - 直接删旧块再插新块（`index_chunks(replace=True)`），无需额外去重
+- 错误：`403/40300`；`422/42200`「没有可重建的笔记」（库中无未删除笔记）；`500/50000`「任务队列不可用」（已提交的清理由此前的 commit 保留，返回失败）
+- 备注：全量重建按笔记 `content_md` 重建，文档笔记的 `page_no/bbox_json` 会清空（S3-1 已知代价）；并发重建/并发保存同一笔记可能触发 `uq_note_chunks_note_chunk_index` 唯一冲突，由任务 runner 重试收敛
+
+### GET /api/v1/admin/index/runs/{run_id}（S3-1 定稿）
+- 权限：`admin`（其他角色 403/40300）
+- 类型：同步
+- 入参：路径 `run_id`，必须匹配 `^[0-9a-f]{32}$`（否则 422/42200）
+- 出参：`Envelope[RebuildProgress]`：
+  `run_id` / `total` / `pending` / `running` / `succeeded` / `failed` / `percent`（0–100 整数）/ `chunks`（成功任务切片数之和）/ `started_at` / `finished_at`（全部终态才非空）/ `failures`（≤20 条，`{note_id, error}`）
+- 聚合方式：按 `name='index.note' AND payload->>'run_id'=run_id` 查 `async_tasks`，Python 内聚合，不建新表
+- 错误：`403/40300`；`404/40400`「索引重建记录不存在」；`422/42200` run_id 格式非法
 
 ### GET /health
 - 权限：公开

@@ -1005,7 +1005,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [x] S2-14 前端知识点树管理
 
 ## 阶段 3：RAG 问答上线（M2）
-[ ] S3-1 索引服务产品化
+[x] S3-1 索引服务产品化
 [ ] S3-2 检索服务
 [ ] S3-3 Query 改写与意图识别
 [ ] S3-4 上下文组装 + Prompt 版本管理

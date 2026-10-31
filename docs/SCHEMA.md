@@ -186,6 +186,8 @@ erDiagram
 | bbox_json | JSONB | 是 | — | 原文位置框（引用高亮） | — |
 
 > S2-1 复核时把外键延后到 S2-5；**S2-5 迁移 0003 已补齐**：`note_id → notes.id`（ON DELETE CASCADE）、`user_id → users.id`、`source_file_id → files.id`。补外键前条件清理了无主行（本库 83 行 S1-3 实验残留，`user_id=1` 但 users 为空），删除后不可恢复。
+>
+> S3-1 起本表同时承载**手写笔记**（按 `notes.content_md` 的 Markdown 重建，`page_no/bbox_json` 为空）与文档笔记（解析产物）；全量重建会把文档笔记的 `page_no/bbox_json` 清空，属已确认代价。软删笔记时同事务删除本表对应行。
 
 ### 4.4 note_kps
 
