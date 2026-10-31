@@ -1006,7 +1006,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 
 ## 阶段 3：RAG 问答上线（M2）
 [x] S3-1 索引服务产品化
-[ ] S3-2 检索服务
+[x] S3-2 检索服务
 [ ] S3-3 Query 改写与意图识别
 [ ] S3-4 上下文组装 + Prompt 版本管理
 [ ] S3-5 问答 API（SSE）+ 会话落库

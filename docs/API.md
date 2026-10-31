@@ -292,6 +292,28 @@
 
 ## 5. RAG 问答（论文核心）
 
+### POST /api/v1/retrieval/search（S3-2）
+- 权限：`student`（teacher/parent/admin 403/40300）
+- 类型：同步 JSON（非流式）
+- 入参：
+
+  | 字段 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | query | string | 是 | 1–500 字，去空白后非空 |
+  | top_k | int | 否 | 1–20，缺省 `RETRIEVAL_TOP_K=6` |
+  | rerank | bool | 否 | 缺省 `RETRIEVAL_RERANK_ENABLED=true`；false 走 RRF 顺序 |
+  | debug | bool | 否 | 默认 false；true 才返回候选明细 |
+  | scope | object | 否 | `{subject_id?, folder?, start_date?, end_date?, chunk_types?}` |
+
+- scope 语义：`folder` 精确匹配 `notes.folder`（当前无 notebook 表）；`start_date/end_date` 按 `notes.created_at`（UTC 日期，end 含当天）；`chunk_types ∈ {question,note,formula}`，传 `[]` 为 422；未知字段 422。
+- 出参：`query/top_k/rerank/elapsed_ms/embedding_ms/rerank_info/hits[]/debug?`
+  - hit：`chunk_id/note_id/note_title/chunk_index/chunk_type/content/snippet/heading_path/page_no/vector_rank/vector_distance/fulltext_rank/fulltext_score/rrf_score/rerank_score`
+  - `debug`：`tsquery/vector_ms/fulltext_ms/vector[]/fulltext[]/fused[]`（完整候选，最多每路 20 条，仅调试用）
+  - `rerank_info`：开启重排时返回 `{model,candidates,top_k,tokens,latency_ms,cost_yuan,fallback,error}`；关闭时为 null
+- 备注：空知识库/无命中返回 200 + `hits=[]`；rerank 失败自动回退 fused（`rerank_info.fallback=true`），接口不报错；检索恒过滤 `user_id` 与 `notes.deleted_at IS NULL`。
+- 错误码：401 未登录 / 403 非 student / 422 参数非法 / 500 Embedding 不可用
+- 性能口径（S3-2 验收）：HTTP 端到端、`rerank=false`、20 问、预热 3 次，P95 < 500ms（含查询 Embedding）；实测见 `docs/plan/s3-2-retrieval-service.md`。
+
 ### POST /api/v1/qa/ask
 - 权限：student
 - 类型：SSE 流式
@@ -300,7 +322,7 @@
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
   | question | string | 是 | 用户问题，1–500 字 |
-  | scope | object | 否 | {subject_id?, notebook_id?, start_date?, end_date?} |
+  | scope | object | 否 | {subject_id?, folder?, start_date?, end_date?}（语义同 §5 检索接口，S3-5 复用） |
   | conversation_id | string | 否 | 不传则新建会话 |
 
 - SSE 事件：

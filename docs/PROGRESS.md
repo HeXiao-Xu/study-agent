@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-1 索引服务产品化（Markdown 解析、`index.note` 任务、笔记保存/软删副作用、管理员全量重建与进度）；后端 **564 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-2 检索服务；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-2 检索服务（scope 过滤、student 检索接口、rerank 开关/debug、P95 压测）；后端 **586 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-3 Query 改写与意图识别；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
 ## 任务清单
@@ -48,7 +48,7 @@
 
 ### 阶段 3：RAG 问答上线（M2）
 - [x] S3-1 索引服务产品化
-- [ ] S3-2 检索服务
+- [x] S3-2 检索服务
 - [ ] S3-3 Query 改写与意图识别
 - [ ] S3-4 上下文组装 + Prompt 版本管理
 - [ ] S3-5 问答 API（SSE）+ 会话落库
@@ -148,8 +148,23 @@
 | 50 | 无单笔记索引状态列与单笔记重跑接口，失败只能整轮重建（S3-1） | 单篇坏笔记排障成本高、重复花钱 | 需要时加 `index_status` 列或 `index.note` 单笔记接口 |
 | 51 | 同一笔记并发索引可能撞 `uq_note_chunks_note_chunk_index`，靠 runner 3 次重试（S3-1） | 极端并发下任务短暂失败；重试仍失败只进重建 failures | 有并发编辑需求时加 advisory lock 或按笔记防抖 |
 | 52 | 重建费用与耗时随笔记量线性增长，无增量重建（S3-1） | 笔记多时全量重建较贵 | 后续按 `updated_at` 增量或只重建指定笔记 |
+| 53 | 文档笔记 `subject_id` 为 NULL（S2-8 未回填），带 `subject_id` 的检索不命中它们（S3-2） | 按学科过滤会漏掉上传文件生成的笔记 | 文件级学科元数据回填卡处理，不猜数据 |
+| 54 | `folder` 是 `notes.folder` 自由文本，无 notebook 表/层级（S3-2） | 改名等于换 scope；前端无法做文件夹树 | 需要笔记本树时新建表并迁移 |
+| 55 | P95 受外部 Embedding 支配（实测 P50 154ms/次），无查询向量缓存（S3-2） | Embedding 抖动时 P95 贴线；重复问题重复付费 | S3-7 Redis 缓存 query embedding 后再压测 |
+| 56 | `debug=true` 最多返回 3×20 条完整块文本（S3-2） | 响应体大，误开会影响前端性能 | 仅调试使用；需要时加 `debug_limit` |
+| 57 | 检索不支持 kp/知识点过滤（`note_kps` 有数据但未下推）（S3-2） | 不能按知识点圈定复习范围 | 需要时加 join `note_kps` 并评估索引 |
 
 ## 变更日志
+
+### 2026-10-31（S3-2）
+- S3-2 完成（spec `docs/spec/s3-2-retrieval-service.md` + plan `docs/plan/s3-2-retrieval-service.md`，用户确认后内联执行）。交付：`ai/rag/retriever.py` scope 下推（join `notes`，恒带 `user_id` + `deleted_at IS NULL`）与 `embedding_ms`、`schemas/retrieval.py`、`services/retrieval_service.py`、`api/v1/retrieval.py`（`POST /api/v1/retrieval/search`，student）、`scripts/retrieval_bench.py`；新增 3 个配置项 `RETRIEVAL_TOP_K/RECALL_K/RERANK_ENABLED`
+- 拍板（D-036）：scope=`{subject_id?,folder?,start_date?,end_date?,chunk_types?}`（`notebook_id` 改为 `folder`，无 notebook 表）；日期按 `created_at`、end 含当天；rerank 可请求覆盖、debug 默认关；SQL 只在 retriever，service 只编排；空库 200+空 hits；P95 HTTP 端到端、rerank=false、含查询 Embedding
+- 验收证据：pytest **586 passed, 1 warning**（基线 564 −1 旧拒参用例 +4 retriever +10 service +9 API）；前端未改
+- 真实联调（真实 Postgres/Embedding/Rerank）：验收笔记 81（subject=7/folder=函数）2 块（note+question）；无 scope/subject7/folder=函数/当天各 2 命中，subject8/folder=数列/创建前/题型 formula 各 0；`chunk_types=["question"]` 只 1 条 question；`rerank=true` 走 `qwen3-rerank`、fallback=否、candidates=2、latency=193ms、scores=0.832/0.528；debug 返回 vector/fulltext/fused 各 2 条、`embedding_ms=148`；空库学生 200+0 命中；匿名 401/40100、teacher 403/40300
+- 性能：`retrieval_bench.py --runs 20 --warmup 3 --no-rerank` → wall P50=172ms / **P95=229ms**（server P50=163/P95=223，embedding P50=154ms），达标 <500ms
+- 回归：`ask.py --user-id 28` 回答引用笔记 #81 两块（refused=否、llm_calls=1、cost ¥0.001431）；`retrieval_eval.py --user-id 28` 10 问正常跑完（仅 1 篇笔记，hit@5=2/10，rerank fallback=0/10）
+- 文档同步：API.md §5（检索接口 + qa scope 改 folder）、SCHEMA.md §4.3、DECISIONS D-036、PROGRESS、AGENTS §9.2/§9.6、实施计划 S3-2 勾选、spec/plan 执行记录；无迁移、无新依赖、无前端改动
+- 已知不足：见遗留 53–57；subject 过滤不命中文档笔记、folder 无 notebook 语义、P95 受外部 Embedding 支配、debug 体积大、kp 过滤未做
 
 ### 2026-10-31（S3-1）
 - S3-1 完成（spec `docs/spec/s3-1-index-service.md` + plan `docs/plan/s3-1-index-service.md`，用户确认后实施）。交付：`ai/parse/markdown.py`（笔记 Markdown → `ParsedBlock`）、`services/index_service.py`（`build_note_chunks` / `index_note` / `delete_note_chunks` / `purge_deleted_note_chunks` / `start_rebuild` / `get_rebuild_progress`）、`schemas/indexing.py`、`tasks/index_note.py`、`api/v1/admin.py`；笔记创建/正文更新 best-effort 入队 `index.note`，软删同事务清切片

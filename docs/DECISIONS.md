@@ -460,3 +460,19 @@
 - 决策 9（并发用量统计）：验收发现 S1-3 用共享 `EmbeddingClient.usage_tokens` 前后差值统计本次 tokens，S3-1 的并发任务会互相串账（note 79 单建 58，重建记成 662=588+74）。改为在 `index_chunks` 内累加本次 `on_batch` 的 `BatchStats.tokens`（批次回调只属于本次调用），补并发回归测试；块数、检索行为不变，`usage_tokens` 仍保留给脚本/其他调用方。
 - 验证（真实 Postgres/Redis/Worker + 真实 DashScope Embedding）：创建验收笔记（note 79）→ `index.note` succeeded、2 块/58 tokens，`heading_path` 含 `函数`、`函数/单调性`；PATCH 追加唯一标记 → 新任务 succeeded、命中 1 行、总块数 2、重复分组 0；软删临时笔记 → 残留 0、孤儿 0；全量重建两次均 `percent=100 / succeeded=5 / failed=0 / chunks=39`，表内 39 行、重复分组 0（各笔记 2/6/8/21/2）；重建后 `page_no` 非空 = 0（确认代价）；student 重建与进度 403、匿名 401、坏 run_id 422、未知 run 404；`scripts/ask.py --user-id 25` 真实回答并引用笔记 #79 的「函数/单调性」片段。修复统计后再次重建 4 篇：tokens=70/588/437/1168、`chunks=37`、`failed=0`。
 - 已知代价：全量重建丢文档页码/bbox；无单笔记索引状态列与单笔记重跑接口（只能整轮重建）；重建费用随笔记量增长；同一笔记并发保存可能短暂失败后重试；软删只清当前笔记切片，历史遗留靠重建清理。
+
+## D-036 检索服务与 scope 过滤（S3-2）
+
+- 背景：S1-4/S1-5 的 `retrieve_hybrid_reranked()` 只被脚本/评测直接调用，且对 `subject_id/kp_ids` 直接抛错，等于没有 scope；S3-2 要把检索封装成业务服务并暴露 student 接口。spec/plan 见 `docs/spec/s3-2-retrieval-service.md`、`docs/plan/s3-2-retrieval-service.md`。
+- 决策 1（接口）：新增 `POST /api/v1/retrieval/search`，仅 student；同步 JSON；空知识库/无命中 200 + `hits=[]`。
+- 决策 2（scope 字段）：`{subject_id?, folder?, start_date?, end_date?, chunk_types?}`；`notebook_id` 改为 `folder`，因为库里只有 `notes.folder` TEXT，没有 notebook 表。
+- 决策 3（SQL 下推）：scope 条件全部在 `retriever.py` 内 join `notes` 下推；即使无 scope 也 join，并恒带 `notes.user_id` 与 `notes.deleted_at IS NULL`，软删残块不会被召回。
+- 决策 4（日期语义）：按 `notes.created_at`；`end_date` 含当天（下界为次日 00:00 UTC）。
+- 决策 5（开关）：`rerank` 请求可覆盖配置；`debug` 默认 false，开启才返回 vector/fulltext/fused 候选与分项耗时。
+- 决策 6（服务边界）：SQL 只在 `ai/rag/retriever.py`；`services/retrieval_service.py` 只做校验、开关、标题一次批查与 DTO 组装；`answer_question` 不改，S3-5 直接复用本服务。
+- 决策 7（性能口径）：HTTP 端到端、`rerank=false`、20 问、预热 3 次，含 DashScope 查询 Embedding，P95 < 500ms；同时记录 `embedding_ms/vector_ms/fulltext_ms` 分项。
+- 决策 8（测试）：新增 retriever scope 4 条、service 10 条、API 9 条；删除 S1-4 旧的 subject/kp 拒参用例 1 条；全量 **586 passed, 1 warning**。
+- 验证（真实 Postgres/Redis + 真实 Embedding/Rerank）：验收学生 1 篇笔记（subject=7、folder=函数）产出 2 块（note+question）。无 scope/subject7/folder=函数/当天日期各命中 2 块；subject8/folder=数列/创建前日期/题型 formula 各 0 块；`chunk_types=["question"]` 只返回 question 块。`rerank=true` 返回 `qwen3-rerank`、`fallback=false`、candidates=2、latency=193ms、scores=0.832/0.528。debug 返回 vector/fulltext/fused 各 2 条、`embedding_ms=148`。空库学生 200+0 命中；匿名 401/40100、teacher 403/40300。
+- 验证（P95）：`scripts/retrieval_bench.py --runs 20 --warmup 3 --no-rerank`：wall P50=172ms / P95=229ms；server P50=163 / P95=223；embedding P50=154ms；PASS（<500ms）。
+- 回归：`scripts/ask.py --user-id 28` 真实回答并引用笔记 #81 两个块（refused=否，llm_calls=1）；`scripts/retrieval_eval.py --user-id 28` 正常跑完 10 问（该账号仅 1 篇笔记，hit@5=2/10，rerank fallback=0/10）。
+- 已知限制：带 `subject_id` 不命中文档笔记（S2-8 未回填 subject）；folder 是自由文本、无层级；P95 受外部 Embedding 支配（本机 154ms/次），无缓存；debug 响应最多 3×20 条完整块；kp/知识点过滤未支持；rerank 失败静默回退。
