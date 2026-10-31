@@ -489,3 +489,22 @@
 - 决策 7（测试）：新增 24 条（AI 10、service 13、llm scene 1）；全量 **610 passed, 1 warning**；真实外部调用全部 fake。
 - 验证（真实 DashScope LLM/Embedding + Postgres，`test1` id=18）：`scripts/rewrite_eval.py --user-id 18 --top-k 3` → hit@3 **9/10**、degraded 0/10、tokens 3958、cost ¥0.003802；10 条均 `concept_explain`、`is_followup=true`；`你好`→chitchat+reply；独立问题 `is_followup=false`。第 6 条“分段函数 f(f(-1))”改写正确，但检索 top3 未召回目标块 `note 77/chunk 11`（块存在），按约定不改样本/关键词。
 - 已知限制：意图单次 LLM 判定、4 类粒度粗；缓存不跨进程/重启；历史截断可能丢条件；chitchat 误判会跳过检索；失败调用 token 无法完整记账；无 API/前端，S3-5 接入前只能脚本验收。
+
+## D-038 Prompt 版本管理（S3-4）
+
+- 背景：S1-6 的 QA Prompt 固定在 `ai/prompts/qa_v1.md`，改词要改代码/重启；任务卡要求存库、版本号、启用开关、缺变量报错与改动留痕。spec/plan 见 `docs/spec/s3-4-prompt-management.md`、`docs/plan/s3-4-prompt-management.md`。
+- 决策 1（表与种子）：新表 `prompt_templates`；`UNIQUE(name, version)`；部分唯一索引 `uq_prompt_templates_active_name(name) WHERE is_active` 保证每 name 最多一条 active；迁移 `0006_s3_4` 内联种子 `qa/v1`（内容取自当前 `qa_v1.md`，末尾多一个换行、渲染无影响；`variables_json=["context","question"]`，`created_by=NULL`）。不改历史迁移。
+- 决策 2（不可变版本）：不提供 PUT 改 content/删除；只 `POST` 新建 + `PUT /{id}/activate` 显式启用；`version` 省略自动 `vN+1`，显式重复 409；仅 admin，`created_by` 取当前用户，启用刷新 `updated_at`。
+- 决策 3（读取链路）：生产只读库；`prompt_service.get_active_prompt()` 无 active 抛 `PromptTemplateError`，不静默回退文件；`answer_question` 增加可选 `prompt_template`，缺省仍读文件仅用于单测/兼容；`scripts/ask.py` 每次问答查一次 active 并传入，保证启用即时生效；无缓存（S3-7 再加）。
+- 决策 4（渲染）：`prompt_builder.render_prompt_text()` 是唯一 Jinja2 文本入口（`StrictUndefined`、`autoescape=False`）；文件版 `render_prompt` 读文件后复用它；缺变量/空模板统一 `PromptTemplateError`，错误不携带上下文正文。
+- 决策 5（上下文组装）：`build_context` 完全沿用 S1-6（4000 token 预算、rerank 排序、去重、截断、引用编号）；本卡只换 Prompt 来源，不改检索/回答/引用/拒答逻辑。
+- 决策 6（范围）：本轮只迁 QA Prompt；`rewrite_v1.md`、`kp_align_v1.md` 仍读文件；无 SSE/会话/前端/新依赖；不改 `.env.example`。
+- 决策 7（接口）：`GET /api/v1/admin/prompts?name=`、`POST`（201）、`PUT /{id}/activate`；`PromptCreate` 校验 name/version/content/variables；`PromptTemplateOut` 含全部字段；错误沿用 401/403/404/409/422。
+- 决策 8（测试）：新增 26 条（模型 2、渲染/answerer 4、service 12、API 8）；基线 610 → **636 passed, 1 warning**；外部 LLM 全部 fake。
+- 验证（真实 Postgres + 真实 LLM，`test1` id=18，2026-10-31）：
+  - 迁移后 `qa/v1` active、`variables_json=["context","question"]`、`created_by=NULL`。
+  - 基线 `scripts/ask.py --user-id 18 "错位相减法怎么用"` → `Prompt：qa/v1`，tokens 685/866/1551，cost ¥0.002280。
+  - 通过真实 HTTP（TestClient + 临时 admin）`POST` 新建并启用 `qa/v2`（v1 末尾加“回答末尾必须写【PROMPT-V2】”）→ 同一问题回答末尾出现【PROMPT-V2】，`Prompt：qa/v2`，tokens 699/802/1501，cost ¥0.002163。
+  - `GET` 历史返回 v2/v1；`PUT /1/activate` 切回 v1 → 同一问题标记消失，`Prompt：qa/v1`，tokens 685/862/1547，cost ¥0.002272；历史最终 v1 active、v2 inactive；临时 admin 清理，v2 保留为历史。
+  - 激活首次实测触发 `uq_prompt_templates_active_name` 冲突：同一 flush 同时把旧版 false、目标 true，PG 在语句级检查部分唯一索引。修复为“先把同 name 全部置 false → `flush()` → 目标置 true → commit”，并加 FakeSession flush 断言；修复后真实 HTTP 激活成功。
+- 已知限制：无删除/停用/回滚预览接口；`variables_json` 只做元数据与类型校验，不校验模板实际引用；每次问答多一次 DB 查询；多管理员并发激活无重试；行级留痕不能替代完整操作审计；rewrite/kp Prompt 未迁。

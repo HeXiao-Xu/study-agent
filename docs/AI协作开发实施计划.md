@@ -1008,7 +1008,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [x] S3-1 索引服务产品化
 [x] S3-2 检索服务
 [x] S3-3 Query 改写与意图识别
-[ ] S3-4 上下文组装 + Prompt 版本管理
+[x] S3-4 上下文组装 + Prompt 版本管理
 [ ] S3-5 问答 API（SSE）+ 会话落库
 [ ] S3-6 拒答与引用校验
 [ ] S3-7 缓存 + 调用日志 + 用量统计

@@ -457,6 +457,32 @@
 - 聚合方式：按 `name='index.note' AND payload->>'run_id'=run_id` 查 `async_tasks`，Python 内聚合，不建新表
 - 错误：`403/40300`；`404/40400`「索引重建记录不存在」；`422/42200` run_id 格式非法
 
+### GET /api/v1/admin/prompts（S3-4 定稿）
+- 权限：`admin`（其他角色 403/40300；匿名 401/40100）
+- 类型：同步
+- 入参：查询 `name` 可选，匹配 `^[a-z][a-z0-9_]{0,63}$`（非法 422/42200）
+- 出参：`Envelope[list[PromptTemplateOut]]`，按 `created_at DESC, id DESC`；含 `content`
+- `PromptTemplateOut`：`id/name/version/content/variables_json/model_hint/is_active/created_by/created_at/updated_at`
+- 说明：版本历史只读；`is_active` 由部分唯一索引保证每个 name 最多一条
+
+### POST /api/v1/admin/prompts（S3-4 定稿）
+- 权限：`admin`
+- 类型：同步，**201**
+- 入参：`{name, content, version?, variables_json?, model_hint?, activate?}`
+  - `name` 必填 + 正则；`content` 1–20000 字（strip 后非空）；`version` 可选 + `^[A-Za-z0-9._-]{1,32}$`
+  - `version` 省略时自动取同 name 最大 `vN` + 1；`activate` 默认 false
+- 出参：`Envelope[PromptTemplateOut]`；`created_by`=当前 admin
+- 行为：版本行不可变；`activate=true` 同事务停用旧版并启用新版
+- 错误：`409/40900`「Prompt 版本已存在」；`422/42200` 校验失败；`403/401`
+
+### PUT /api/v1/admin/prompts/{id}/activate（S3-4 定稿）
+- 权限：`admin`
+- 类型：同步
+- 入参：路径 `id` 正整数
+- 行为：同 name 全部停用后启用目标，刷新 `updated_at`；先 flush 停用再启用，避免部分唯一索引冲突
+- 出参：`Envelope[PromptTemplateOut]`（目标 `is_active=true`）
+- 错误：`404/40400`「Prompt 版本不存在」；`422/42200` id 非法；`403/401`
+
 ### GET /health
 - 权限：公开
 - 类型：同步

@@ -424,14 +424,20 @@ erDiagram
 
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
 |---|---|---|---|---|---|
-| id | BIGINT | 否 | 自增 | 主键 | PK ⚠ |
-| name | TEXT | 否 | — | Prompt 名称 | 复合 UNIQUE(name, version) ⚠ |
-| version | TEXT | 否 | — | 版本号（论文做"迭代 3 版效果对比"） | — |
-| content | TEXT | 否 | — | Prompt 正文 | — |
-| variables_json | JSONB | 是 | — | 模板变量 | — |
-| model_hint | TEXT | 是 | — | 适用模型 | — |
-| is_active | BOOLEAN | 否 | false ⚠ | 当前生效版本 | — |
-| created_by | BIGINT | 是 | — | 创建人 | — |
+| id | BIGINT IDENTITY | 否 | 自增 | 主键 | PK |
+| name | TEXT | 否 | — | Prompt 名称（如 `qa`） | 复合 UNIQUE(name, version) |
+| version | TEXT | 否 | — | 版本号（如 `v1`） | 同上 |
+| content | TEXT | 否 | — | Jinja2 模板正文 | — |
+| variables_json | JSONB | 是 | — | 变量名数组，如 `["context","question"]` | — |
+| model_hint | TEXT | 是 | — | 适用模型提示 | — |
+| is_active | BOOLEAN | 否 | false | 当前生效版本 | 部分唯一 `uq_prompt_templates_active_name(name) WHERE is_active` |
+| created_by | BIGINT | 是 | — | 创建人；系统种子为 NULL | FK → users.id |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间 | `ix_prompt_templates_name_created_at(name, created_at)` |
+| updated_at | TIMESTAMPTZ | 否 | now() | 启用时刷新 | — |
+
+- 版本行不可变；新版本只增不改，启用通过 `is_active` 切换。
+- 每个 name 最多一条 active，由部分唯一索引保证；切换时必须先停旧再启新（同一事务分两次 flush）。
+- 迁移 `0006_s3_4` 内联种子 `qa/v1`（内容等于 `ai/prompts/qa_v1.md`，`variables_json=["context","question"]`）。
 
 ### 8.4 llm_call_logs
 

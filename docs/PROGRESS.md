@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-3 Query 改写与意图识别（历史裁剪、进程内 LRU/TTL、LLM 失败降级、10 条指代追问 hit@3=9/10）；后端 **610 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-4 上下文组装 + Prompt 版本管理；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-4 上下文组装 + Prompt 版本管理（`prompt_templates` + `qa/v1` 种子、Jinja2 文本渲染、admin 三接口、ask.py 读库即时生效）；后端 **636 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-5 问答 API（SSE）+ 会话/消息/引用落库；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
 ## 任务清单
@@ -50,7 +50,7 @@
 - [x] S3-1 索引服务产品化
 - [x] S3-2 检索服务
 - [x] S3-3 Query 改写与意图识别
-- [ ] S3-4 上下文组装 + Prompt 版本管理
+- [x] S3-4 上下文组装 + Prompt 版本管理
 - [ ] S3-5 问答 API（SSE）+ 会话落库
 - [ ] S3-6 拒答与引用校验
 - [ ] S3-7 缓存 + 调用日志 + 用量统计
@@ -159,8 +159,22 @@
 | 61 | `LLMError` 降级时拿不到 usage，token/cost 记 0（S3-3） | 失败调用成本不透明 | S3-7 在适配器层记录失败请求的预估用量 |
 | 62 | 指代追问验收 hit@3=9/10；第 6 条改写正确但检索未召回 `note 77/chunk 11`（S3-3） | 单条追问仍可能答非所问 | 检索侧调权重/召回，不改写侧粉饰 |
 | 63 | 无 HTTP 接口/前端，S3-5 接入前只能脚本验收（S3-3） | 前端暂不可用 | S3-5 接会话 API |
+| 64 | Prompt 版本无删除/停用/归档接口，历史只增不减（S3-4） | 长期积累脏版本；误建无法清理 | 需要时加 admin 归档/软删，不做物理删除 |
+| 65 | 只有 QA Prompt 走库；`rewrite_v1.md`、`kp_align_v1.md` 仍读文件（S3-4） | 三类 Prompt 管理方式不统一 | 后续卡迁 rewrite/kp，统一 `prompt_service` |
+| 66 | 每次问答多一次 `prompt_templates` active 查询，无缓存（S3-4） | 高并发多一次 DB 往返 | S3-7 加 Redis 短 TTL，并带版本失效 |
+| 67 | `variables_json` 只校验类型/非空，不校验模板实际引用了哪些变量（S3-4） | 元数据可能和正文不一致 | 保存时用 Jinja2 AST 提取变量并与元数据比对 |
+| 68 | 多管理员并发激活同一 name 无重试，部分唯一索引冲突会失败（S3-4） | 并发切换可能一方报错 | 单管理员场景暂可接受；需要时加重试/串行化 |
+| 69 | 行级留痕只有 `created_by/created_at/updated_at`，无完整操作审计日志（S3-4） | 只能知道谁建，不能还原启用操作序列 | S3-7 `llm_call_logs`/运维审计补事件日志 |
 
 ## 变更日志
+
+### 2026-10-31（S3-4）
+- S3-4 完成（spec `docs/spec/s3-4-prompt-management.md` + plan `docs/plan/s3-4-prompt-management.md`，用户确认后内联执行）。交付：`models/prompt_template.py`、迁移 `0006_s3_4` + `qa/v1` 种子、`services/prompt_service.py`、`schemas/prompt.py`、`api/v1/admin.py` 三个接口、`render_prompt_text`、`answer_question(prompt_template=...)`、`scripts/ask.py` 读库并打印版本
+- 拍板（D-038）：版本行不可变、只增不改；部分唯一索引保证每 name 一个 active；生产只读库、无 active 抛错；只迁 QA Prompt；上下文组装沿用 S1-6；无新依赖
+- 测试：新增 26 条（模型 2、渲染/answerer 4、service 12、API 8），全量 **636 passed, 1 warning**
+- 验收：迁移后 `qa/v1` active；基线 `ask.py --user-id 18 "错位相减法怎么用"` → `Prompt：qa/v1`；真实 HTTP 建并启用 `qa/v2`（加标记）→ 回答出现【PROMPT-V2】、`Prompt：qa/v2`；`PUT` 切回 v1 → 标记消失、`Prompt：qa/v1`；历史 v1 active / v2 inactive；临时 admin 清理，v2 留历史
+- 修复：首次激活触发部分唯一索引冲突，改为“先全部停用 → flush → 启用目标”（`fix(s3-4)`，带 FakeSession 回归断言）
+- 文档同步：API.md §11、SCHEMA.md §8.3、DECISIONS D-038、PROGRESS、AGENTS §9.2/§9.6、实施计划 S3-4 勾选、spec/plan 执行记录
 
 ### 2026-10-31（S3-3）
 - S3-3 完成（spec `docs/spec/s3-3-query-rewrite.md` + plan `docs/plan/s3-3-query-rewrite.md`，用户确认后内联执行）。交付：`ai/prompts/rewrite_v1.md`、`ai/rag/query_rewriter.py`（严格 JSON + 2 次重试 + `RewriteOutput` 校验）、`services/query_rewrite.py`（历史裁剪/LRU+TTL/降级）、`scripts/rewrite_eval.py`；`ai/llm/{base,openai_compat}.py` 增加可选 `scene`；新增 6 个 `QUERY_REWRITE_*` 配置
