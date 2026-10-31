@@ -267,3 +267,273 @@ def prepare_ask(
         rewrite=rewrite,
         started_at=started,
     )
+
+
+def _usage_payload(response: LLMResponse | None) -> dict[str, object]:
+    if response is None:
+        return {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cost_yuan": 0.0,
+        }
+    return {
+        "prompt_tokens": response.prompt_tokens,
+        "completion_tokens": response.completion_tokens,
+        "total_tokens": response.total_tokens,
+        "cost_yuan": response.cost_yuan,
+    }
+
+
+def _token_usage(
+    response: LLMResponse | None, rewrite: RewriteResult | None
+) -> dict[str, object]:
+    payload = _usage_payload(response)
+    payload["rewrite"] = (
+        {
+            "prompt_tokens": rewrite.prompt_tokens,
+            "completion_tokens": rewrite.completion_tokens,
+            "total_tokens": rewrite.total_tokens,
+            "cost_yuan": rewrite.cost_yuan,
+            "degraded": rewrite.degraded,
+            "cache_hit": rewrite.cache_hit,
+        }
+        if rewrite is not None
+        else None
+    )
+    return payload
+
+
+def _total_tokens(
+    response: LLMResponse | None, rewrite: RewriteResult | None
+) -> int:
+    return (response.total_tokens if response is not None else 0) + (
+        rewrite.total_tokens if rewrite is not None else 0
+    )
+
+
+def _persist_assistant(
+    *,
+    session_factory: Callable[[], Session],
+    plan: QaPlan,
+    content: str,
+    response: LLMResponse | None,
+    citation_indices: list[int],
+) -> Message:
+    latency_ms = int((time.perf_counter() - plan.started_at) * 1000)
+    session = session_factory()
+    try:
+        message = Message(
+            conversation_id=plan.conversation_id,
+            role="assistant",
+            content_md=content,
+            token_usage=_token_usage(response, plan.rewrite),
+            latency_ms=latency_ms,
+            model=(
+                response.model
+                if response is not None
+                else get_settings().llm_model
+            ),
+            prompt_version=plan.prompt_version,
+        )
+        session.add(message)
+        session.flush()
+        if plan.prepared is not None and plan.prepared.built is not None:
+            for index in citation_indices:
+                citation = plan.prepared.built.items[index - 1].citation
+                session.add(
+                    MessageCitation(
+                        message_id=message.id,
+                        chunk_id=citation.chunk_id,
+                        note_id=citation.note_id,
+                        score=citation.rerank_score,
+                        snippet=citation.snippet,
+                        page_no=citation.page_no,
+                        rank=index,
+                    )
+                )
+        session.commit()
+        return message
+    finally:
+        session.close()
+
+
+def _valid_citation_indices(plan: QaPlan, text: str) -> list[int]:
+    if plan.prepared is None or plan.prepared.built is None:
+        return []
+    size = len(plan.prepared.built.items)
+    return [
+        index
+        for index in extract_citation_indices(text)
+        if 1 <= index <= size
+    ]
+
+
+def _done_data(
+    plan: QaPlan,
+    message: Message,
+    *,
+    refused: bool,
+    response: LLMResponse | None,
+) -> dict[str, object]:
+    return {
+        "message_id": message.id,
+        "conversation_id": str(plan.conversation_id),
+        "tokens": _total_tokens(response, plan.rewrite),
+        "latency_ms": int((time.perf_counter() - plan.started_at) * 1000),
+        "refused": refused,
+    }
+
+
+def _error_event() -> QaStreamEvent:
+    return QaStreamEvent(
+        event="error",
+        data={"code": 50000, "message": "生成失败"},
+    )
+
+
+def stream_events(
+    plan: QaPlan,
+    *,
+    llm_client: LLMClient | None = None,
+    session_factory: Callable[[], Session] = new_session,
+) -> Iterator[QaStreamEvent]:
+    yield QaStreamEvent(
+        event="meta",
+        data={
+            "conversation_id": str(plan.conversation_id),
+            "user_message_id": plan.user_message_id,
+            "citations": [asdict(citation) for citation in plan.citations],
+        },
+    )
+
+    if plan.kind == "chitchat":
+        text = plan.chitchat_reply or FALLBACK_REPLY
+        yield QaStreamEvent(event="delta", data={"text": text})
+        try:
+            message = _persist_assistant(
+                session_factory=session_factory,
+                plan=plan,
+                content=text,
+                response=None,
+                citation_indices=[],
+            )
+        except Exception:
+            logger.exception("qa_persist_chitchat_failed")
+            yield _error_event()
+            return
+        yield QaStreamEvent(
+            event="done",
+            data=_done_data(plan, message, refused=False, response=None),
+        )
+        return
+
+    if plan.kind == "refused":
+        yield QaStreamEvent(event="delta", data={"text": REFUSAL_TEXT})
+        try:
+            message = _persist_assistant(
+                session_factory=session_factory,
+                plan=plan,
+                content=REFUSAL_TEXT,
+                response=None,
+                citation_indices=[],
+            )
+        except Exception:
+            logger.exception("qa_persist_refusal_failed")
+            yield _error_event()
+            return
+        yield QaStreamEvent(
+            event="done",
+            data=_done_data(plan, message, refused=True, response=None),
+        )
+        return
+
+    if plan.prepared is None:
+        yield _error_event()
+        return
+
+    parts: list[str] = []
+    final_response: LLMResponse | None = None
+    stream = stream_answer(plan.prepared, llm_client=llm_client)
+    try:
+        for chunk in stream:
+            if chunk.text:
+                parts.append(chunk.text)
+                yield QaStreamEvent(event="delta", data={"text": chunk.text})
+            if chunk.response is not None:
+                final_response = chunk.response
+    except GeneratorExit:
+        logger.info(
+            "qa_stream_disconnected",
+            extra={"conversation_id": plan.conversation_id},
+        )
+        return
+    except LLMError:
+        logger.warning(
+            "qa_stream_llm_failed",
+            extra={"conversation_id": plan.conversation_id},
+        )
+        yield _error_event()
+        return
+    except Exception:
+        logger.exception(
+            "qa_stream_failed",
+            extra={"conversation_id": plan.conversation_id},
+        )
+        yield _error_event()
+        return
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            close()
+
+    answer_text = "".join(parts).strip()
+    refused = not answer_text
+    if refused:
+        answer_text = REFUSAL_TEXT
+        yield QaStreamEvent(event="delta", data={"text": REFUSAL_TEXT})
+    indices = [] if refused else _valid_citation_indices(plan, answer_text)
+    try:
+        message = _persist_assistant(
+            session_factory=session_factory,
+            plan=plan,
+            content=answer_text,
+            response=final_response,
+            citation_indices=indices,
+        )
+    except Exception:
+        logger.exception("qa_persist_assistant_failed")
+        yield _error_event()
+        return
+
+    yield QaStreamEvent(
+        event="done",
+        data=_done_data(
+            plan,
+            message,
+            refused=refused,
+            response=final_response,
+        ),
+    )
+
+
+def get_message_citations(
+    session: Session, *, user_id: int, message_id: int
+) -> list[MessageCitation]:
+    message = session.scalar(
+        select(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(
+            Message.id == message_id,
+            Conversation.user_id == user_id,
+        )
+    )
+    if message is None:
+        raise NotFoundError("消息不存在")
+    return list(
+        session.scalars(
+            select(MessageCitation)
+            .where(MessageCitation.message_id == message_id)
+            .order_by(MessageCitation.rank.asc(), MessageCitation.id.asc())
+        ).all()
+    )
