@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-2 检索服务（scope 过滤、student 检索接口、rerank 开关/debug、P95 压测）；后端 **586 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-3 Query 改写与意图识别；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-3 Query 改写与意图识别（历史裁剪、进程内 LRU/TTL、LLM 失败降级、10 条指代追问 hit@3=9/10）；后端 **610 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-4 上下文组装 + Prompt 版本管理；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
 ## 任务清单
@@ -49,7 +49,7 @@
 ### 阶段 3：RAG 问答上线（M2）
 - [x] S3-1 索引服务产品化
 - [x] S3-2 检索服务
-- [ ] S3-3 Query 改写与意图识别
+- [x] S3-3 Query 改写与意图识别
 - [ ] S3-4 上下文组装 + Prompt 版本管理
 - [ ] S3-5 问答 API（SSE）+ 会话落库
 - [ ] S3-6 拒答与引用校验
@@ -153,8 +153,21 @@
 | 55 | P95 受外部 Embedding 支配（实测 P50 154ms/次），无查询向量缓存（S3-2） | Embedding 抖动时 P95 贴线；重复问题重复付费 | S3-7 Redis 缓存 query embedding 后再压测 |
 | 56 | `debug=true` 最多返回 3×20 条完整块文本（S3-2） | 响应体大，误开会影响前端性能 | 仅调试使用；需要时加 `debug_limit` |
 | 57 | 检索不支持 kp/知识点过滤（`note_kps` 有数据但未下推）（S3-2） | 不能按知识点圈定复习范围 | 需要时加 join `note_kps` 并评估索引 |
+| 58 | 意图由单次 LLM 判定且仅 4 类；10 条验收全部判为 `concept_explain`（S3-3） | 误判会走错分支/文案，但不改检索结果 | S3-5 用真实对话评估；必要时加规则或多标签 |
+| 59 | 改写缓存只在进程内，不跨 worker/重启（S3-3） | 多 worker 命中率低、重复计费 | S3-7 换 Redis |
+| 60 | 历史只留最近 3 个 user 轮、单条截 300 字（S3-3） | 长对话更早条件丢失，追问可能缺前提 | S3-5 按需调参；超长对话先摘要 |
+| 61 | `LLMError` 降级时拿不到 usage，token/cost 记 0（S3-3） | 失败调用成本不透明 | S3-7 在适配器层记录失败请求的预估用量 |
+| 62 | 指代追问验收 hit@3=9/10；第 6 条改写正确但检索未召回 `note 77/chunk 11`（S3-3） | 单条追问仍可能答非所问 | 检索侧调权重/召回，不改写侧粉饰 |
+| 63 | 无 HTTP 接口/前端，S3-5 接入前只能脚本验收（S3-3） | 前端暂不可用 | S3-5 接会话 API |
 
 ## 变更日志
+
+### 2026-10-31（S3-3）
+- S3-3 完成（spec `docs/spec/s3-3-query-rewrite.md` + plan `docs/plan/s3-3-query-rewrite.md`，用户确认后内联执行）。交付：`ai/prompts/rewrite_v1.md`、`ai/rag/query_rewriter.py`（严格 JSON + 2 次重试 + `RewriteOutput` 校验）、`services/query_rewrite.py`（历史裁剪/LRU+TTL/降级）、`scripts/rewrite_eval.py`；`ai/llm/{base,openai_compat}.py` 增加可选 `scene`；新增 6 个 `QUERY_REWRITE_*` 配置
+- 拍板（D-037）：4 类意图只做流程分支，chitchat 同一次调用生成 reply 且不检索；history 由调用方传入、最近 3 个 user 轮、单条 300 字；缓存进程内 LRU/TTL、只缓存成功；LLM 失败回退原问题 + `note_query` + `degraded=True`，不中断检索；不加接口/表/迁移/依赖
+- 测试：新增 24 条（AI 10、service 13、llm scene 1），全量 **610 passed, 1 warning**
+- 验收：`scripts/rewrite_eval.py --user-id 18 --top-k 3` → hit@3 **9/10**、degraded 0/10、tokens 3958、cost ¥0.003802、PASS；闲聊与独立问题检查通过；失败条为检索未召回 `note 77/chunk 11`，未改样本/关键词
+- 文档同步：DECISIONS D-037、PROGRESS、AGENTS §9.2/§9.6、实施计划 S3-3 勾选、spec §9/§11、plan 执行记录；无 API/SCHEMA/前端改动
 
 ### 2026-10-31（S3-2）
 - S3-2 完成（spec `docs/spec/s3-2-retrieval-service.md` + plan `docs/plan/s3-2-retrieval-service.md`，用户确认后内联执行）。交付：`ai/rag/retriever.py` scope 下推（join `notes`，恒带 `user_id` + `deleted_at IS NULL`）与 `embedding_ms`、`schemas/retrieval.py`、`services/retrieval_service.py`、`api/v1/retrieval.py`（`POST /api/v1/retrieval/search`，student）、`scripts/retrieval_bench.py`；新增 3 个配置项 `RETRIEVAL_TOP_K/RECALL_K/RERANK_ENABLED`

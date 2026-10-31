@@ -476,3 +476,16 @@
 - 验证（P95）：`scripts/retrieval_bench.py --runs 20 --warmup 3 --no-rerank`：wall P50=172ms / P95=229ms；server P50=163 / P95=223；embedding P50=154ms；PASS（<500ms）。
 - 回归：`scripts/ask.py --user-id 28` 真实回答并引用笔记 #81 两个块（refused=否，llm_calls=1）；`scripts/retrieval_eval.py --user-id 28` 正常跑完 10 问（该账号仅 1 篇笔记，hit@5=2/10，rerank fallback=0/10）。
 - 已知限制：带 `subject_id` 不命中文档笔记（S2-8 未回填 subject）；folder 是自由文本、无层级；P95 受外部 Embedding 支配（本机 154ms/次），无缓存；debug 响应最多 3×20 条完整块；kp/知识点过滤未支持；rerank 失败静默回退。
+
+## D-037 Query 改写与意图识别（S3-3）
+
+- 背景：S3-2 检索服务只接受单轮完整查询；多轮追问（“那它的前提条件呢？”）直接检索会丢失指代对象；chitchat 也会白跑检索。S3-3 在检索前做一次改写/意图识别。spec/plan 见 `docs/spec/s3-3-query-rewrite.md`、`docs/plan/s3-3-query-rewrite.md`。
+- 决策 1（分层）：Prompt `ai/prompts/rewrite_v1.md` + 严格 JSON/重试/`RewriteOutput` 校验放 `ai/rag/query_rewriter.py`；`services/query_rewrite.py` 只做历史裁剪、缓存、降级、日志；service 不 import httpx/厂商 SDK。
+- 决策 2（意图）：仅 4 类 `note_query/question_query/concept_explain/chitchat`；意图只做流程分支，禁止改变检索 scope、禁止生成多查询变体；chitchat 由同一次 LLM 调用生成 1–2 句 reply，不检索。
+- 决策 3（历史契约）：调用方传入升序对话历史（不含当前问题）；S3-3 只取最近 3 个 user 轮及其后 assistant，单条空白折叠并截 300 字；不读会话表（S3-5 负责落库与鉴权）。
+- 决策 4（缓存）：进程内 `OrderedDict` LRU + TTL（默认 3600s/256 条，线程锁）；key=`sha256(prompt_version|model|question|role:content...)`，只缓存成功结果；命中时 `cache_hit=True` 且 tokens/cost/latency 归零；`use_cache=False` 跳过读写；S3-7 换 Redis。
+- 决策 5（降级）：LLM 超时/非 JSON/字段非法重试 2 次后，回退原问题 + `intent="note_query"` + `degraded=True` + 固定 reply，检索继续，禁止把异常抛给问答主链路；`RewriteError` 携带累计 `llm_calls/tokens/cost`，`LLMError` 因拿不到 usage 记 0。
+- 决策 6（配置与边界）：6 个 `QUERY_REWRITE_*` 配置；无新接口/表/迁移/依赖；不改 `answer_question`、`retrieval_service`、API.md/SCHEMA.md/前端；LLM 调用加 `scene="query_rewrite"` 参数，`llm_call_logs` 落库仍归 S3-7。
+- 决策 7（测试）：新增 24 条（AI 10、service 13、llm scene 1）；全量 **610 passed, 1 warning**；真实外部调用全部 fake。
+- 验证（真实 DashScope LLM/Embedding + Postgres，`test1` id=18）：`scripts/rewrite_eval.py --user-id 18 --top-k 3` → hit@3 **9/10**、degraded 0/10、tokens 3958、cost ¥0.003802；10 条均 `concept_explain`、`is_followup=true`；`你好`→chitchat+reply；独立问题 `is_followup=false`。第 6 条“分段函数 f(f(-1))”改写正确，但检索 top3 未召回目标块 `note 77/chunk 11`（块存在），按约定不改样本/关键词。
+- 已知限制：意图单次 LLM 判定、4 类粒度粗；缓存不跨进程/重启；历史截断可能丢条件；chitchat 误判会跳过检索；失败调用 token 无法完整记账；无 API/前端，S3-5 接入前只能脚本验收。
