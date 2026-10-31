@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     rerank_top_k: int = 6
     rerank_price_per_million: float = 0.5
 
+    # --- 检索服务（S3-2）---
+    retrieval_top_k: int = 6
+    retrieval_recall_k: int = 20
+    retrieval_rerank_enabled: bool = True
+
     # --- QA（S1-6）---
     qa_context_max_tokens: int = 4000
     qa_refuse_threshold: float = 0.45
