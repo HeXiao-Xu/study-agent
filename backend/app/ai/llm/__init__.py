@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse
+from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse, LLMStreamChunk
 from app.ai.llm.errors import LLMError
 from app.ai.llm.openai_compat import OpenAICompatibleLLMClient
 from app.core.config import get_settings
@@ -30,6 +30,7 @@ __all__ = [
     "LLMError",
     "LLMMessage",
     "LLMResponse",
+    "LLMStreamChunk",
     "OpenAICompatibleLLMClient",
     "get_llm_client",
 ]

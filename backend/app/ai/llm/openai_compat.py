@@ -7,11 +7,13 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterator
 from typing import Any, Callable
 
 import httpx
+import tiktoken
 
-from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse
+from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse, LLMStreamChunk
 from app.ai.llm.errors import LLMError
 
 logger = logging.getLogger(__name__)
@@ -64,15 +66,12 @@ class OpenAICompatibleLLMClient(LLMClient):
     ) -> LLMResponse:
         if not messages:
             raise ValueError("messages 不能为空")
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": message.role, "content": message.content}
-                for message in messages
-            ],
-            "temperature": self._temperature if temperature is None else temperature,
-            "max_tokens": self._max_output_tokens if max_tokens is None else max_tokens,
-        }
+        payload = self._build_payload(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=False,
+        )
         started = time.perf_counter()
         data = self._post_with_retry(payload)
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -105,6 +104,160 @@ class OpenAICompatibleLLMClient(LLMClient):
             latency_ms=latency_ms,
             cost_yuan=cost,
         )
+
+    def _build_payload(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float | None,
+        max_tokens: int | None,
+        stream: bool,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": message.role, "content": message.content}
+                for message in messages
+            ],
+            "temperature": self._temperature if temperature is None else temperature,
+            "max_tokens": self._max_output_tokens if max_tokens is None else max_tokens,
+        }
+        if stream:
+            payload["stream"] = True
+            payload["stream_options"] = {"include_usage": True}
+        return payload
+
+    def chat_stream(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        scene: str = "qa",
+    ) -> Iterator[LLMStreamChunk]:
+        if not messages:
+            raise ValueError("messages 不能为空")
+        payload = self._build_payload(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        started = time.perf_counter()
+        texts: list[str] = []
+        usage: dict[str, Any] | None = None
+        emitted = False
+        attempt = 0
+
+        while True:
+            try:
+                with self._client.stream(
+                    "POST",
+                    self._url,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json=payload,
+                ) as response:
+                    if not 200 <= response.status_code < 300:
+                        status = response.status_code
+                        raise LLMError(
+                            f"LLM 流式请求失败：HTTP {status}",
+                            status_code=status,
+                            retryable=status in _RETRYABLE_STATUS,
+                        )
+                    for line in response.iter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        raw = line[5:].strip()
+                        if raw == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(raw)
+                        except ValueError as exc:
+                            raise LLMError(
+                                "LLM 流式返回非 JSON", retryable=False
+                            ) from exc
+                        if not isinstance(data, dict):
+                            raise LLMError("LLM 流式块不是对象", retryable=False)
+                        chunk_usage = data.get("usage")
+                        if isinstance(chunk_usage, dict):
+                            usage = chunk_usage
+                        for choice in data.get("choices") or []:
+                            if not isinstance(choice, dict):
+                                continue
+                            delta = choice.get("delta")
+                            if not isinstance(delta, dict):
+                                continue
+                            content = delta.get("content")
+                            if not isinstance(content, str) or not content:
+                                continue
+                            emitted = True
+                            texts.append(content)
+                            yield LLMStreamChunk(text=content)
+                break
+            except LLMError as exc:
+                if emitted or attempt >= self._max_retries or not exc.retryable:
+                    raise
+                attempt += 1
+                self._sleep(self._backoff(attempt - 1, None))
+            except httpx.HTTPError as exc:
+                if emitted or attempt >= self._max_retries:
+                    raise LLMError(
+                        f"LLM 流式网络错误（重试耗尽）：{type(exc).__name__}",
+                        retryable=True,
+                    ) from exc
+                attempt += 1
+                self._sleep(self._backoff(attempt - 1, None))
+
+        text = "".join(texts)
+        prompt_tokens, completion_tokens, total_tokens = self._stream_usage(
+            usage, messages, text
+        )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        cost = (
+            prompt_tokens * self._price_in / 1_000_000
+            + completion_tokens * self._price_out / 1_000_000
+        )
+        self.usage_tokens += total_tokens
+        self.request_count += 1
+        logger.info(
+            "llm_call",
+            extra={
+                "scene": scene,
+                "model": self.model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "latency_ms": latency_ms,
+                "cost_yuan": round(cost, 8),
+                "stream": True,
+            },
+        )
+        yield LLMStreamChunk(
+            response=LLMResponse(
+                text=text,
+                model=self.model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                cost_yuan=cost,
+            )
+        )
+
+    @staticmethod
+    def _stream_usage(
+        usage: dict[str, Any] | None,
+        messages: list[LLMMessage],
+        text: str,
+    ) -> tuple[int, int, int]:
+        if usage is not None:
+            return OpenAICompatibleLLMClient._parse_usage({"usage": usage})
+        encoding = tiktoken.get_encoding("cl100k_base")
+        prompt_tokens = len(
+            encoding.encode("\n".join(message.content for message in messages))
+        )
+        completion_tokens = len(encoding.encode(text))
+        return prompt_tokens, completion_tokens, prompt_tokens + completion_tokens
 
     def _post_with_retry(self, payload: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(self._max_retries + 1):
