@@ -328,3 +328,22 @@ def test_stream_answer_yields_deltas_and_final_response() -> None:
     assert chunks[-1].response is not None
     assert chunks[-1].response.total_tokens == 15
     assert fake.calls[0][0].content == "prompt"
+
+
+def test_stream_answer_accepts_retry_messages() -> None:
+    prepared = PreparedAnswer(
+        retrieval=_retrieval([_chunk()]),
+        built=None,
+        prompt="原始 prompt",
+        refused=None,
+        retrieval_ms=1,
+        top_score=0.9,
+        degraded=False,
+    )
+    fake = FakeStreamLLM(["答[1]"])
+    retry = [LLMMessage(role="user", content="重试 prompt")]
+
+    chunks = list(stream_answer(prepared, llm_client=fake, messages=retry))
+
+    assert "".join(chunk.text for chunk in chunks) == "答[1]"
+    assert fake.calls[0] == retry

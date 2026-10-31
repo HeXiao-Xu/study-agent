@@ -271,13 +271,16 @@ def stream_answer(
     prepared: PreparedAnswer,
     *,
     llm_client: LLMClient | None = None,
+    messages: list[LLMMessage] | None = None,
 ) -> Iterator[AnswerChunk]:
     if prepared.refused is not None:
         return
     client = llm_client if llm_client is not None else get_llm_client()
-    messages = [LLMMessage(role="user", content=prepared.prompt)]
+    request_messages = messages or [
+        LLMMessage(role="user", content=prepared.prompt)
+    ]
     for chunk in client.chat_stream(
-        messages,
+        request_messages,
         temperature=get_settings().llm_temperature,
         max_tokens=get_settings().llm_max_output_tokens,
         scene="qa",
