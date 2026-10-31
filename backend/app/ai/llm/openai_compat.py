@@ -60,6 +60,7 @@ class OpenAICompatibleLLMClient(LLMClient):
         *,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        scene: str = "qa",
     ) -> LLMResponse:
         if not messages:
             raise ValueError("messages 不能为空")
@@ -86,7 +87,7 @@ class OpenAICompatibleLLMClient(LLMClient):
         logger.info(
             "llm_call",
             extra={
-                "scene": "qa",
+                "scene": scene,
                 "model": self.model,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,

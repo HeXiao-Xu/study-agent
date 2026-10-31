@@ -153,3 +153,14 @@ def test_llm_chat_top_level_not_object_raises() -> None:
     client = _client(lambda request: httpx.Response(200, json=[]))
     with pytest.raises(LLMError):
         client.chat([LLMMessage("user", "问题")])
+
+
+def test_llm_chat_scene_is_logged(caplog) -> None:
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.ai.llm.openai_compat")
+    client = _client(lambda request: _ok())
+    client.chat([LLMMessage("user", "问题")], scene="query_rewrite")
+
+    record = next(item for item in caplog.records if item.message == "llm_call")
+    assert record.scene == "query_rewrite"

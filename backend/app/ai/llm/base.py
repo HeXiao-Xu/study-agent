@@ -38,5 +38,6 @@ class LLMClient(ABC):
         *,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        scene: str = "qa",
     ) -> LLMResponse:
-        """发送一轮对话；网络重试由实现负责，逻辑重试由 Answerer 负责。"""
+        """发送一轮对话；网络重试由实现负责，逻辑重试由调用方负责。"""
