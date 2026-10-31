@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -64,12 +65,20 @@ class QaDeltaData(BaseModel):
     text: str
 
 
+class QaSuggestion(BaseModel):
+    type: Literal["rephrase", "note"]
+    text: str
+    note_id: int | None = None
+
+
 class QaDoneData(BaseModel):
     message_id: int
     conversation_id: str
     tokens: int
     latency_ms: int
     refused: bool
+    refusal_reason: str | None = None
+    suggestions: list[QaSuggestion] = Field(default_factory=list)
 
 
 class QaErrorData(BaseModel):

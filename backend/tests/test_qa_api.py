@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.api.deps import get_db
 from app.core.exceptions import NotFoundError
@@ -99,6 +100,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
                         "tokens": 15,
                         "latency_ms": 20,
                         "refused": False,
+                        "refusal_reason": None,
+                        "suggestions": [],
                     },
                 ),
             ]
@@ -128,7 +131,42 @@ def test_qa_ask_streams_sse_frames(client: TestClient) -> None:
     assert "event: delta" in body
     assert '"text":"你好"' in body
     assert "event: done" in body
+    assert '"refusal_reason":null' in body
+    assert '"suggestions":[]' in body
     assert body.endswith("\n\n")
+
+
+def test_qa_done_contract_supports_refusal_suggestions() -> None:
+    from app.schemas.qa import QaDoneData, QaSuggestion
+
+    data = QaDoneData(
+        message_id=31,
+        conversation_id="12",
+        tokens=15,
+        latency_ms=20,
+        refused=True,
+        refusal_reason="no_valid_citation",
+        suggestions=[
+            QaSuggestion(type="rephrase", text="换问法"),
+            QaSuggestion(type="note", text="补笔记"),
+        ],
+    )
+    assert data.suggestions[0].type == "rephrase"
+    assert data.refusal_reason == "no_valid_citation"
+
+
+def test_qa_done_contract_rejects_unknown_suggestion_type() -> None:
+    from app.schemas.qa import QaDoneData
+
+    with pytest.raises(ValidationError):
+        QaDoneData(
+            message_id=31,
+            conversation_id="12",
+            tokens=15,
+            latency_ms=20,
+            refused=True,
+            suggestions=[{"type": "other", "text": "未知建议"}],
+        )
 
 
 def test_qa_ask_requires_student(client: TestClient) -> None:
