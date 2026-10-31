@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_db
 from app.core.context import get_trace_id
@@ -24,9 +25,22 @@ def _sse(event: qa_service.QaStreamEvent) -> str:
     return f"event: {event.event}\ndata: {data}\n\n"
 
 
-def _stream(plan: qa_service.QaPlan) -> Iterator[str]:
-    for event in qa_service.stream_events(plan):
-        yield _sse(event)
+async def _stream(
+    plan: qa_service.QaPlan, request: Request
+) -> AsyncIterator[str]:
+    events = qa_service.stream_events(plan)
+    try:
+        while True:
+            event = await run_in_threadpool(next, events, None)
+            if event is None:
+                break
+            if await request.is_disconnected():
+                break
+            yield _sse(event)
+    finally:
+        close = getattr(events, "close", None)
+        if close is not None:
+            close()
 
 
 @router.post(
@@ -36,6 +50,7 @@ def _stream(plan: qa_service.QaPlan) -> Iterator[str]:
 )
 def ask(
     payload: QaAskRequest,
+    request: Request,
     current_user: User = Depends(require_role("student")),
     session: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -52,7 +67,7 @@ def ask(
         conversation_id=conversation_id,
     )
     return StreamingResponse(
-        _stream(plan),
+        _stream(plan, request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -454,6 +454,8 @@ def stream_events(
 
     parts: list[str] = []
     final_response: LLMResponse | None = None
+    finished = False
+    failed = False
     stream = stream_answer(plan.prepared, llm_client=llm_client)
     try:
         for chunk in stream:
@@ -463,12 +465,9 @@ def stream_events(
             if chunk.response is not None:
                 final_response = chunk.response
     except GeneratorExit:
-        logger.info(
-            "qa_stream_disconnected",
-            extra={"conversation_id": plan.conversation_id},
-        )
         return
     except LLMError:
+        failed = True
         logger.warning(
             "qa_stream_llm_failed",
             extra={"conversation_id": plan.conversation_id},
@@ -476,6 +475,7 @@ def stream_events(
         yield _error_event()
         return
     except Exception:
+        failed = True
         logger.exception(
             "qa_stream_failed",
             extra={"conversation_id": plan.conversation_id},
@@ -486,6 +486,11 @@ def stream_events(
         close = getattr(stream, "close", None)
         if close is not None:
             close()
+        if not finished and not failed:
+            logger.info(
+                "qa_stream_disconnected",
+                extra={"conversation_id": plan.conversation_id},
+            )
 
     answer_text = "".join(parts).strip()
     refused = not answer_text
@@ -506,6 +511,7 @@ def stream_events(
         yield _error_event()
         return
 
+    finished = True
     yield QaStreamEvent(
         event="done",
         data=_done_data(
