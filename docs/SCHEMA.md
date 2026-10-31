@@ -367,7 +367,7 @@ erDiagram
 | conversation_id | BIGINT | 否 | — | | idx ⚠ |
 | role | TEXT | 否 | — | user / assistant / system（§10.12） | — |
 | content_md | TEXT | 否 | — | 消息内容（Markdown） | — |
-| token_usage | JSONB | 是 | — | token 用量（结构 TODO，S3-5 定） | — |
+| token_usage | JSONB | 是 | — | token 用量（结构见下，S3-5） | — |
 | latency_ms | INTEGER | 是 | — | 生成耗时 | — |
 | model | TEXT | 是 | — | 所用模型 | — |
 | prompt_version | TEXT | 是 | — | Prompt 版本 | — |
@@ -387,6 +387,30 @@ erDiagram
 | page_no | INTEGER | 是 | — | 页码 | — |
 | bbox_json | JSONB | 是 | — | 高亮位置框 | — |
 | rank | INTEGER | 是 | — | 排序位次 | — |
+
+**S3-5 落库约束：**
+- `conversations.user_id → users.id`；`messages.conversation_id → conversations.id ON DELETE CASCADE`；`message_citations.message_id → messages.id ON DELETE CASCADE`。
+- `messages.role` 由 CHECK 限定为 `user / assistant / system`。
+- `messages.token_usage` 结构：
+
+```json
+{
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "total_tokens": 0,
+  "cost_yuan": 0.0,
+  "rewrite": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "cost_yuan": 0.0,
+    "degraded": false,
+    "cache_hit": false
+  }
+}
+```
+
+  `rewrite` 可为 `null`（未调用改写或 chitchat 以外的无改写场景）。
 
 ## 8. Agent 与运维
 

@@ -508,3 +508,21 @@
   - `GET` 历史返回 v2/v1；`PUT /1/activate` 切回 v1 → 同一问题标记消失，`Prompt：qa/v1`，tokens 685/862/1547，cost ¥0.002272；历史最终 v1 active、v2 inactive；临时 admin 清理，v2 保留为历史。
   - 激活首次实测触发 `uq_prompt_templates_active_name` 冲突：同一 flush 同时把旧版 false、目标 true，PG 在语句级检查部分唯一索引。修复为“先把同 name 全部置 false → `flush()` → 目标置 true → commit”，并加 FakeSession flush 断言；修复后真实 HTTP 激活成功。
 - 已知限制：无删除/停用/回滚预览接口；`variables_json` 只做元数据与类型校验，不校验模板实际引用；每次问答多一次 DB 查询；多管理员并发激活无重试；行级留痕不能替代完整操作审计；rewrite/kp Prompt 未迁。
+
+## D-039 问答流式与会话落库（S3-5）
+
+- 背景：S3-4 以前只有脚本级同步问答；任务卡要求 `POST /qa/ask` SSE、会话/消息/引用落库、断连中断上游 LLM。spec/plan 见 `docs/spec/s3-5-qa-sse.md`、`docs/plan/s3-5-qa-sse.md`。
+- 决策 1（LLM 层）：`LLMClient` 新增 `chat_stream`；默认实现调用一次 `chat` 后产出单块文本 + 最终响应，兼容只实现 `chat` 的 Client；OpenAI 兼容适配器用 `stream=true` + `stream_options.include_usage=true`，只解析 `data:` 行，`[DONE]` 结束；缺失 usage 时用 tiktoken 估算。
+- 决策 2（时序）：`prepare_ask` 先落 user 消息（新会话同时落 conversations），再流式生成；assistant 与 citations 只在正常结束后用新 Session 落库；断连/流中错误不落 assistant。
+- 决策 3（断连）：服务端关闭上游 `chat_stream`，保留 user 消息，不向已断开的客户端写 `error`；正常结束发 `done`，流中失败发 `error` 后关闭。
+- 决策 4（引用）：S3-5 不做引用校验/重试/补丁；只持久化回答里合法的 `[n]` 子集，S3-6 `citation_checker` 接管；`meta.citations` 始终返回全部上下文引用。
+- 决策 5（契约）：`conversation_id` 对外十进制字符串、库内 BIGINT；会话不存在/不属于当前学生统一 404/40400；chitchat/拒答也走 meta → 单 delta → done；无会话列表/删除/重命名，无限流。
+- 决策 6（scope）：新会话按请求 scope 落 `conversations.scope_json`；已有会话请求未带 scope 时继承库内 scope，带 scope 时仅本次覆盖、不回写。
+- 决策 7（测试）：新增 30 条（模型 3、LLM 5、answerer 3、service 13、API 6）；基线 636 → **666 passed, 1 warning**；外部 LLM 全部 mock。
+- 验证（真实 Postgres + DashScope `qwen-plus`，`test1` id=18，2026-10-31）：
+  - 首问 SSE：meta 1 / delta 181 / done 1，curl 总耗时 **24.480s**；`done.tokens=1949`、`latency_ms=24472`；DB user+assistant，4 条 citations（rank 1–4），`prompt_version=qa/v1`。
+  - 追问（conversation_id=1）HTTP 总耗时 **3.688s**，同会话新增 user+assistant，引用接口返回 1 条。
+  - chitchat `你好` **1.224s**，`prompt_version` 为空；不存在会话 → 404/40400。
+  - 断连 `curl --max-time 3`：收到 meta + 20 delta 后超时（2776 bytes），DB 只有 user、无 assistant；日志出现 `qa_stream_disconnected`，上游未完成，连接已关闭。
+- 断连实现细节：同步 `StreamingResponse` 在 uvicorn 取消时不会主动关闭同步生成器；路由改为 async 生成器，`run_in_threadpool(next, events, None)` 逐事件读取，`finally: events.close()` 保证断连时关闭上游。
+- 已知限制：引用校验/重试归 S3-6；会话管理、前端归 S3-8；429 限流与 `llm_call_logs` 归 S3-7；未做并发压测。

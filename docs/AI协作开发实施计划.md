@@ -609,15 +609,16 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **提示词要点**：Prompt 存库 + 支持版本号与启用开关；从库读取而非硬编码；**模板变量渲染用 Jinja2（现成库），不要手写 `{{var}}` 正则替换**；模板变量缺失要报错而不是静默渲染成空；改动留痕（谁改的、什么时间）
 - **验收**：后台改一版 Prompt 并启用，问答立即生效；能查历史版本
 
-#### S3-5 问答 API（SSE 流式）+ 会话/消息/引用落库
-- **产出**：`api/v1/qa.py`、`services/qa_service.py`
-- **提示词要点**：`POST /qa/ask` 返回 SSE；事件类型 `meta`(引用列表)/`delta`(增量文本)/`done`(消息 id、token、耗时)；先落 user 消息，再边生成边推送，结束时落 assistant 消息与 citations；客户端断开要能中断上游 LLM 调用
+#### S3-5 问答 API（SSE 流式）+ 会话/消息/引用落库 ✅
+- **产出**：`api/v1/qa.py`、`services/qa_service.py`、`models/{conversation,message,message_citation}.py`、迁移 `0007_s3_5`
+- **提示词要点**：`POST /qa/ask` 返回 SSE；事件类型 `meta`(引用列表)/`delta`(增量文本)/`done`(消息 id、token、耗时)/`error`；先落 user 消息，再边生成边推送，结束时落 assistant 消息与 citations；客户端断开要能中断上游 LLM 调用
 - **验收**：
   ```bash
   curl -N -X POST localhost:8000/api/v1/qa/ask -H "Authorization: Bearer $T" \
     -d '{"question":"错位相减法怎么用"}'   # 能看到逐段输出
   ```
   数据库确认 `messages` 与 `message_citations` 都有记录
+- **实测（2026-10-31）**：真实 DashScope + Postgres，`test1` id=18；首问 meta 1 / delta 181 / done 1、24.480s、`done.tokens=1949`，assistant 落库 + 4 条 citations；追问 3.688s；断连只留 user；全量 **666 passed, 1 warning**
 - **坑**：SSE 在 Nginx 下必须 `proxy_buffering off`，否则流式变"一次性吐出"。**部署阶段一定会踩这个坑，提前写进 deploy/README.md**
 
 #### S3-6 拒答与引用校验

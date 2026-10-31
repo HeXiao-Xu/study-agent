@@ -316,27 +316,33 @@
 
 ### POST /api/v1/qa/ask
 - 权限：student
-- 类型：SSE 流式
+- 类型：SSE 流式（`text/event-stream`）
 - 入参：
 
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
-  | question | string | 是 | 用户问题，1–500 字 |
+  | question | string | 是 | 用户问题，1–500 字；首尾空白会被裁剪 |
   | scope | object | 否 | {subject_id?, folder?, start_date?, end_date?}（语义同 §5 检索接口，S3-5 复用） |
-  | conversation_id | string | 否 | 不传则新建会话 |
+  | conversation_id | string | 否 | 十进制正整数字符串；不传则新建会话 |
 
 - SSE 事件：
-  - `meta`：{citations:[{index,note_id,chunk_id,title,heading_path,page_no,snippet}]}
-  - `delta`：{text:"..."}
-  - `done`：{message_id, tokens, latency_ms, refused:bool}
-- 错误码：401 未登录 / 403 无权访问该 scope / 429 超出频率限制 / 500 生成失败
-- 备注：无检索依据时返回 refused=true 与固定拒答文案，不调用 LLM
-- 检索链路与参数（方案 6.4）：向量 top-20 + 全文 top-20 → RRF（k=60）→ Rerank 取 top-6 → 上下文预算 4k–6k token；拒答阈值 τ=0.35（重排分归一化，需实测校准）；温度 0.3；多轮仅取最近 3 轮做 query 改写；缓存 (user_id, 规范化问题, scope) 24h
+  - `meta`：`{conversation_id(字符串), user_message_id, citations:[{index,note_id,chunk_id,title,heading_path,page_no,snippet}]}`；`citations` 为全部上下文引用，编号供正文 `[n]` 使用
+  - `delta`：`{text:"..."}`；增量文本，0..N 个
+  - `done`：`{message_id, conversation_id(字符串), tokens, latency_ms, refused}`；`tokens`=回答+改写总 token，`latency_ms`=服务端总耗时
+  - `error`：`{code:50000,message:"生成失败"}`；流中失败后连接关闭，不再发 `done`
+- 错误码：401 未登录 / 403 非 student / 404 会话不存在或不属于当前学生（40400，不泄露存在性）/ 422 入参非法（42200）/ 500 生成失败
+- 备注：
+  - 先落 user 消息，正常结束后落 assistant + citations；断连时关闭上游 LLM，保留 user、不落 assistant。
+  - 无检索依据时 `refused=true` 与固定拒答文案，不调用 LLM；chitchat 不检索。
+  - chitchat/拒答也先发 `meta`（citations 为空），再发一次 `delta` 全文，再发 `done`。
+  - 本轮不实现限流；429 暂不返回。
+  - 检索链路与参数（方案 6.4）：向量 top-20 + 全文 top-20 → RRF（k=60）→ Rerank 取 top-6 → 上下文预算 4k–6k token；拒答阈值 τ=0.35（重排分归一化，需实测校准）；温度 0.3；多轮仅取最近 3 轮做 query 改写；缓存 (user_id, 规范化问题, scope) 24h
 
 ### GET /api/v1/qa/messages/{id}/citations
 - 权限：student（仅本人消息）
 - 类型：同步
-- 出参：引用列表（对应 message_citations 表）
+- 出参：`message_citations` 表字段 `id/message_id/chunk_id/note_id/question_id/score/snippet/page_no/bbox_json/rank`，按 `rank,id` 升序
+- 错误：不存在/越权统一 404/40400「消息不存在」
 
 ## 6. 错题本
 

@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-4 上下文组装 + Prompt 版本管理（`prompt_templates` + `qa/v1` 种子、Jinja2 文本渲染、admin 三接口、ask.py 读库即时生效）；后端 **636 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-5 问答 API（SSE）+ 会话/消息/引用落库；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-5 问答 API（SSE meta/delta/done/error）+ 会话/消息/引用落库；后端 **666 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-6 拒答与引用校验；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
 ## 任务清单
@@ -51,7 +51,7 @@
 - [x] S3-2 检索服务
 - [x] S3-3 Query 改写与意图识别
 - [x] S3-4 上下文组装 + Prompt 版本管理
-- [ ] S3-5 问答 API（SSE）+ 会话落库
+- [x] S3-5 问答 API（SSE）+ 会话落库
 - [ ] S3-6 拒答与引用校验
 - [ ] S3-7 缓存 + 调用日志 + 用量统计
 - [ ] S3-8 前端问答页（流式 + 引用跳转）★
@@ -165,8 +165,22 @@
 | 67 | `variables_json` 只校验类型/非空，不校验模板实际引用了哪些变量（S3-4） | 元数据可能和正文不一致 | 保存时用 Jinja2 AST 提取变量并与元数据比对 |
 | 68 | 多管理员并发激活同一 name 无重试，部分唯一索引冲突会失败（S3-4） | 并发切换可能一方报错 | 单管理员场景暂可接受；需要时加重试/串行化 |
 | 69 | 行级留痕只有 `created_by/created_at/updated_at`，无完整操作审计日志（S3-4） | 只能知道谁建，不能还原启用操作序列 | S3-7 `llm_call_logs`/运维审计补事件日志 |
+| 70 | S3-5 只持久化合法 `[n]` 子集，不做引用校验/重试/拒答补丁（S3-5） | 模型漏引或无依据陈述仍会入库 | S3-6 `citation_checker` 接管 |
+| 71 | 会话只支持创建与续聊，无列表/删除/重命名接口（S3-5） | 前端无法管理历史会话 | S3-8 前端问答页一起补 |
+| 72 | SSE 无 429 限流，断连与错误路径无 `llm_call_logs` 落库（S3-5） | 高频请求与失败成本不可审计 | S3-7 统一限流 + 调用日志 |
+| 73 | 真实验收使用本机 DashScope `qwen-plus`，未做并发压测（S3-5） | 单路延迟 3.7–24.5s，并发表现未知 | 上线前按并发目标压测 |
 
 ## 变更日志
+
+### 2026-10-31（S3-5）
+- S3-5 完成（spec `docs/spec/s3-5-qa-sse.md` + plan `docs/plan/s3-5-qa-sse.md`，用户确认后内联执行）。交付：`models/conversation.py`、`models/message.py`、`models/message_citation.py`、迁移 `0007_s3_5`、`ai/llm` 的 `chat_stream`、answerer 的 `prepare_answer/stream_answer`、`schemas/qa.py`、`services/qa_service.py`、`api/v1/qa.py`
+- 拍板（D-039）：真实 token 流；先落 user 再流式，正常结束落 assistant + citations；断连保留 user、不落 assistant；`conversation_id` 对外字符串、库内 BIGINT；流中错误发 `error` 后关闭；本轮不做引用校验与限流
+- 测试：新增 30 条（模型 3、LLM 流 5、answerer 3、service 13、API 6），全量 **666 passed, 1 warning**
+- 验收（真实 Postgres + DashScope，`test1` id=18）：首问 SSE **meta 1 / delta 181 / done 1**，curl 总耗时 **24.480s**，`done.tokens=1949`、`latency_ms=24472`；DB `messages` user/assistant 两行、`message_citations` 4 行（rank 1–4）、`prompt_version=qa/v1`
+- 验收：同会话追问（conversation_id=1）HTTP 总耗时 **3.688s**，新增 user/assistant，引用接口返回 1 条；chitchat `你好` **1.224s**、无 prompt_version；`conversation_id=999` → **404/40400**
+- 断连：`curl --max-time 3` 收到 meta + 20 个 delta 后超时（2776 bytes），DB 该轮只有 user、无 assistant；日志出现 `qa_stream_disconnected`，上游未写完成日志，连接已关闭
+- 断连修复：同步生成器在 uvicorn 取消时不会主动关闭上游；`api/v1/qa.py` 改为 async SSE 生成器 + `run_in_threadpool(next, ...)` + `finally: events.close()`，复测断开后立即出现 `qa_stream_disconnected`，不再落 assistant
+- 文档同步：API.md §5、SCHEMA.md §7、DECISIONS D-039、PROGRESS、实施计划 S3-5 勾选、deploy/README Nginx SSE；spec/plan 执行记录
 
 ### 2026-10-31（S3-4）
 - S3-4 完成（spec `docs/spec/s3-4-prompt-management.md` + plan `docs/plan/s3-4-prompt-management.md`，用户确认后内联执行）。交付：`models/prompt_template.py`、迁移 `0006_s3_4` + `qa/v1` 种子、`services/prompt_service.py`、`schemas/prompt.py`、`api/v1/admin.py` 三个接口、`render_prompt_text`、`answer_question(prompt_template=...)`、`scripts/ask.py` 读库并打印版本

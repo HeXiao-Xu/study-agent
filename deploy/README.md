@@ -62,6 +62,24 @@ compose 内置了开发默认值；要覆盖时把根目录 `.env` 显式传给 
 docker compose --env-file .env -f deploy/docker-compose.dev.yml up -d
 ```
 
+## Nginx 反向代理与 SSE（S3-5）
+
+`POST /api/v1/qa/ask` 是 `text/event-stream`。Nginx 默认会缓冲上游响应，导致 `curl -N` 看起来像一次收到完整答复；必须对这条路由关闭缓冲。生产/预发 Nginx 至少加：
+
+```nginx
+location /api/v1/qa/ask {
+    proxy_pass http://backend:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 300s;
+    add_header X-Accel-Buffering no;
+}
+```
+
+后端自身也会返回 `X-Accel-Buffering: no` 与 `Cache-Control: no-cache`。若前面还有网关/负载均衡，同样要支持流式并关闭响应缓冲；否则前端仍可能最后一次性收到内容。
+
 ## 镜像加速（本机实测，2026-10）
 
 Docker Hub 直连在本机约 110KB/s；DaoCloud 公共镜像已 502 失效。
