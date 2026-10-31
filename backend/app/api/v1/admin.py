@@ -10,7 +10,8 @@ from app.core.permissions import require_role
 from app.models.user import User
 from app.schemas.common import Envelope
 from app.schemas.indexing import RebuildProgress, RebuildStart
-from app.services import index_service
+from app.schemas.prompt import PromptCreate, PromptTemplateOut
+from app.services import index_service, prompt_service
 from app.tasks.queue import TaskQueue, get_task_queue
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -43,3 +44,62 @@ def get_rebuild_run(
 ) -> Envelope[RebuildProgress]:
     data = index_service.get_rebuild_progress(session, run_id=run_id)
     return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.get(
+    "/prompts",
+    response_model=Envelope[list[PromptTemplateOut]],
+    summary="查询 Prompt 版本历史",
+)
+def list_prompt_templates(
+    name: str | None = None,
+    current_user: User = Depends(require_role("admin")),
+    session: Session = Depends(get_db),
+) -> Envelope[list[PromptTemplateOut]]:
+    rows = prompt_service.list_prompts(session, name=name)
+    data = [PromptTemplateOut.model_validate(row) for row in rows]
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.post(
+    "/prompts",
+    status_code=201,
+    response_model=Envelope[PromptTemplateOut],
+    summary="新建 Prompt 版本（不可变）",
+)
+def create_prompt_template(
+    payload: PromptCreate,
+    current_user: User = Depends(require_role("admin")),
+    session: Session = Depends(get_db),
+) -> Envelope[PromptTemplateOut]:
+    prompt = prompt_service.create_prompt_version(
+        session,
+        name=payload.name,
+        content=payload.content,
+        version=payload.version,
+        variables_json=payload.variables_json,
+        model_hint=payload.model_hint,
+        created_by=current_user.id,
+        activate=payload.activate,
+    )
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=PromptTemplateOut.model_validate(prompt),
+    )
+
+
+@router.put(
+    "/prompts/{prompt_id}/activate",
+    response_model=Envelope[PromptTemplateOut],
+    summary="启用指定 Prompt 版本",
+)
+def activate_prompt_template(
+    prompt_id: int = Path(..., ge=1, description="Prompt 版本 id"),
+    current_user: User = Depends(require_role("admin")),
+    session: Session = Depends(get_db),
+) -> Envelope[PromptTemplateOut]:
+    prompt = prompt_service.activate_prompt(session, prompt_id)
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=PromptTemplateOut.model_validate(prompt),
+    )
