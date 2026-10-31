@@ -1,6 +1,7 @@
 """S3-5 qa_service：FakeSession，不连库、不调外部 LLM。"""
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from datetime import date, datetime, timezone
 
@@ -18,6 +19,7 @@ from app.models.message import Message
 from app.models.message_citation import MessageCitation
 from app.schemas.qa import QaAskRequest, QaScopeIn
 from app.services import qa_service
+from app.services.citation_checker import SUPPLEMENT_PREFIX
 from app.services.query_rewrite import RewriteResult
 
 
@@ -396,7 +398,7 @@ def test_stream_events_rag_persists_assistant_and_citations(monkeypatch) -> None
         )
     )
 
-    assert [event.event for event in events] == ["meta", "delta", "delta", "done"]
+    assert [event.event for event in events] == ["meta", "delta", "done"]
     assert events[0].data["conversation_id"] == "12"
     assert events[-1].data["refused"] is False
     assert events[-1].data["tokens"] == 135
@@ -493,7 +495,6 @@ def test_stream_events_disconnect_does_not_persist_assistant(monkeypatch) -> Non
         _plan(), session_factory=lambda: final_session
     )
     assert next(generator).event == "meta"
-    assert next(generator).event == "delta"
     with pytest.raises(StopIteration):
         next(generator)
     assert closed == [True]
@@ -515,3 +516,153 @@ def test_get_message_citations_returns_rows_and_404() -> None:
 
     with pytest.raises(NotFoundError):
         qa_service.get_message_citations(session, user_id=18, message_id=999)
+
+
+def _response(text: str, total: int = 10) -> LLMResponse:
+    return LLMResponse(
+        text=text,
+        model="qwen-plus",
+        prompt_tokens=total - 2,
+        completion_tokens=2,
+        total_tokens=total,
+        latency_ms=1,
+        cost_yuan=0.0001,
+    )
+
+
+def test_stream_events_clean_answer_does_not_retry(monkeypatch) -> None:
+    calls: list[list[object]] = []
+
+    def fake_stream(prepared, *, llm_client=None, messages=None):
+        calls.append(list(messages or []))
+        yield AnswerChunk(text="答[1]")
+        yield AnswerChunk(response=_response("答[1]"))
+
+    monkeypatch.setattr(qa_service, "stream_answer", fake_stream)
+    final_session = FakeAssistantSession()
+    events = list(
+        qa_service.stream_events(
+            _plan(), session_factory=lambda: final_session
+        )
+    )
+
+    assert len(calls) == 1
+    assert events[-1].data["refused"] is False
+    assert events[-1].data["refusal_reason"] is None
+    assert events[-1].data["suggestions"] == []
+    assistant = next(
+        item for item in final_session.added if isinstance(item, Message)
+    )
+    assert assistant.content_md == "答[1]"
+    assert SUPPLEMENT_PREFIX not in assistant.content_md
+
+
+def test_stream_events_no_citation_retries_then_refuses(monkeypatch) -> None:
+    calls = 0
+
+    def fake_stream(prepared, *, llm_client=None, messages=None):
+        nonlocal calls
+        calls += 1
+        text = "第一版无引用内容。" if calls == 1 else "第二版仍无引用。"
+        yield AnswerChunk(text=text)
+        yield AnswerChunk(response=_response(text, total=20 + calls))
+
+    monkeypatch.setattr(qa_service, "stream_answer", fake_stream)
+    final_session = FakeAssistantSession()
+    events = list(
+        qa_service.stream_events(
+            _plan(), session_factory=lambda: final_session
+        )
+    )
+
+    assert calls == 2
+    assert events[-1].data["refused"] is True
+    assert events[-1].data["refusal_reason"] == "no_valid_citation"
+    assert len(events[-1].data["suggestions"]) == 2
+    assistant = next(
+        item for item in final_session.added if isinstance(item, Message)
+    )
+    assert assistant.content_md == REFUSAL_TEXT
+    assert assistant.token_usage["total_tokens"] == 43
+
+
+def test_stream_events_partial_retry_annotates_uncited_block(monkeypatch) -> None:
+    calls = 0
+
+    def fake_stream(prepared, *, llm_client=None, messages=None):
+        nonlocal calls
+        calls += 1
+        text = "已引用[1]。\n\n没有引用的补充内容。"
+        yield AnswerChunk(text=text)
+        yield AnswerChunk(response=_response(text))
+
+    monkeypatch.setattr(qa_service, "stream_answer", fake_stream)
+    final_session = FakeAssistantSession()
+    events = list(
+        qa_service.stream_events(
+            _plan(), session_factory=lambda: final_session
+        )
+    )
+
+    assert calls == 2
+    assert events[-1].data["refused"] is False
+    assistant = next(
+        item for item in final_session.added if isinstance(item, Message)
+    )
+    assert SUPPLEMENT_PREFIX in assistant.content_md
+    assert "没有引用的补充内容。" in assistant.content_md
+    deltas = "".join(
+        str(item.data["text"])
+        for item in events
+        if item.event == "delta"
+    )
+    assert deltas == assistant.content_md
+    assert events[-1].data["suggestions"] == []
+
+
+def test_stream_events_strips_invalid_citation_after_retry(monkeypatch) -> None:
+    def fake_stream(prepared, *, llm_client=None, messages=None):
+        text = "有效[1]，越界[9]。"
+        yield AnswerChunk(text=text)
+        yield AnswerChunk(response=_response(text))
+
+    monkeypatch.setattr(qa_service, "stream_answer", fake_stream)
+    final_session = FakeAssistantSession()
+    events = list(
+        qa_service.stream_events(
+            _plan(), session_factory=lambda: final_session
+        )
+    )
+
+    assistant = next(
+        item for item in final_session.added if isinstance(item, Message)
+    )
+    assert "[9]" not in assistant.content_md
+    assert "[1]" in assistant.content_md
+    citations = [
+        item for item in final_session.added if isinstance(item, MessageCitation)
+    ]
+    assert [row.rank for row in citations] == [1]
+    assert events[-1].data["refused"] is False
+
+
+def test_stream_events_cancel_event_does_not_persist(monkeypatch) -> None:
+    cancel = threading.Event()
+
+    def fake_stream(prepared, *, llm_client=None, messages=None):
+        yield AnswerChunk(text="第一段")
+        cancel.set()
+        yield AnswerChunk(text="第二段")
+
+    monkeypatch.setattr(qa_service, "stream_answer", fake_stream)
+    final_session = FakeAssistantSession()
+    events = list(
+        qa_service.stream_events(
+            _plan(),
+            session_factory=lambda: final_session,
+            cancel_event=cancel,
+        )
+    )
+
+    assert [event.event for event in events] == ["meta"]
+    assert not any(isinstance(item, Message) for item in final_session.added)

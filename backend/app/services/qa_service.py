@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
@@ -11,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.llm import LLMClient, LLMResponse
+from app.ai.llm import LLMClient, LLMMessage, LLMResponse
 from app.ai.llm.errors import LLMError
 from app.ai.rag.answerer import (
     REFUSAL_TEXT,
@@ -32,6 +34,12 @@ from app.models.message_citation import MessageCitation
 from app.models.note import Note
 from app.schemas.qa import QaScopeIn
 from app.services import prompt_service
+from app.services.citation_checker import (
+    annotate_uncited,
+    build_correction,
+    check_answer,
+    strip_invalid_citations,
+)
 from app.services.query_rewrite import FALLBACK_REPLY, RewriteResult, rewrite_query
 
 logger = logging.getLogger(__name__)
@@ -53,6 +61,13 @@ class QaCitationMeta:
 class QaStreamEvent:
     event: Literal["meta", "delta", "done", "error"]
     data: dict[str, object]
+
+
+@dataclass(frozen=True)
+class QaSuggestion:
+    type: Literal["rephrase", "note"]
+    text: str
+    note_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -269,26 +284,19 @@ def prepare_ask(
     )
 
 
-def _usage_payload(response: LLMResponse | None) -> dict[str, object]:
-    if response is None:
-        return {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-            "cost_yuan": 0.0,
-        }
+def _usage_payload(responses: list[LLMResponse]) -> dict[str, object]:
     return {
-        "prompt_tokens": response.prompt_tokens,
-        "completion_tokens": response.completion_tokens,
-        "total_tokens": response.total_tokens,
-        "cost_yuan": response.cost_yuan,
+        "prompt_tokens": sum(r.prompt_tokens for r in responses),
+        "completion_tokens": sum(r.completion_tokens for r in responses),
+        "total_tokens": sum(r.total_tokens for r in responses),
+        "cost_yuan": sum(r.cost_yuan for r in responses),
     }
 
 
 def _token_usage(
-    response: LLMResponse | None, rewrite: RewriteResult | None
+    responses: list[LLMResponse], rewrite: RewriteResult | None
 ) -> dict[str, object]:
-    payload = _usage_payload(response)
+    payload = _usage_payload(responses)
     payload["rewrite"] = (
         {
             "prompt_tokens": rewrite.prompt_tokens,
@@ -305,9 +313,9 @@ def _token_usage(
 
 
 def _total_tokens(
-    response: LLMResponse | None, rewrite: RewriteResult | None
+    responses: list[LLMResponse], rewrite: RewriteResult | None
 ) -> int:
-    return (response.total_tokens if response is not None else 0) + (
+    return sum(r.total_tokens for r in responses) + (
         rewrite.total_tokens if rewrite is not None else 0
     )
 
@@ -317,23 +325,20 @@ def _persist_assistant(
     session_factory: Callable[[], Session],
     plan: QaPlan,
     content: str,
-    response: LLMResponse | None,
+    responses: list[LLMResponse],
     citation_indices: list[int],
 ) -> Message:
     latency_ms = int((time.perf_counter() - plan.started_at) * 1000)
+    model = responses[-1].model if responses else None
     session = session_factory()
     try:
         message = Message(
             conversation_id=plan.conversation_id,
             role="assistant",
             content_md=content,
-            token_usage=_token_usage(response, plan.rewrite),
+            token_usage=_token_usage(responses, plan.rewrite),
             latency_ms=latency_ms,
-            model=(
-                response.model
-                if response is not None
-                else get_settings().llm_model
-            ),
+            model=model,
             prompt_version=plan.prompt_version,
         )
         session.add(message)
@@ -369,19 +374,30 @@ def _valid_citation_indices(plan: QaPlan, text: str) -> list[int]:
     ]
 
 
+def _suggestions() -> list[QaSuggestion]:
+    return [
+        QaSuggestion("rephrase", "换个问法，把问题拆得更具体"),
+        QaSuggestion("note", "先补充相关笔记，或缩小检索范围"),
+    ]
+
+
 def _done_data(
     plan: QaPlan,
     message: Message,
     *,
     refused: bool,
-    response: LLMResponse | None,
+    responses: list[LLMResponse],
+    refusal_reason: str | None,
+    suggestions: list[QaSuggestion],
 ) -> dict[str, object]:
     return {
         "message_id": message.id,
         "conversation_id": str(plan.conversation_id),
-        "tokens": _total_tokens(response, plan.rewrite),
+        "tokens": _total_tokens(responses, plan.rewrite),
         "latency_ms": int((time.perf_counter() - plan.started_at) * 1000),
         "refused": refused,
+        "refusal_reason": refusal_reason,
+        "suggestions": [asdict(item) for item in suggestions],
     }
 
 
@@ -392,11 +408,57 @@ def _error_event() -> QaStreamEvent:
     )
 
 
+def _answer_parts(text: str) -> list[str]:
+    if not text:
+        return [""]
+    parts: list[str] = []
+    start = 0
+    for match in re.finditer(r"\n{2,}", text):
+        parts.append(text[start : match.end()])
+        start = match.end()
+    if start < len(text):
+        parts.append(text[start:])
+    return parts
+
+
+def _consume_answer(
+    prepared: PreparedAnswer,
+    *,
+    llm_client: LLMClient | None,
+    messages: list[LLMMessage] | None = None,
+    cancel_event: threading.Event | None = None,
+) -> tuple[str, list[LLMResponse], bool]:
+    parts: list[str] = []
+    responses: list[LLMResponse] = []
+    if messages is None:
+        stream = stream_answer(prepared, llm_client=llm_client)
+    else:
+        stream = stream_answer(
+            prepared, llm_client=llm_client, messages=messages
+        )
+    cancelled = False
+    try:
+        for chunk in stream:
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
+            if chunk.text:
+                parts.append(chunk.text)
+            if chunk.response is not None:
+                responses.append(chunk.response)
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            close()
+    return "".join(parts), responses, cancelled
+
+
 def stream_events(
     plan: QaPlan,
     *,
     llm_client: LLMClient | None = None,
     session_factory: Callable[[], Session] = new_session,
+    cancel_event: threading.Event | None = None,
 ) -> Iterator[QaStreamEvent]:
     yield QaStreamEvent(
         event="meta",
@@ -415,7 +477,7 @@ def stream_events(
                 session_factory=session_factory,
                 plan=plan,
                 content=text,
-                response=None,
+                responses=[],
                 citation_indices=[],
             )
         except Exception:
@@ -424,7 +486,14 @@ def stream_events(
             return
         yield QaStreamEvent(
             event="done",
-            data=_done_data(plan, message, refused=False, response=None),
+            data=_done_data(
+                plan,
+                message,
+                refused=False,
+                responses=[],
+                refusal_reason=None,
+                suggestions=[],
+            ),
         )
         return
 
@@ -435,39 +504,45 @@ def stream_events(
                 session_factory=session_factory,
                 plan=plan,
                 content=REFUSAL_TEXT,
-                response=None,
+                responses=[],
                 citation_indices=[],
             )
         except Exception:
             logger.exception("qa_persist_refusal_failed")
             yield _error_event()
             return
+        reason = (
+            getattr(plan.prepared.refused, "refusal_reason", None)
+            if plan.prepared is not None and plan.prepared.refused is not None
+            else "no_context"
+        ) or "no_context"
         yield QaStreamEvent(
             event="done",
-            data=_done_data(plan, message, refused=True, response=None),
+            data=_done_data(
+                plan,
+                message,
+                refused=True,
+                responses=[],
+                refusal_reason=reason,
+                suggestions=_suggestions(),
+            ),
         )
         return
 
-    if plan.prepared is None:
+    if plan.prepared is None or plan.prepared.built is None:
         yield _error_event()
         return
 
-    parts: list[str] = []
-    final_response: LLMResponse | None = None
-    finished = False
-    failed = False
-    stream = stream_answer(plan.prepared, llm_client=llm_client)
+    context_size = len(plan.prepared.built.items)
     try:
-        for chunk in stream:
-            if chunk.text:
-                parts.append(chunk.text)
-                yield QaStreamEvent(event="delta", data={"text": chunk.text})
-            if chunk.response is not None:
-                final_response = chunk.response
+        first_text, first_responses, cancelled = _consume_answer(
+            plan.prepared,
+            llm_client=llm_client,
+            cancel_event=cancel_event,
+        )
     except GeneratorExit:
         return
     except LLMError:
-        failed = True
         logger.warning(
             "qa_stream_llm_failed",
             extra={"conversation_id": plan.conversation_id},
@@ -475,35 +550,91 @@ def stream_events(
         yield _error_event()
         return
     except Exception:
-        failed = True
         logger.exception(
             "qa_stream_failed",
             extra={"conversation_id": plan.conversation_id},
         )
         yield _error_event()
         return
-    finally:
-        close = getattr(stream, "close", None)
-        if close is not None:
-            close()
-        if not finished and not failed:
+
+    if cancelled:
+        logger.info(
+            "qa_stream_disconnected",
+            extra={"conversation_id": plan.conversation_id},
+        )
+        return
+
+    check = check_answer(first_text, context_size=context_size)
+    responses = list(first_responses)
+    final_text = first_text
+    if check.needs_retry and get_settings().qa_citation_max_retries >= 1:
+        retry_messages = [
+            LLMMessage(role="user", content=plan.prepared.prompt),
+            LLMMessage(role="assistant", content=first_text or "(空回答)"),
+            LLMMessage(role="user", content=build_correction(check)),
+        ]
+        try:
+            retry_text, retry_responses, cancelled = _consume_answer(
+                plan.prepared,
+                llm_client=llm_client,
+                messages=retry_messages,
+                cancel_event=cancel_event,
+            )
+        except GeneratorExit:
+            return
+        except LLMError:
+            logger.warning(
+                "qa_stream_retry_llm_failed",
+                extra={"conversation_id": plan.conversation_id},
+            )
+            yield _error_event()
+            return
+        except Exception:
+            logger.exception(
+                "qa_stream_retry_failed",
+                extra={"conversation_id": plan.conversation_id},
+            )
+            yield _error_event()
+            return
+        if cancelled:
             logger.info(
                 "qa_stream_disconnected",
                 extra={"conversation_id": plan.conversation_id},
             )
+            return
+        responses.extend(retry_responses)
+        final_text = retry_text
+        check = check_answer(final_text, context_size=context_size)
 
-    answer_text = "".join(parts).strip()
-    refused = not answer_text
-    if refused:
-        answer_text = REFUSAL_TEXT
-        yield QaStreamEvent(event="delta", data={"text": REFUSAL_TEXT})
-    indices = [] if refused else _valid_citation_indices(plan, answer_text)
+    refused = False
+    refusal_reason: str | None = None
+    suggestions: list[QaSuggestion] = []
+    if not check.has_content:
+        refused = True
+        refusal_reason = "empty_answer"
+        final_text = REFUSAL_TEXT
+        suggestions = _suggestions()
+    elif not check.has_valid_citation:
+        refused = True
+        refusal_reason = "no_valid_citation"
+        final_text = REFUSAL_TEXT
+        suggestions = _suggestions()
+    else:
+        final_text = annotate_uncited(
+            strip_invalid_citations(final_text, context_size=context_size),
+            context_size=context_size,
+        )
+
+    indices = [] if refused else _valid_citation_indices(plan, final_text)
+    for part in _answer_parts(final_text):
+        yield QaStreamEvent(event="delta", data={"text": part})
+
     try:
         message = _persist_assistant(
             session_factory=session_factory,
             plan=plan,
-            content=answer_text,
-            response=final_response,
+            content=final_text,
+            responses=responses,
             citation_indices=indices,
         )
     except Exception:
@@ -511,14 +642,15 @@ def stream_events(
         yield _error_event()
         return
 
-    finished = True
     yield QaStreamEvent(
         event="done",
         data=_done_data(
             plan,
             message,
             refused=refused,
-            response=final_response,
+            responses=responses,
+            refusal_reason=refusal_reason,
+            suggestions=suggestions,
         ),
     )
 

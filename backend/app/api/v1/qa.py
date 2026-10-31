@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Request
@@ -28,7 +29,8 @@ def _sse(event: qa_service.QaStreamEvent) -> str:
 async def _stream(
     plan: qa_service.QaPlan, request: Request
 ) -> AsyncIterator[str]:
-    events = qa_service.stream_events(plan)
+    cancel_event = threading.Event()
+    events = qa_service.stream_events(plan, cancel_event=cancel_event)
     try:
         while True:
             event = await run_in_threadpool(next, events, None)
@@ -38,9 +40,14 @@ async def _stream(
                 break
             yield _sse(event)
     finally:
+        cancel_event.set()
         close = getattr(events, "close", None)
         if close is not None:
-            close()
+            try:
+                close()
+            except ValueError:
+                # 生成器正在工作线程里执行；cancel_event 会让它收尾关闭上游。
+                pass
 
 
 @router.post(
