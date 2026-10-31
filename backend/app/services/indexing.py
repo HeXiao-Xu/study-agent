@@ -45,7 +45,14 @@ def index_chunks(
     started = time.perf_counter()
     settings = get_settings()
     embedding_client = client or get_embedding_client()
-    tokens_before = embedding_client.usage_tokens
+    # 并发任务共享缓存 client：usage_tokens 差值会互相串账，只认本次批次回调
+    tokens_used = 0
+
+    def _on_batch(stats: BatchStats) -> None:
+        nonlocal tokens_used
+        tokens_used += stats.tokens
+        if progress is not None:
+            progress(stats)
 
     if not chunks:
         try:
@@ -64,7 +71,9 @@ def index_chunks(
         )
 
     try:
-        vectors = embedding_client.encode([chunk.content for chunk in chunks], on_batch=progress)
+        vectors = embedding_client.encode(
+            [chunk.content for chunk in chunks], on_batch=_on_batch
+        )
         if len(vectors) != len(chunks):
             raise EmbeddingError(
                 f"Embedding 返回条数不符：期望 {len(chunks)}，实际 {len(vectors)}",
@@ -101,7 +110,7 @@ def index_chunks(
         session.rollback()
         raise
 
-    total_tokens = embedding_client.usage_tokens - tokens_before
+    total_tokens = tokens_used
     cost_cny = total_tokens / 1_000_000 * settings.embedding_price_per_million
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info(

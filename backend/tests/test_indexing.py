@@ -50,6 +50,15 @@ class FakeClient:
         return [[0.0] * self.dim for _ in texts]
 
 
+class ConcurrentUsageClient(FakeClient):
+    """模拟并发：本次 encode 期间，另一线程把共享 usage_tokens 推高。"""
+
+    def encode(self, texts: list[str], *, on_batch=None) -> list[list[float]]:
+        vectors = super().encode(texts, on_batch=on_batch)
+        self.usage_tokens += 999
+        return vectors
+
+
 def _chunk(content: str = "函数的单调性：设 f(x) 在区间 D 内。", index: int = 0) -> Chunk:
     return Chunk(
         content=content,
@@ -140,3 +149,17 @@ def test_progress_callback_is_forwarded() -> None:
         progress=seen.append,
     )
     assert len(seen) == 1
+
+
+def test_total_tokens_not_contaminated_by_concurrent_usage() -> None:
+    """并发任务共享 client 时，本次用量只能来自本次批次，不能取共享计数器差值。"""
+    result = index_chunks(
+        FakeSession(),
+        [_chunk()],
+        note_id=7,
+        user_id=3,
+        client=ConcurrentUsageClient(),
+    )
+
+    assert result.total_tokens == 3
+    assert result.cost_cny == pytest.approx(3 / 1_000_000 * 0.5)
