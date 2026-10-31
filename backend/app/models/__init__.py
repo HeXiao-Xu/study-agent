@@ -7,6 +7,7 @@ from app.models.knowledge_point import KnowledgePoint
 from app.models.note import Note
 from app.models.note_chunk import NoteChunk
 from app.models.note_kp import NoteKp
+from app.models.prompt_template import PromptTemplate
 from app.models.subject import Subject
 from app.models.user import User
 from app.models.user_relation import UserRelation
@@ -20,6 +21,7 @@ __all__ = [
     "Note",
     "NoteChunk",
     "NoteKp",
+    "PromptTemplate",
     "Subject",
     "User",
     "UserRelation",
