@@ -7,6 +7,7 @@ from app.ai.rag.prompt_builder import (
     PromptTemplateError,
     build_context,
     render_prompt,
+    render_prompt_text,
 )
 from app.ai.rag.retriever import RetrievedChunk
 
@@ -106,3 +107,24 @@ def test_render_prompt_renders_context_and_question() -> None:
 def test_render_prompt_missing_template_raises(tmp_path) -> None:
     with pytest.raises(PromptTemplateError):
         render_prompt("ctx", "q", template_path=tmp_path / "missing.md")
+
+
+def test_render_prompt_text_renders_context_and_question() -> None:
+    rendered = render_prompt_text(
+        "规则A\n资料：{{ context }}\n问：{{ question }}",
+        context="[1] 正文",
+        question="怎么用？",
+    )
+
+    assert rendered.startswith("规则A")
+    assert "[1] 正文" in rendered
+    assert "怎么用？" in rendered
+
+
+def test_render_prompt_text_missing_variable_raises() -> None:
+    with pytest.raises(PromptTemplateError):
+        render_prompt_text(
+            "{{ context }} / {{ missing }}",
+            context="ctx",
+            question="q",
+        )

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import tiktoken
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, StrictUndefined
 
 from app.ai.rag.retriever import RetrievedChunk
 
@@ -174,6 +174,22 @@ def build_context(
     )
 
 
+def render_prompt_text(
+    template_text: str,
+    *,
+    context: str,
+    question: str,
+) -> str:
+    if not template_text.strip():
+        raise PromptTemplateError("Prompt 模板为空")
+    env = Environment(undefined=StrictUndefined, autoescape=False)
+    try:
+        template = env.from_string(template_text)
+        return template.render(context=context, question=question)
+    except Exception as exc:
+        raise PromptTemplateError("Prompt 模板渲染失败") from exc
+
+
 def render_prompt(
     context: str,
     question: str,
@@ -183,13 +199,8 @@ def render_prompt(
     path = PROMPT_PATH if template_path is None else template_path
     if not path.is_file():
         raise PromptTemplateError(f"Prompt 模板不存在：{path}")
-    env = Environment(
-        loader=FileSystemLoader(str(path.parent)),
-        undefined=StrictUndefined,
-        autoescape=False,
-    )
     try:
-        template = env.get_template(path.name)
-        return template.render(context=context, question=question)
-    except Exception as exc:  # Jinja2 的 TemplateNotFound/UndefinedError 统一收口
-        raise PromptTemplateError(f"Prompt 模板渲染失败：{path}") from exc
+        template_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise PromptTemplateError(f"Prompt 模板读取失败：{path}") from exc
+    return render_prompt_text(template_text, context=context, question=question)

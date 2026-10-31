@@ -12,6 +12,7 @@ from app.ai.rag.answerer import (
     extract_citation_indices,
     validate_citations,
 )
+from app.ai.rag.prompt_builder import PromptTemplateError
 from app.ai.rag.retriever import RerankInfo, RetrievalResult, RetrievedChunk
 
 
@@ -209,3 +210,38 @@ def test_answer_question_rejects_invalid_threshold(monkeypatch) -> None:
     _patch(monkeypatch, _retrieval([_chunk()]))
     with pytest.raises(ValueError):
         answer_question(object(), "问题", user_id=1, threshold=1.1)
+
+
+def test_answer_question_uses_custom_prompt_template(monkeypatch) -> None:
+    _patch(monkeypatch, _retrieval([_chunk()]))
+    fake = FakeLLM(["自定义回答[1]"])
+
+    result = answer_question(
+        object(),
+        "问题",
+        user_id=1,
+        llm_client=fake,
+        prompt_template="CUSTOM-RULE\n资料：{{ context }}\n问：{{ question }}",
+    )
+
+    assert result.refused is False
+    prompt = fake.calls[0][0].content
+    assert "CUSTOM-RULE" in prompt
+    assert "错位相减法：乘公比" in prompt
+    assert "问题" in prompt
+
+
+def test_answer_question_custom_template_missing_variable_raises(monkeypatch) -> None:
+    _patch(monkeypatch, _retrieval([_chunk()]))
+    fake = FakeLLM(["不应调用"])
+
+    with pytest.raises(PromptTemplateError):
+        answer_question(
+            object(),
+            "问题",
+            user_id=1,
+            llm_client=fake,
+            prompt_template="{{ context }} / {{ missing }}",
+        )
+
+    assert fake.calls == []

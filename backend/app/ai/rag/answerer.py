@@ -24,6 +24,7 @@ from app.ai.rag.prompt_builder import (
     ContextItem,
     build_context,
     render_prompt,
+    render_prompt_text,
 )
 from app.ai.rag.retriever import RetrievalResult, retrieve_hybrid_reranked
 from app.ai.rerank import RerankClient
@@ -142,6 +143,7 @@ def answer_question(
     embedding_client: EmbeddingClient | None = None,
     rerank_client: RerankClient | None = None,
     llm_client: LLMClient | None = None,
+    prompt_template: str | None = None,
 ) -> AnswerResult:
     if not question.strip():
         raise ValueError("question 不能为空")
@@ -193,7 +195,14 @@ def answer_question(
             degraded=degraded,
         )
 
-    prompt = render_prompt(built.text, question)
+    if prompt_template is None:
+        prompt = render_prompt(built.text, question)
+    else:
+        prompt = render_prompt_text(
+            prompt_template,
+            context=built.text,
+            question=question,
+        )
     client = llm_client if llm_client is not None else get_llm_client()
     messages = [LLMMessage(role="user", content=prompt)]
     first = _call_llm(
