@@ -6,7 +6,7 @@
 ## 当前状态
 
 - 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-1 索引服务产品化（Markdown 解析、`index.note` 任务、笔记保存/软删副作用、管理员全量重建与进度）；后端 **563 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 最近完成：S3-1 索引服务产品化（Markdown 解析、`index.note` 任务、笔记保存/软删副作用、管理员全量重建与进度）；后端 **564 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
 - 下一步：S3-2 检索服务；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
 
@@ -154,10 +154,11 @@
 ### 2026-10-31（S3-1）
 - S3-1 完成（spec `docs/spec/s3-1-index-service.md` + plan `docs/plan/s3-1-index-service.md`，用户确认后实施）。交付：`ai/parse/markdown.py`（笔记 Markdown → `ParsedBlock`）、`services/index_service.py`（`build_note_chunks` / `index_note` / `delete_note_chunks` / `purge_deleted_note_chunks` / `start_rebuild` / `get_rebuild_progress`）、`schemas/indexing.py`、`tasks/index_note.py`、`api/v1/admin.py`；笔记创建/正文更新 best-effort 入队 `index.note`，软删同事务清切片
 - 拍板（D-035，2026-10-31 用户确认）：每笔记一个任务 + `run_id` 聚合进度（不建表/不迁移）；索引全部未删除笔记（含 3 篇文档笔记）；全量重建按 Markdown 重建、文档笔记页码归零；软删清理切片；队列故障不影响保存；重建入队失败 500；不加锁靠 runner 重试；只有 `content_md` 变化触发重索引
-- 验收证据：pytest **563 passed, 1 warning**（基线 524 + 39：Markdown 12、service 11、task 4、admin 8、notes 4）；前端未改（85 passed 基线）
+- 验收证据：pytest **564 passed, 1 warning**（基线 524 + 40：Markdown 12、service 11、task 4、admin 8、notes 4、并发用量回归 1）；前端未改（85 passed 基线）
 - 真实联调（真实 Postgres/Redis/MinIO + ARQ Worker + DashScope Embedding）：建 note 79 → `index.note` succeeded 2 块/58 tokens，`heading_path=函数`、`函数/单调性`；PATCH 追加唯一标记 → 新任务 succeeded、命中 1 行、块数 2、重复分组 0；软删临时笔记 → 残留 0、孤儿 0；全量重建两次均 `percent=100 / succeeded=5 / failed=0 / chunks=39`，表内 39 行、重复分组 0（各笔记 2/6/8/21/2），重建后 `page_no` 非空 = 0（确认代价）；student 重建/进度 403、匿名 401、坏 run_id 422、未知 run 404；`scripts/ask.py --user-id 25` 真实回答并引用笔记 #79「函数/单调性」片段（refused=否，llm_calls=1）
 - 实测说明：重建 run 1 `purged_chunks=0`（库内当时无软删残留）；`chunks=39` 与表内行数一致，证明按 `run_id` 聚合的块数与库一致
-- 清理：验收账号 2 个、笔记 3 篇（含软删）、异步任务 18 条全部删除；库回到 4 篇未删除笔记 / 37 块（3 篇文档笔记 35 + 原手写笔记 2），本次重建已使 `page_no` 归零
+- 实测抓修（`976216e`）：并发重建时 S1-3 用共享 `EmbeddingClient.usage_tokens` 差值统计，任务间互相串账（note 79 单建 58 tokens，重建时被记成 662 = 588+74；第二轮 144 = 74+70）。改为累加本次 `on_batch` 的 `BatchStats.tokens`，新增并发回归测试；修复后重建 4 篇笔记 tokens=70/588/437/1168（note 77 三批 611+429+128），全量 **564 passed**
+- 清理：验收账号 2 个、笔记 3 篇（含软删）、异步任务 18 条全部删除；修复验收账号 1 个与 4 条任务删除；库回到 4 篇未删除笔记 / 37 块（3 篇文档笔记 35 + 原手写笔记 2），本次重建已使 `page_no` 归零
 - 文档同步：API.md §2/§11、SCHEMA.md §4.3、DECISIONS D-035、PROGRESS、AGENTS §9.2/§9.6、实施计划 S3-1 勾选、spec/plan 执行记录；无迁移、无新依赖、无前端改动
 - 已知不足：见遗留 49–52；全量重建丢页码、无单笔记重跑、并发唯一键冲突靠重试、无增量重建
 

@@ -456,6 +456,7 @@
 - 决策 5（重建范围与代价）：全量重建覆盖全部未删除笔记（含文档笔记）；先清理软删笔记遗留切片再建任务；按 Markdown 重建会清空文档笔记的 `page_no/bbox_json`。
 - 决策 6（并发）：不加分布式锁；同一笔记并发任务可能撞 `uq_note_chunks_note_chunk_index`，由 runner 3 次重试收敛；失败任务在进度接口 `failures` 中可见（≤20 条）。
 - 决策 7（接口与权限）：`POST /api/v1/admin/index/rebuild`（202，返回 `run_id/total_notes/purged_chunks`）与 `GET /api/v1/admin/index/runs/{run_id}`（32 位小写 hex），仅 admin；空库 422、未知 run 404、队列不可用 500。
-- 决策 8（测试）：新增 39 条（Markdown 12、service 11、task 4、admin 8、notes 4），全量 **563 passed, 1 warning**。
-- 验证（真实 Postgres/Redis/Worker + 真实 DashScope Embedding）：创建验收笔记（note 79）→ `index.note` succeeded、2 块/58 tokens，`heading_path` 含 `函数`、`函数/单调性`；PATCH 追加唯一标记 → 新任务 succeeded、命中 1 行、总块数 2、重复分组 0；软删临时笔记 → 残留 0、孤儿 0；全量重建两次均 `percent=100 / succeeded=5 / failed=0 / chunks=39`，表内 39 行、重复分组 0（各笔记 2/6/8/21/2）；重建后 `page_no` 非空 = 0（确认代价）；student 重建与进度 403、匿名 401、坏 run_id 422、未知 run 404；`scripts/ask.py --user-id 25` 真实回答并引用笔记 #79 的「函数/单调性」片段。
+- 决策 8（测试）：新增 40 条（Markdown 12、service 11、task 4、admin 8、notes 4、并发用量回归 1），全量 **564 passed, 1 warning**。
+- 决策 9（并发用量统计）：验收发现 S1-3 用共享 `EmbeddingClient.usage_tokens` 前后差值统计本次 tokens，S3-1 的并发任务会互相串账（note 79 单建 58，重建记成 662=588+74）。改为在 `index_chunks` 内累加本次 `on_batch` 的 `BatchStats.tokens`（批次回调只属于本次调用），补并发回归测试；块数、检索行为不变，`usage_tokens` 仍保留给脚本/其他调用方。
+- 验证（真实 Postgres/Redis/Worker + 真实 DashScope Embedding）：创建验收笔记（note 79）→ `index.note` succeeded、2 块/58 tokens，`heading_path` 含 `函数`、`函数/单调性`；PATCH 追加唯一标记 → 新任务 succeeded、命中 1 行、总块数 2、重复分组 0；软删临时笔记 → 残留 0、孤儿 0；全量重建两次均 `percent=100 / succeeded=5 / failed=0 / chunks=39`，表内 39 行、重复分组 0（各笔记 2/6/8/21/2）；重建后 `page_no` 非空 = 0（确认代价）；student 重建与进度 403、匿名 401、坏 run_id 422、未知 run 404；`scripts/ask.py --user-id 25` 真实回答并引用笔记 #79 的「函数/单调性」片段。修复统计后再次重建 4 篇：tokens=70/588/437/1168、`chunks=37`、`failed=0`。
 - 已知代价：全量重建丢文档页码/bbox；无单笔记索引状态列与单笔记重跑接口（只能整轮重建）；重建费用随笔记量增长；同一笔记并发保存可能短暂失败后重试；软删只清当前笔记切片，历史遗留靠重建清理。

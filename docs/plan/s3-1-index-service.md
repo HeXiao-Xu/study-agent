@@ -1606,7 +1606,7 @@ cd E:/BiShe-AIStudy/study-agent
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-Expected: `563 passed` 左右（基线 524 + 新增 39；以实际为准，全绿即可）
+Expected: `564 passed` 左右（基线 524 + 新增 40；以实际为准，全绿即可）
 
 - [ ] **Step 10: Commit**
 
@@ -1787,7 +1787,8 @@ git commit -m "docs(s3-1): 索引服务验收记录与文档同步"
 | 2 索引服务 | `feat(s3-1): 索引服务与重建进度聚合` | `test_index_service.py` 11 passed | SQL 断言含 note_id+user_id、deleted_at；空库 422 |
 | 3 index.note 任务 | `feat(s3-1): index.note 任务与注册` | `test_index_task.py` 4 + registry 5 passed | 任务已注册，skipped 结果透传 |
 | 4 接口与副作用 | `feat(s3-1): 笔记索引副作用与管理员重建接口` | admin 8 + notes 17 passed；全量 **563 passed, 1 warning** | 仅正文 PATCH 入队；DELETE 同事务删块 |
-| 5 真实验收+文档 | `docs(s3-1): 索引服务验收记录与文档同步` | 全量回归 563 passed | 见下 |
+| 5 真实验收+文档 | `docs(s3-1): 索引服务验收记录与文档同步` | 全量回归 564 passed | 见下 |
+| 6 统计修复 | `fix(s3-1): 并发索引的 Embedding 用量统计串账` | 新增并发回归 1 条，全量 **564 passed, 1 warning** | 真实重建 4 篇 tokens=70/588/437/1168 |
 
 真实环境：Docker `study-agent-postgres/redis/minio` Up；uvicorn `127.0.0.1:8000` + `arq app.tasks.worker.WorkerSettings`；真实 DashScope `text-embedding-v4`（Key 已配置，未打印）。
 
@@ -1809,3 +1810,5 @@ git commit -m "docs(s3-1): 索引服务验收记录与文档同步"
 4. 重建 run 的 `purged_chunks=0` 与计划示例一致（当时库内无软删残留），清理路径已由 note 78/80 的 DELETE 验收覆盖。
 5. 文档提交与代码分开；`git push` 未执行（按项目约定由用户推送）。
 6. **验收后清理**：删除 `s31_student`/`s31_admin`、3 篇验收笔记与 18 条任务；库回到 4 篇未删除笔记、37 块，避免把测试账号留在基线。
+7. **修改了 `index_chunks`（已获用户确认，偏离 Global Constraints）**：并发重建发现共享 `EmbeddingClient.usage_tokens` 差值互相串账（note 79 单建 58，重建记成 662=588+74；第二轮 144=74+70）。改为累加本次 `on_batch` 的 `BatchStats.tokens`，补 `ConcurrentUsageClient` 回归测试；修复后重启 Worker 再重建 4 篇，tokens=70/588/437/1168、`chunks=37`、`failed=0`；块数与检索行为不变。
+8. 修复验收账号 `s31fix_admin`（id 27）与 4 条任务已删除，未留在库内。

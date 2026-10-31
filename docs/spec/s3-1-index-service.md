@@ -201,7 +201,7 @@ def index_note_task(session: Session, payload: dict[str, Any]) -> dict[str, Any]
 
 前置：`docker compose -f deploy/docker-compose.dev.yml up -d`（当前三件套已在跑）；`alembic upgrade head`（本卡无迁移）；起 uvicorn 与 arq worker。
 
-1. **pytest**：全套全绿（实际 **563 passed, 1 warning**，基线 524 + 39 条）。
+1. **pytest**：全套全绿（实际 **564 passed, 1 warning**，基线 524 + 40 条）。
 2. **创建笔记即入库**：`test1` 登录 → `POST /notes`（含 `## 标题`、LaTeX、列表）→ 等任务成功 → psql 查 `note_chunks`：块数 == 任务结果 `result.chunks`，`heading_path` 正确，`content` 含标题文字。
 3. **改正文即重建**：`PATCH` 追加一句唯一标记 → 等任务成功 → psql：旧标记内容查不到、新标记能查到、`SELECT count(*)` 与任务 `result.chunks` 一致；同笔记重复保存不出现重复 `(note_id, chunk_index)`。
 4. **软删清理**：新建临时笔记并等入库 → `DELETE` → psql 该 note 的 `note_chunks` 为 0；`SELECT count(*) FROM note_chunks c JOIN notes n ON n.id=c.note_id WHERE n.deleted_at IS NOT NULL` 为 0。
@@ -251,3 +251,4 @@ def index_note_task(session: Session, payload: dict[str, Any]) -> dict[str, Any]
   - 权限：student 两接口 403、匿名 401、坏 run_id 422、未知 run 404。
   - `scripts/ask.py --user-id 25` 真实检索并回答，引用笔记 #79 的「函数/单调性」与「函数」两个片段（`refused=否`，`llm_calls=1`）。
 - 验收后清理：删除 `s31_student`/`s31_admin` 两个账号、其 3 篇笔记（78/79/80）与 18 条 `async_tasks`；库回到 4 篇未删除笔记、37 块（3 篇文档笔记 35 块 + 原手写笔记 2 块），`page_no` 因本次全量重建已为 0。
+- 实测抓修（2026-10-31，`976216e`）：并发重建暴露出 S1-3 用共享 `EmbeddingClient.usage_tokens` 差值统计会串账（note 79 单建 58 tokens，重建时记成 662=588+74；第二轮 144=74+70）。`index_chunks` 改为累加本次 `on_batch` 的 `BatchStats.tokens`，新增并发回归测试；修复后重建 4 篇 tokens=70/588/437/1168、`chunks=37`、`failed=0`，全量 **564 passed**。这偏离了 spec「不改 `indexing.py`」的边界，原因是验收发现的既有缺陷会影响 S3-7 用量统计准确性，已获用户确认后修复。
