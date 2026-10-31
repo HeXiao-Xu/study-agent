@@ -153,7 +153,10 @@ def activate_prompt(session: Session, prompt_id: int) -> PromptTemplate:
         select(PromptTemplate).where(PromptTemplate.name == target.name)
     ).all()
     for row in rows:
-        row.is_active = row.id == target.id
+        row.is_active = False
+    # 部分唯一索引不允许同一 flush 里同时出现两条 active；先落停用，再启用目标。
+    session.flush()
+    target.is_active = True
     target.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(target)

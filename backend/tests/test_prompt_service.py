@@ -33,12 +33,15 @@ class FakeSession:
         scalar_results: list[object] | None = None,
         scalars_results: list[list[object]] | None = None,
         get_results: dict[int, object] | None = None,
+        known_rows: list[PromptTemplate] | None = None,
     ) -> None:
         self.scalar_results = list(scalar_results or [])
         self.scalars_results = list(scalars_results or [])
         self.get_results = dict(get_results or {})
+        self.known_rows = list(known_rows or [])
         self.added: list[object] = []
         self.commits = 0
+        self.flush_calls = 0
 
     def scalar(self, statement: object) -> object | None:
         return self.scalar_results.pop(0)
@@ -58,6 +61,11 @@ class FakeSession:
 
     def commit(self) -> None:
         self.commits += 1
+
+    def flush(self) -> None:
+        self.flush_calls += 1
+        active = sum(1 for row in self.known_rows if row.is_active)
+        assert active <= 1, "active 唯一索引会在 flush 时冲突"
 
     def refresh(self, instance: object) -> None:
         return None
@@ -182,6 +190,7 @@ def test_activate_prompt_switches_exclusive() -> None:
     session = FakeSession(
         get_results={2: target},
         scalars_results=[[old, target]],
+        known_rows=[old, target],
     )
 
     result = prompt_service.activate_prompt(session, 2)
@@ -189,6 +198,7 @@ def test_activate_prompt_switches_exclusive() -> None:
     assert result is target
     assert target.is_active is True
     assert old.is_active is False
+    assert session.flush_calls >= 1
     assert session.commits == 1
 
 
