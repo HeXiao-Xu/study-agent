@@ -6,10 +6,12 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects import postgresql
 
 from app.api.deps import get_db
 from app.core.security import create_access_token
 from app.main import app
+from app.models.async_task import AsyncTask
 from app.models.note import Note
 from app.models.subject import Subject
 from app.models.user import User
@@ -33,6 +35,7 @@ class FakeSession:
         self.relation = relation
         self.subject = subject
         self.added: list[object] = []
+        self.executed: list[object] = []
         self.commits = 0
 
     def scalar(self, statement: object):
@@ -66,6 +69,9 @@ class FakeSession:
         if getattr(instance, "created_at", None) is None:
             instance.created_at = now
         instance.updated_at = now
+
+    def execute(self, statement: object) -> None:
+        self.executed.append(statement)
 
 
 def _user(
@@ -264,3 +270,68 @@ def test_notes_require_token(client: TestClient) -> None:
     resp = client.get("/api/v1/notes")
     assert resp.status_code == 401
     assert resp.json()["code"] == 40100
+
+
+def _task_names(session: FakeSession) -> list[str]:
+    return [item.name for item in session.added if isinstance(item, AsyncTask)]
+
+
+def test_create_note_enqueues_index_task(client: TestClient) -> None:
+    session = FakeSession(user=_user())
+    _override(session)
+
+    resp = client.post(
+        "/api/v1/notes",
+        json={"title": "函数单调性", "content_md": "## 单调性\n\n设 $x$ 递增"},
+        headers=_headers(session.user),
+    )
+
+    assert resp.status_code == 201
+    assert "index.note" in _task_names(session)
+
+
+def test_patch_note_content_enqueues_index_task(client: TestClient) -> None:
+    note = _note()
+    session = FakeSession(user=_user(), note=note)
+    _override(session)
+
+    resp = client.patch(
+        "/api/v1/notes/1",
+        json={"content_md": "## 新章节\n\n新正文"},
+        headers=_headers(session.user),
+    )
+
+    assert resp.status_code == 200
+    assert "index.note" in _task_names(session)
+    assert note.content_text == "新章节 新正文"
+
+
+def test_patch_note_title_only_does_not_enqueue_index(client: TestClient) -> None:
+    note = _note()
+    session = FakeSession(user=_user(), note=note)
+    _override(session)
+
+    resp = client.patch(
+        "/api/v1/notes/1", json={"title": "新标题"}, headers=_headers(session.user)
+    )
+
+    assert resp.status_code == 200
+    assert "index.note" not in _task_names(session)
+
+
+def test_delete_note_deletes_chunks(client: TestClient) -> None:
+    note = _note()
+    session = FakeSession(user=_user(), note=note)
+    _override(session)
+
+    resp = client.delete("/api/v1/notes/1", headers=_headers(session.user))
+
+    assert resp.status_code == 204
+    sql = str(
+        session.executed[0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "DELETE FROM note_chunks" in sql
+    assert "note_id = 1" in sql
+    assert "user_id = 1" in sql

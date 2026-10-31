@@ -19,6 +19,7 @@ from app.models.subject import Subject
 from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.notes import NoteCreate, NoteSummary, NoteUpdate
+from app.services import index_service
 from app.utils.markdown_text import to_plain_text
 from app.utils.pagination import PageParams, SortParams, apply_sort, paginate_query
 
@@ -172,4 +173,8 @@ def delete_note(session: Session, *, note_id: int, owner: User) -> None:
     if note.user_id != owner.id:
         raise ForbiddenError("无权删除该资源")
     note.deleted_at = datetime.now(timezone.utc)
+    # 检索链路只按 user_id 过滤、不 join notes：切片必须与软删同事务清掉
+    index_service.delete_note_chunks(
+        session, note_id=note.id, user_id=note.user_id
+    )
     _commit(session)

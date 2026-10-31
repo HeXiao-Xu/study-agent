@@ -29,6 +29,7 @@ class FakeSession:
         self.relation = relation
         self.subject = subject
         self.added: list[object] = []
+        self.executed: list[object] = []
         self.commits = 0
         self.rollbacks = 0
 
@@ -61,6 +62,9 @@ class FakeSession:
         if getattr(instance, "created_at", None) is None:
             instance.created_at = now
         instance.updated_at = now
+
+    def execute(self, statement: object) -> None:
+        self.executed.append(statement)
 
 
 def _user(
