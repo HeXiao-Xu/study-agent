@@ -411,6 +411,7 @@ erDiagram
 ```
 
   `rewrite` 可为 `null`（未调用改写或 chitchat 以外的无改写场景）。
+  S3-6 起顶层 token 字段为所有 LLM 尝试（首轮 + 引用重试）之和；`rewrite` 仍单独计。
 
 ## 8. Agent 与运维
 
