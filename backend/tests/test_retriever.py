@@ -1,6 +1,8 @@
 """S1-4 检索器测试：RRF 纯函数 + fake session（spec §11）。"""
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from sqlalchemy.dialects import postgresql
 
@@ -13,8 +15,9 @@ from app.ai.rerank import (
     RerankScore,
 )
 from app.ai.rag.retriever import (
-    RetrievalFilterUnavailable,
+    RetrievalScope,
     RetrievedChunk,
+    _scope_conditions,
     rerank_fused,
     retrieve_hybrid,
     retrieve_hybrid_reranked,
@@ -153,13 +156,64 @@ def test_query_filters_use_user_id_and_limits() -> None:
     assert 1 in fulltext_params.values()
 
 
-def test_rejects_subject_and_kp_filters() -> None:
-    client = FakeClient()
-    with pytest.raises(RetrievalFilterUnavailable, match="S2-1"):
-        retrieve_hybrid(FakeSession(), "函数的定义域", user_id=1, client=client, subject_id=3)
-    with pytest.raises(RetrievalFilterUnavailable, match="S2-1"):
-        retrieve_hybrid(FakeSession(), "函数的定义域", user_id=1, client=client, kp_ids=[1, 2])
-    assert client.calls == []
+def _compiled(statement: object) -> str:
+    return str(
+        statement.compile(  # type: ignore[attr-defined]
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+
+def test_retrieve_hybrid_joins_notes_and_guards_owner() -> None:
+    session = FakeSession(FakeResult([]), FakeResult([]))
+    retrieve_hybrid(session, "函数的定义域", user_id=7, client=FakeClient())
+
+    for statement in session.statements:
+        sql = str(statement.compile(dialect=postgresql.dialect()))
+        assert "JOIN notes" in sql
+        assert "notes.user_id" in sql
+        assert "notes.deleted_at IS NULL" in sql
+
+
+def test_scope_conditions_include_all_filters() -> None:
+    from sqlalchemy import select
+
+    scope = RetrievalScope(
+        subject_id=7,
+        folder="函数",
+        start_date=date(2026, 10, 1),
+        end_date=date(2026, 10, 31),
+        chunk_types=["question", "note"],
+    )
+    sql = _compiled(select(NoteChunk.id).where(*_scope_conditions(scope, 7)))
+
+    assert "notes.user_id = 7" in sql
+    assert "notes.deleted_at IS NULL" in sql
+    assert "notes.subject_id = 7" in sql
+    assert "notes.folder = '函数'" in sql
+    assert "notes.created_at >=" in sql
+    # end_date 含当天：下界是次日 00:00 UTC
+    assert "2026-11-01 00:00:00+00:00" in sql
+    assert "chunk_type IN ('question', 'note')" in sql
+
+
+def test_scope_none_keeps_only_owner_and_deleted_guard() -> None:
+    from sqlalchemy import select
+
+    sql = _compiled(select(NoteChunk.id).where(*_scope_conditions(None, 7)))
+
+    assert "notes.user_id = 7" in sql
+    assert "notes.deleted_at IS NULL" in sql
+    assert "notes.subject_id" not in sql
+    assert "notes.folder" not in sql
+    assert "chunk_type IN" not in sql
+
+
+def test_retrieval_result_reports_embedding_ms() -> None:
+    session = FakeSession(FakeResult([]), FakeResult([]))
+    result = retrieve_hybrid(session, "函数的定义域", user_id=1, client=FakeClient())
+    assert result.embedding_ms >= 0
 
 
 def test_empty_query_returns_empty_without_embedding() -> None:

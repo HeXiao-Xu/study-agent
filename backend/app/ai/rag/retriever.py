@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import date, datetime, time as dtime, timedelta, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -20,6 +22,7 @@ from app.ai.rerank import (
     get_rerank_client,
 )
 from app.core.config import get_settings
+from app.models.note import Note
 from app.models.note_chunk import NoteChunk
 from app.utils.zh_tokenizer import build_tsquery_or
 
@@ -31,8 +34,40 @@ DEFAULT_RERANK_CANDIDATES = 30
 DEFAULT_RERANK_TOP_K = 6
 
 
-class RetrievalFilterUnavailable(ValueError):
-    """S1-4 只能下推 user_id；subject/kp 依赖 S2-1 的 notes/note_kps。"""
+class RetrievalScope(BaseModel):
+    """S3-2 检索范围：全部条件下推 SQL；None 表示不额外过滤。"""
+
+    subject_id: int | None = None
+    folder: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    chunk_types: list[Literal["question", "note", "formula"]] | None = None
+
+
+def _utc_start(day: date) -> datetime:
+    return datetime.combine(day, dtime.min, tzinfo=timezone.utc)
+
+
+def _scope_conditions(scope: RetrievalScope | None, user_id: int) -> list[object]:
+    """owner + 未删是恒有条件；其余 scope 条件全部下推 SQL。"""
+    conditions: list[object] = [
+        NoteChunk.user_id == user_id,
+        Note.user_id == user_id,
+        Note.deleted_at.is_(None),
+    ]
+    if scope is None:
+        return conditions
+    if scope.subject_id is not None:
+        conditions.append(Note.subject_id == scope.subject_id)
+    if scope.folder:
+        conditions.append(Note.folder == scope.folder)
+    if scope.start_date is not None:
+        conditions.append(Note.created_at >= _utc_start(scope.start_date))
+    if scope.end_date is not None:
+        conditions.append(Note.created_at < _utc_start(scope.end_date + timedelta(days=1)))
+    if scope.chunk_types:
+        conditions.append(NoteChunk.chunk_type.in_(scope.chunk_types))
+    return conditions
 
 
 class RetrievedChunk(BaseModel):
@@ -70,6 +105,7 @@ class RetrievalResult(BaseModel):
     fulltext: list[RetrievedChunk]
     fused: list[RetrievedChunk]
     elapsed_ms: int
+    embedding_ms: int = 0
     vector_ms: int = 0
     fulltext_ms: int = 0
     reranked: list[RetrievedChunk] = Field(default_factory=list)
@@ -147,11 +183,13 @@ def _vector_search(
     *,
     user_id: int,
     top_k: int,
+    scope: RetrievalScope | None = None,
 ) -> list[RetrievedChunk]:
     distance = NoteChunk.embedding.cosine_distance(query_vector).label("distance")
     stmt = (
         select(NoteChunk, distance)
-        .where(NoteChunk.user_id == user_id)
+        .join(Note, Note.id == NoteChunk.note_id)
+        .where(*_scope_conditions(scope, user_id))
         .order_by(distance.asc(), NoteChunk.id.asc())
         .limit(top_k)
     )
@@ -168,12 +206,14 @@ def _fulltext_search(
     *,
     user_id: int,
     top_k: int,
+    scope: RetrievalScope | None = None,
 ) -> list[RetrievedChunk]:
     tsquery = func.to_tsquery("simple", tsquery_str)
     score = func.ts_rank_cd(NoteChunk.tsv, tsquery).label("fulltext_score")
     stmt = (
         select(NoteChunk, score)
-        .where(NoteChunk.user_id == user_id, NoteChunk.tsv.op("@@")(tsquery))
+        .join(Note, Note.id == NoteChunk.note_id)
+        .where(NoteChunk.tsv.op("@@")(tsquery), *_scope_conditions(scope, user_id))
         .order_by(score.desc(), NoteChunk.id.asc())
         .limit(top_k)
     )
@@ -192,14 +232,9 @@ def retrieve_hybrid(
     top_k: int = DEFAULT_TOP_K,
     final_k: int | None = None,
     client: EmbeddingClient | None = None,
-    subject_id: int | None = None,
-    kp_ids: list[int] | None = None,
+    scope: RetrievalScope | None = None,
 ) -> RetrievalResult:
-    """两路检索 + RRF；user_id 必填，subject/kp 在 S2-1 前不可用。"""
-    if subject_id is not None or kp_ids:
-        raise RetrievalFilterUnavailable(
-            "S1-4 仅支持 user_id 过滤；subject_id/kp_ids 需要 S2-1 的 notes/note_kps 表"
-        )
+    """两路检索 + RRF；user_id 必填，scope 条件下推 SQL。"""
     if top_k <= 0:
         raise ValueError("top_k 必须为正整数")
     if final_k is not None and final_k <= 0:
@@ -214,12 +249,15 @@ def retrieve_hybrid(
             fulltext=[],
             fused=[],
             elapsed_ms=0,
+            embedding_ms=0,
         )
 
     started = time.perf_counter()
     settings = get_settings()
     embedding_client = client or get_embedding_client()
+    embed_started = time.perf_counter()
     query_vector = embedding_client.encode([query])[0]
+    embedding_ms = int((time.perf_counter() - embed_started) * 1000)
     if len(query_vector) != settings.embedding_dim:
         raise EmbeddingError(
             f"查询向量维度不符：期望 {settings.embedding_dim}，实际 {len(query_vector)}",
@@ -227,13 +265,17 @@ def retrieve_hybrid(
         )
 
     vector_started = time.perf_counter()
-    vector_hits = _vector_search(session, query_vector, user_id=user_id, top_k=top_k)
+    vector_hits = _vector_search(
+        session, query_vector, user_id=user_id, top_k=top_k, scope=scope
+    )
     vector_ms = int((time.perf_counter() - vector_started) * 1000)
 
     tsquery_str = build_tsquery_or(query)
     fulltext_started = time.perf_counter()
     fulltext_hits = (
-        _fulltext_search(session, tsquery_str, user_id=user_id, top_k=top_k)
+        _fulltext_search(
+            session, tsquery_str, user_id=user_id, top_k=top_k, scope=scope
+        )
         if tsquery_str
         else []
     )
@@ -252,6 +294,7 @@ def retrieve_hybrid(
             "fused_hits": len(fused),
             "tsquery": tsquery_str,
             "latency_ms": elapsed_ms,
+            "embedding_ms": embedding_ms,
             "vector_ms": vector_ms,
             "fulltext_ms": fulltext_ms,
         },
@@ -263,6 +306,7 @@ def retrieve_hybrid(
         fulltext=fulltext_hits,
         fused=fused,
         elapsed_ms=elapsed_ms,
+        embedding_ms=embedding_ms,
         vector_ms=vector_ms,
         fulltext_ms=fulltext_ms,
     )
@@ -353,8 +397,7 @@ def retrieve_hybrid_reranked(
     rerank_top_k: int | None = None,
     client: EmbeddingClient | None = None,
     rerank_client: RerankClient | None = None,
-    subject_id: int | None = None,
-    kp_ids: list[int] | None = None,
+    scope: RetrievalScope | None = None,
 ) -> RetrievalResult:
     """S1-4 混合检索 → top30 → rerank → top6；rerank 失败只回退。"""
     settings = get_settings()
@@ -372,8 +415,7 @@ def retrieve_hybrid_reranked(
         top_k=top_k,
         final_k=None,
         client=client,
-        subject_id=subject_id,
-        kp_ids=kp_ids,
+        scope=scope,
     )
     if not result.fused:
         return result
