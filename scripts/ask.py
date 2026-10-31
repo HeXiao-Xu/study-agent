@@ -24,6 +24,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.core.context import set_trace_id  # noqa: E402
 from app.core.db import new_session  # noqa: E402
 from app.core.logging import setup_logging  # noqa: E402
+from app.services import prompt_service  # noqa: E402
 
 
 def _configure_stdio() -> None:
@@ -54,7 +55,13 @@ def _format_citation(citation: Citation) -> str:
     )
 
 
-def _print_result(question: str, result: AnswerResult, *, debug: bool) -> None:
+def _print_result(
+    question: str,
+    result: AnswerResult,
+    *,
+    debug: bool,
+    prompt_label: str | None = None,
+) -> None:
     print(f"问题：{question}")
     print("回答：")
     print(result.answer)
@@ -63,6 +70,8 @@ def _print_result(question: str, result: AnswerResult, *, debug: bool) -> None:
         for citation in result.citations:
             print(_format_citation(citation))
             print(f"    片段：{citation.snippet.replace(chr(10), ' ')[:160]}")
+    if prompt_label:
+        print(f"\nPrompt：{prompt_label}")
     if debug:
         print(
             f"\n调试：refused={result.refused} reason={result.refusal_reason} "
@@ -89,14 +98,23 @@ def _ask_one(
 ) -> int:
     try:
         with new_session() as session:
+            active = prompt_service.get_active_prompt(
+                session, name=prompt_service.QA_PROMPT_NAME
+            )
             result = answer_question(
                 session,
                 question,
                 user_id=user_id,
                 top_k=top_k,
                 threshold=threshold,
+                prompt_template=active.content,
             )
-            _print_result(question, result, debug=debug)
+            _print_result(
+                question,
+                result,
+                debug=debug,
+                prompt_label=f"{active.name}/{active.version}",
+            )
             return 0
     except LLMError as exc:
         print(f"LLM 调用失败：{exc}", file=sys.stderr)
