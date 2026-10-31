@@ -42,6 +42,12 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class MessageRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
 def in_check(column: str, values: Iterable[str]) -> str:
     """渲染 `<column> IN ('a', 'b')`；StrEnum 成员经 f-string 取到值本身。"""
     joined = ", ".join(f"'{value}'" for value in values)
