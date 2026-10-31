@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal
 
@@ -20,13 +21,18 @@ from app.ai.llm import (
     get_llm_client,
 )
 from app.ai.rag.prompt_builder import (
+    BuiltContext,
     Citation,
     ContextItem,
     build_context,
     render_prompt,
     render_prompt_text,
 )
-from app.ai.rag.retriever import RetrievalResult, retrieve_hybrid_reranked
+from app.ai.rag.retriever import (
+    RetrievalResult,
+    RetrievalScope,
+    retrieve_hybrid_reranked,
+)
 from app.ai.rerank import RerankClient
 from app.core.config import get_settings
 
@@ -61,6 +67,23 @@ class AnswerResult:
     citation_retry_count: int
     degraded: bool
     top_rerank_score: float | None
+
+
+@dataclass(frozen=True)
+class PreparedAnswer:
+    retrieval: RetrievalResult
+    built: BuiltContext | None
+    prompt: str
+    refused: AnswerResult | None
+    retrieval_ms: int
+    top_score: float | None
+    degraded: bool
+
+
+@dataclass(frozen=True)
+class AnswerChunk:
+    text: str = ""
+    response: LLMResponse | None = None
 
 
 def extract_citation_indices(answer: str) -> list[int]:
@@ -133,7 +156,7 @@ def _call_llm(
     )
 
 
-def answer_question(
+def prepare_answer(
     session: Session,
     question: str,
     *,
@@ -142,9 +165,10 @@ def answer_question(
     threshold: float | None = None,
     embedding_client: EmbeddingClient | None = None,
     rerank_client: RerankClient | None = None,
-    llm_client: LLMClient | None = None,
+    scope: RetrievalScope | None = None,
+    retrieval_query: str | None = None,
     prompt_template: str | None = None,
-) -> AnswerResult:
+) -> PreparedAnswer:
     if not question.strip():
         raise ValueError("question 不能为空")
     settings = get_settings()
@@ -152,19 +176,32 @@ def answer_question(
     if not 0.0 <= threshold_value <= 1.0:
         raise ValueError("threshold 必须在 [0, 1]")
 
+    query = (retrieval_query or question).strip()
+    if not query:
+        raise ValueError("retrieval_query 不能为空")
+
     retrieval_started = time.perf_counter()
     retrieval: RetrievalResult = retrieve_hybrid_reranked(
         session,
-        question,
+        query,
         user_id=user_id,
         top_k=top_k,
         client=embedding_client,
         rerank_client=rerank_client,
+        scope=scope,
     )
     retrieval_ms = int((time.perf_counter() - retrieval_started) * 1000)
 
     if not retrieval.reranked:
-        return _refused("no_context", retrieval_ms=retrieval_ms)
+        return PreparedAnswer(
+            retrieval=retrieval,
+            built=None,
+            prompt="",
+            refused=_refused("no_context", retrieval_ms=retrieval_ms),
+            retrieval_ms=retrieval_ms,
+            top_score=None,
+            degraded=False,
+        )
 
     scores = [
         chunk.rerank_score
@@ -177,10 +214,18 @@ def answer_question(
         or top_score is None
     )
     if not degraded and top_score is not None and top_score < threshold_value:
-        return _refused(
-            "low_score",
+        return PreparedAnswer(
+            retrieval=retrieval,
+            built=None,
+            prompt="",
+            refused=_refused(
+                "low_score",
+                retrieval_ms=retrieval_ms,
+                top_rerank_score=top_score,
+            ),
             retrieval_ms=retrieval_ms,
-            top_rerank_score=top_score,
+            top_score=top_score,
+            degraded=degraded,
         )
 
     built = build_context(
@@ -188,10 +233,18 @@ def answer_question(
         max_tokens=settings.qa_context_max_tokens,
     )
     if not built.items:
-        return _refused(
-            "no_context",
+        return PreparedAnswer(
+            retrieval=retrieval,
+            built=None,
+            prompt="",
+            refused=_refused(
+                "no_context",
+                retrieval_ms=retrieval_ms,
+                top_rerank_score=top_score,
+                degraded=degraded,
+            ),
             retrieval_ms=retrieval_ms,
-            top_rerank_score=top_score,
+            top_score=top_score,
             degraded=degraded,
         )
 
@@ -203,8 +256,71 @@ def answer_question(
             context=built.text,
             question=question,
         )
+    return PreparedAnswer(
+        retrieval=retrieval,
+        built=built,
+        prompt=prompt,
+        refused=None,
+        retrieval_ms=retrieval_ms,
+        top_score=top_score,
+        degraded=degraded,
+    )
+
+
+def stream_answer(
+    prepared: PreparedAnswer,
+    *,
+    llm_client: LLMClient | None = None,
+) -> Iterator[AnswerChunk]:
+    if prepared.refused is not None:
+        return
     client = llm_client if llm_client is not None else get_llm_client()
-    messages = [LLMMessage(role="user", content=prompt)]
+    messages = [LLMMessage(role="user", content=prepared.prompt)]
+    for chunk in client.chat_stream(
+        messages,
+        temperature=get_settings().llm_temperature,
+        max_tokens=get_settings().llm_max_output_tokens,
+        scene="qa",
+    ):
+        if chunk.response is not None:
+            yield AnswerChunk(response=chunk.response)
+        elif chunk.text:
+            yield AnswerChunk(text=chunk.text)
+
+
+def answer_question(
+    session: Session,
+    question: str,
+    *,
+    user_id: int,
+    top_k: int = 20,
+    threshold: float | None = None,
+    embedding_client: EmbeddingClient | None = None,
+    rerank_client: RerankClient | None = None,
+    llm_client: LLMClient | None = None,
+    prompt_template: str | None = None,
+    scope: RetrievalScope | None = None,
+    retrieval_query: str | None = None,
+) -> AnswerResult:
+    prepared = prepare_answer(
+        session,
+        question,
+        user_id=user_id,
+        top_k=top_k,
+        threshold=threshold,
+        embedding_client=embedding_client,
+        rerank_client=rerank_client,
+        scope=scope,
+        retrieval_query=retrieval_query,
+        prompt_template=prompt_template,
+    )
+    if prepared.refused is not None:
+        return prepared.refused
+    assert prepared.built is not None
+
+    settings = get_settings()
+    client = llm_client if llm_client is not None else get_llm_client()
+    messages = [LLMMessage(role="user", content=prepared.prompt)]
     first = _call_llm(
         client,
         messages,
@@ -218,35 +334,36 @@ def answer_question(
     cost_yuan = first.cost_yuan
     llm_calls = 1
 
-    ok, indices = validate_citations(first.text, context_size=len(built.items))
+    context_size = len(prepared.built.items)
+    ok, indices = validate_citations(first.text, context_size=context_size)
     citation_retry_count = 0
     if ok:
         return AnswerResult(
             answer=first.text,
             refused=False,
             refusal_reason=None,
-            citations=_cited(built.items, indices),
-            context_tokens=built.tokens,
+            citations=_cited(prepared.built.items, indices),
+            context_tokens=prepared.built.tokens,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
-            retrieval_ms=retrieval_ms,
+            retrieval_ms=prepared.retrieval_ms,
             llm_ms=llm_ms,
-            latency_ms=retrieval_ms + llm_ms,
+            latency_ms=prepared.retrieval_ms + llm_ms,
             cost_yuan=cost_yuan,
             llm_calls=llm_calls,
             citation_retry_count=citation_retry_count,
-            degraded=degraded,
-            top_rerank_score=top_score,
+            degraded=prepared.degraded,
+            top_rerank_score=prepared.top_score,
         )
 
     if settings.qa_citation_max_retries < 1:
         return _refused(
             "citation_invalid",
-            retrieval_ms=retrieval_ms,
-            context_tokens=built.tokens,
-            top_rerank_score=top_score,
-            degraded=degraded,
+            retrieval_ms=prepared.retrieval_ms,
+            context_tokens=prepared.built.tokens,
+            top_rerank_score=prepared.top_score,
+            degraded=prepared.degraded,
             llm_calls=llm_calls,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -257,7 +374,7 @@ def answer_question(
 
     correction = (
         f"你上一次回答的引用编号不合法或缺失。本次可用的引用编号只有 "
-        f"[1]..[{len(built.items)}]。请重写回答，只使用这些编号；"
+        f"[1]..[{context_size}]。请重写回答，只使用这些编号；"
         "如果资料不足，直接回答“你的资料里没有相关内容”。"
         "不要解释校验过程，不要使用不存在的编号。"
     )
@@ -279,25 +396,25 @@ def answer_question(
     llm_calls += 1
     citation_retry_count = 1
 
-    ok, indices = validate_citations(second.text, context_size=len(built.items))
+    ok, indices = validate_citations(second.text, context_size=context_size)
     if ok:
         return AnswerResult(
             answer=second.text,
             refused=False,
             refusal_reason=None,
-            citations=_cited(built.items, indices),
-            context_tokens=built.tokens,
+            citations=_cited(prepared.built.items, indices),
+            context_tokens=prepared.built.tokens,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
-            retrieval_ms=retrieval_ms,
+            retrieval_ms=prepared.retrieval_ms,
             llm_ms=llm_ms,
-            latency_ms=retrieval_ms + llm_ms,
+            latency_ms=prepared.retrieval_ms + llm_ms,
             cost_yuan=cost_yuan,
             llm_calls=llm_calls,
             citation_retry_count=citation_retry_count,
-            degraded=degraded,
-            top_rerank_score=top_score,
+            degraded=prepared.degraded,
+            top_rerank_score=prepared.top_score,
         )
 
     reason: RefusalReason = (
@@ -305,10 +422,10 @@ def answer_question(
     )
     return _refused(
         reason,
-        retrieval_ms=retrieval_ms,
-        context_tokens=built.tokens,
-        top_rerank_score=top_score,
-        degraded=degraded,
+        retrieval_ms=prepared.retrieval_ms,
+        context_tokens=prepared.built.tokens,
+        top_rerank_score=prepared.top_score,
+        degraded=prepared.degraded,
         llm_calls=llm_calls,
         citation_retry_count=citation_retry_count,
         prompt_tokens=prompt_tokens,

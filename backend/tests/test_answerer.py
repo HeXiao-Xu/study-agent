@@ -3,17 +3,26 @@ from __future__ import annotations
 
 import pytest
 
-from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse
+from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse, LLMStreamChunk
 from app.ai.llm.errors import LLMError
 from app.ai.rag import answerer
 from app.ai.rag.answerer import (
     REFUSAL_TEXT,
+    AnswerChunk,
+    PreparedAnswer,
     answer_question,
     extract_citation_indices,
+    prepare_answer,
+    stream_answer,
     validate_citations,
 )
 from app.ai.rag.prompt_builder import PromptTemplateError
-from app.ai.rag.retriever import RerankInfo, RetrievalResult, RetrievedChunk
+from app.ai.rag.retriever import (
+    RerankInfo,
+    RetrievalResult,
+    RetrievalScope,
+    RetrievedChunk,
+)
 
 
 def _chunk(chunk_id: int = 1, score: float | None = 0.9) -> RetrievedChunk:
@@ -245,3 +254,77 @@ def test_answer_question_custom_template_missing_variable_raises(monkeypatch) ->
         )
 
     assert fake.calls == []
+
+
+class FakeStreamLLM(FakeLLM):
+    def chat_stream(self, messages, *, temperature=None, max_tokens=None, scene="qa"):
+        self.calls.append(messages)
+        for text in self.texts:
+            yield LLMStreamChunk(text=text)
+        yield LLMStreamChunk(
+            response=LLMResponse(
+                text="".join(self.texts),
+                model="fake",
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                latency_ms=1,
+                cost_yuan=0.00001,
+            )
+        )
+
+
+def test_prepare_answer_refuses_no_context_without_llm(monkeypatch) -> None:
+    _patch(monkeypatch, _retrieval([]))
+    prepared = prepare_answer(object(), "问题", user_id=1)
+
+    assert prepared.refused is not None
+    assert prepared.refused.refusal_reason == "no_context"
+    assert prepared.built is None
+    assert prepared.prompt == ""
+
+
+def test_prepare_answer_uses_scope_and_retrieval_query(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_retrieve(session, query, **kwargs):
+        captured["query"] = query
+        captured["scope"] = kwargs.get("scope")
+        return _retrieval([_chunk()])
+
+    monkeypatch.setattr(answerer, "retrieve_hybrid_reranked", fake_retrieve)
+    scope = RetrievalScope(subject_id=7)
+    prepared = prepare_answer(
+        object(),
+        "那它的前提呢？",
+        user_id=1,
+        scope=scope,
+        retrieval_query="错位相减法的前提",
+        prompt_template="C={{ context }} Q={{ question }}",
+    )
+
+    assert prepared.refused is None
+    assert captured["query"] == "错位相减法的前提"
+    assert captured["scope"] == scope
+    assert "那它的前提呢？" in prepared.prompt
+    assert "错位相减法：乘公比" in prepared.prompt
+
+
+def test_stream_answer_yields_deltas_and_final_response() -> None:
+    prepared = PreparedAnswer(
+        retrieval=_retrieval([_chunk()]),
+        built=None,
+        prompt="prompt",
+        refused=None,
+        retrieval_ms=7,
+        top_score=0.9,
+        degraded=False,
+    )
+    fake = FakeStreamLLM(["答", "[1]"])
+
+    chunks = list(stream_answer(prepared, llm_client=fake))
+
+    assert "".join(chunk.text for chunk in chunks) == "答[1]"
+    assert chunks[-1].response is not None
+    assert chunks[-1].response.total_tokens == 15
+    assert fake.calls[0][0].content == "prompt"
