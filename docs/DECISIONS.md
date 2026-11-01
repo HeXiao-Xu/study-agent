@@ -541,3 +541,16 @@
   - `scripts/citation_eval.py --user-id 18`：5 条无依据问题全部拒答（3 条 `low_score`、2 条 `no_valid_citation`），5 条部分覆盖问题全部保留并带补充前缀，**10/10 通过**。
   - 真实 SSE 抽查（错位相减法步骤+历史）：`meta` 3.10s，首个 `delta` 15.06s，共 4 个 delta，`done` 15.10s；`tokens=2759`、`latency_ms=14672`、`suggestions=[]`；消息 32 落库 425 字、前缀 2 处、citations rank 1–3。
 - 已知限制：块级检测是启发式，不判断引用是否真正支持该句；首字延迟显著增加；建议固定文案且不落库；断连只能在下一次 chunk 到达时关闭上游，不保证立即停止计费。
+
+## D-041 缓存、LLM 调用日志与用量统计（S3-7）
+
+- 背景：S3-7 要求 LLM/Embedding 调用可审计、重复问答可复用、管理端能按天看 token/成本。spec/plan 见 `docs/spec/s3-7-cache-llm-logs-usage.md`、`docs/plan/s3-7-cache-llm-logs-usage.md`。
+- 决策 1（scene）：按真实调用扩展 `llm_call_logs.scene` 为 `qa/query_rewrite/kp_align/embed/mistake/gen/agent`；`status` 定稿 `success/failed`。`kp_align` 显式传 scene，不再借用 `qa`。
+- 决策 2（问答缓存）：key 固定 `qa:v1:{user_id}:{sha256(scope)}:{sha256(规范化问题)}`，TTL 24h；**不把对话历史放进 key**，因此同一用户同一问题在相同 scope 下会跨会话命中。命中时不改写、不检索、不调 LLM/Embedding，但仍落新的 user/assistant 消息与 citations；`done.tokens=0`、`done.cached=true`。多轮指代问题可能返回首次答案，属于已接受的限制。
+- 决策 3（Embedding 缓存）：key 为 `embed:{model}:{dim}:{sha256(text)}`，TTL 7d；包装器只把 miss 文本交给厂商，命中不产生厂商调用和调用日志；批量结果按原顺序回填，条数/维度不符抛 `EmbeddingError`。
+- 决策 4（调用日志）：`llm_call_logs` 通过 `record_llm_call` best-effort 写入，独立 Session，任何失败只 WARNING，不影响主链路；适配器构造参数 `log_calls` 默认 false，只有 `get_llm_client()/get_embedding_client()` 打开，避免测试直连客户端时碰库。只记录计数/耗时/费用/状态，不记录 prompt 或回答正文；rerank 暂不落库。
+- 决策 5（成本与用量）：费用按配置单价计算（`LLM_PRICE_INPUT/OUTPUT_PER_MILLION`、`EMBEDDING_PRICE_PER_MILLION`），不硬编码；`/admin/usage` 以 UTC 日历日聚合，返回 `totals` + 按 `date/scene/model` 的 items，失败调用 token/cost 按 0 聚合。
+- 决策 6（配置）：新增 `CACHE_ENABLED`、`QA_CACHE_ENABLED`、`QA_CACHE_TTL_SECONDS`、`EMBEDDING_CACHE_ENABLED`、`EMBEDDING_CACHE_TTL_SECONDS`；Redis 不可用时缓存层 fail-open，问答仍可用。
+- 决策 7（迁移）：新增 `0008_s3_7`，`cost NUMERIC(14,8)`、`user_id ON DELETE SET NULL`、scene/status CHECK 与三个索引；已对真实 Postgres 执行 `alembic upgrade head`。
+- 决策 8（测试与验收）：新增模型 4、缓存 7、Embedding 缓存 4、调用日志/适配器 10、用量 5、QA 缓存流程 3，基线 686 → **719 passed, 1 warning**。真实验收（`test1` id=18，DashScope `qwen-plus`/`text-embedding-v4`，真实 Postgres+Redis）：最终一轮第一问 36.468s、`cached=false`、`tokens=4251`、新增 4 条调用日志、缓存已写入；第二问 **0.014s**、`cached=true`、`tokens=0`、**新增 0 条调用日志**、答案一致且落新消息。真实 `GET /api/v1/admin/usage?range=7d` 返回 200，累计 `totals.calls=8`、`prompt_tokens=5386`、`completion_tokens=3047`、`total_tokens=8433`、`cost_yuan=0.010392`、`avg_latency_ms=8730.88`，items 覆盖 embed/qa/query_rewrite；临时 admin 已删除。
+- 已知限制：缓存 key 不含历史；缓存不区分 Prompt 版本/模型（版本变更后需手动清 `qa:v1:*`）；Redis 故障时每次请求最多多 0.5s 连接超时；失败调用无 usage 仍记 0；未做限流；未迁移 query_rewrite 的进程内 LRU 缓存。

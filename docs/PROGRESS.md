@@ -5,10 +5,10 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-6 拒答与引用校验（块级校验、一次重试、补充声明、结构化拒答建议）；后端 **686 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-7 缓存 + 调用日志 + 用量统计；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
-- 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 3 篇原有笔记
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6/S3-7 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-7 缓存 + LLM 调用日志 + 用量统计（Redis QA/Embedding 缓存、`llm_call_logs`、`/admin/usage`）；后端 **719 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
+- 下一步：S3-8 前端问答页（流式 + 引用跳转）★；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
 
@@ -53,7 +53,7 @@
 - [x] S3-4 上下文组装 + Prompt 版本管理
 - [x] S3-5 问答 API（SSE）+ 会话落库
 - [x] S3-6 拒答与引用校验
-- [ ] S3-7 缓存 + 调用日志 + 用量统计
+- [x] S3-7 缓存 + 调用日志 + 用量统计
 - [ ] S3-8 前端问答页（流式 + 引用跳转）★
 - [ ] S3-9 抽查扩展到线上链路 + 三种配置对照
 
@@ -128,7 +128,7 @@
 | 30 | 对齐关键词只匹配节点全名/去前缀核心词，无别名/同义词表；树先验只是 tags/title 近似（S2-10 遗留） | 同义表述漏召回；本次 30 条中 5 条未产生任何关联 | 收真实笔记后补别名表/按学科调阈值 |
 | 31 | 对齐阈值 0.75/0.55 基于 text-embedding-v4 分数分布（S2-10 遗留） | 换 Embedding 模型需重新校准，可能大量进待确认或大量丢弃 | 换模型时用标注集重跑 ROC 选阈值 |
 | 32 | `note_kps` 无时间列/审计表，忽略即删除；并发重跑同一笔记可能 pkey 冲突（S2-10 遗留） | 无法按时间排序/追溯，忽略项重跑可能再现 | 需要时补 `created_at/updated_at` 迁移与审计表 |
-| 33 | 对齐 LLM 失败即任务失败，无纯算法兜底；未写 `llm_call_logs`（S2-10 遗留） | 无 Key/额度时对齐不可用；成本只能看结构化日志 | S3-7 建表后接入；如需降级再设计兜底分数 |
+| 33 | 对齐 LLM 失败即任务失败，无纯算法兜底（S2-10 遗留；S3-7 已把 `kp_align` 调用写入 `llm_call_logs`） | 无 Key/额度时对齐不可用 | 如需降级再设计兜底分数 |
 | 34 | 6 个业务模块目前都是统一占位页；教师/家长登录后看到与学生相同的导航（S2-11 遗留） | 演示时“系统很空”，家长/教师视角未区分 | S2-12–S2-14 逐个替换；角色页等对应模块有数据后再加 `meta.roles` |
 | 35 | token 存 localStorage，无 CSP/HttpOnly，无刷新 token（S2-11 沿用 S2-2） | XSS 可读 token；令牌到期前无法主动失效 | 部署层加 CSP；refresh/吊销见遗留 3 |
 | 36 | Element Plus 全局注册，构建主包 1.0 MB（gzip 330 KB）（S2-11 实测） | 首次加载偏慢，内网演示可接受 | 有性能要求时改按需引入/分包，别在功能卡里顺手重构 |
@@ -150,13 +150,13 @@
 | 52 | 重建费用与耗时随笔记量线性增长，无增量重建（S3-1） | 笔记多时全量重建较贵 | 后续按 `updated_at` 增量或只重建指定笔记 |
 | 53 | 文档笔记 `subject_id` 为 NULL（S2-8 未回填），带 `subject_id` 的检索不命中它们（S3-2） | 按学科过滤会漏掉上传文件生成的笔记 | 文件级学科元数据回填卡处理，不猜数据 |
 | 54 | `folder` 是 `notes.folder` 自由文本，无 notebook 表/层级（S3-2） | 改名等于换 scope；前端无法做文件夹树 | 需要笔记本树时新建表并迁移 |
-| 55 | P95 受外部 Embedding 支配（实测 P50 154ms/次），无查询向量缓存（S3-2） | Embedding 抖动时 P95 贴线；重复问题重复付费 | S3-7 Redis 缓存 query embedding 后再压测 |
+| 55 | P95 受外部 Embedding 支配（实测 P50 154ms/次）；S3-7 已加 Redis 内容哈希缓存，但首次查询仍无向量 | Embedding 抖动时首查 P95 贴线 | 需要时再加批量预热/本地缓存监控 |
 | 56 | `debug=true` 最多返回 3×20 条完整块文本（S3-2） | 响应体大，误开会影响前端性能 | 仅调试使用；需要时加 `debug_limit` |
 | 57 | 检索不支持 kp/知识点过滤（`note_kps` 有数据但未下推）（S3-2） | 不能按知识点圈定复习范围 | 需要时加 join `note_kps` 并评估索引 |
 | 58 | 意图由单次 LLM 判定且仅 4 类；10 条验收全部判为 `concept_explain`（S3-3） | 误判会走错分支/文案，但不改检索结果 | S3-5 用真实对话评估；必要时加规则或多标签 |
-| 59 | 改写缓存只在进程内，不跨 worker/重启（S3-3） | 多 worker 命中率低、重复计费 | S3-7 换 Redis |
+| 59 | 改写缓存只在进程内，不跨 worker/重启（S3-3；S3-7 只把 QA/Embedding 放 Redis，未迁移改写缓存） | 多 worker 命中率低、重复计费 | 后续卡把改写缓存换 Redis |
 | 60 | 历史只留最近 3 个 user 轮、单条截 300 字（S3-3） | 长对话更早条件丢失，追问可能缺前提 | S3-5 按需调参；超长对话先摘要 |
-| 61 | `LLMError` 降级时拿不到 usage，token/cost 记 0（S3-3） | 失败调用成本不透明 | S3-7 在适配器层记录失败请求的预估用量 |
+| 61 | `LLMError` 降级时拿不到 usage，token/cost 记 0（S3-3）；S3-7 失败调用会写 `status=failed`，但 tokens/cost 仍为 NULL | 失败调用成本不透明 | 需要时在适配器层记录失败请求的预估用量 |
 | 62 | 指代追问验收 hit@3=9/10；第 6 条改写正确但检索未召回 `note 77/chunk 11`（S3-3） | 单条追问仍可能答非所问 | 检索侧调权重/召回，不改写侧粉饰 |
 | 63 | 无 HTTP 接口/前端，S3-5 接入前只能脚本验收（S3-3） | 前端暂不可用 | S3-5 接会话 API |
 | 64 | Prompt 版本无删除/停用/归档接口，历史只增不减（S3-4） | 长期积累脏版本；误建无法清理 | 需要时加 admin 归档/软删，不做物理删除 |
@@ -167,7 +167,7 @@
 | 69 | 行级留痕只有 `created_by/created_at/updated_at`，无完整操作审计日志（S3-4） | 只能知道谁建，不能还原启用操作序列 | S3-7 `llm_call_logs`/运维审计补事件日志 |
 | 70 | S3-5 只持久化合法 `[n]` 子集，不做引用校验/重试/拒答补丁（S3-5） | 模型漏引或无依据陈述仍会入库 | S3-6 已由 `citation_checker` 接管 |
 | 71 | 会话只支持创建与续聊，无列表/删除/重命名接口（S3-5） | 前端无法管理历史会话 | S3-8 前端问答页一起补 |
-| 72 | SSE 无 429 限流，断连与错误路径无 `llm_call_logs` 落库（S3-5） | 高频请求与失败成本不可审计 | S3-7 统一限流 + 调用日志 |
+| 72 | SSE 无 429 限流（S3-5）；S3-7 已让 LLM/Embedding 成功/失败调用写 `llm_call_logs`，但限流仍未做 | 高频请求仍可能打满上游 | 后续卡统一限流 |
 | 73 | 真实验收使用本机 DashScope `qwen-plus`，未做并发压测（S3-5） | 单路延迟 3.7–24.5s，并发表现未知 | 上线前按并发目标压测 |
 | 74 | 引用校验后输出，首字延迟从“立即”变为完整生成后（S3-6 实测 meta 3.10s、首个 delta 15.06s） | 前端需要更明显的 loading 态，长答案体感慢 | S3-8 前端补加载态；需要时再评估流式校验替代方案 |
 | 75 | 块级检测是启发式，不判断引用是否真正支持该句；列表/段落内只有末尾一个引用会视为整块已引用（S3-6） | 可能漏掉“引用与陈述不匹配”或段落内部分句子无依据 | 后续用 LLM 逐句归因或引用蕴含校验 |
@@ -175,6 +175,16 @@
 | 77 | 断连在静默生成阶段只能等下一次 chunk 到达才关闭上游（S3-6） | 立即停止计费无保证 | 需要时把 LLM 适配器改 async 取消 |
 
 ## 变更日志
+
+### 2026-11-02（S3-7）
+- S3-7 完成（spec `docs/spec/s3-7-cache-llm-logs-usage.md` + plan `docs/plan/s3-7-cache-llm-logs-usage.md`，用户确认后内联执行）。交付：迁移 `0008_s3_7` 与 `models/llm_call_log.py`；`core/cache.py`（Redis/Memory/Null，fail-open）；`services/qa_cache_service.py`；`ai/embedding/cached.py`；`core/llm_log.py`；`ai/llm`/`ai/embedding` 适配器埋点；`services/usage_service.py`、`schemas/usage.py`、`GET /api/v1/admin/usage`；`qa_service` 缓存命中/写回与 `done.cached`；`scripts/cache_eval.py`
+- 拍板（D-041）：QA 缓存 key=(user, 规范化问题, scope) 且不含历史；命中仍落新消息与引用、`tokens=0`；Embedding 只编码 miss；调用日志 best-effort 独立 Session；成本按配置单价；用量按 UTC 日 × scene × model；scene 扩展 `query_rewrite/kp_align` 等；rerank 暂不落库
+- 测试：新增 33 条（模型 4、缓存 7、Embedding 缓存 4、调用日志/适配器 10、用量 5、QA 缓存流程 3），基线 686 → **719 passed, 1 warning**
+- 迁移：真实 Postgres `alembic upgrade head` 成功（`0007_s3_5 → 0008_s3_7`）；`cost NUMERIC(14,8)`、`user_id ON DELETE SET NULL`、scene/status CHECK、3 个索引
+- 验收（真实 Postgres + Redis + DashScope，`test1` id=18，2026-11-02）：`scripts/cache_eval.py --user-id 18` 最终一轮第一问 36.468s、`cached=false`、`tokens=4251`、新增 4 条调用日志、Redis 已写入；第二问 **0.014s**、`cached=true`、`tokens=0`、**新增 0 条调用日志**、答案一致且落新消息
+- 真实 `GET /api/v1/admin/usage?range=7d`（临时 admin token，用后删除账号）：200；累计 `totals.calls=8`、`prompt_tokens=5386`、`completion_tokens=3047`、`total_tokens=8433`、`cost_yuan=0.010392`、`avg_latency_ms=8730.88`；items 为 embed/qa/query_rewrite 三组
+- 与 plan 的偏差：实际新增 33 条（plan 估 27），全量 719 而非 713；缓存层单测 4 条而非 3；`_chat_stream_impl` 拆出包装器以便在生成器关闭时补记 failed；`align` 测试 Fake 补 `scene` 形参
+- 已知不足（不粉饰）：缓存 key 不含历史，指代追问可能命中旧答案；缓存不按 Prompt/模型版本失效；Redis 故障时最多多 0.5s 超时；失败调用无 usage 仍记 NULL；未做 429 限流；query_rewrite LRU 未迁移
 
 ### 2026-11-01（S3-6）
 - S3-6 完成（spec `docs/spec/s3-6-citation-check.md` + plan `docs/plan/s3-6-citation-check.md`，用户确认后内联执行）。交付：`services/citation_checker.py`；`qa_service` 校验/重试/标注/聚合 token/cancel_event；`api/v1/qa.py` 断连取消；`schemas/qa.py` done 新字段；`scripts/citation_eval.py`

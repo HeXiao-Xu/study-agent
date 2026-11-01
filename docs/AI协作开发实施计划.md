@@ -631,6 +631,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **产出**：`llm_call_logs` 表落库、`services/usage_service.py`、`/admin/usage` 接口
 - **提示词要点**：embedding 按内容哈希缓存到 Redis；问答结果按 (user, 规范化问题, scope) 缓存 24h；每次 LLM 调用记录场景/模型/token/成本/耗时/状态/trace_id；成本按配置的单价表计算（单价写在配置文件里，不要硬编码）
 - **验收**：同一问题问两次，第二次明显更快且 `llm_call_logs` 无新增记录；用量接口能按天返回 token 与成本
+- **实施记录（2026-11-02）**：spec `docs/spec/s3-7-cache-llm-logs-usage.md`、plan `docs/plan/s3-7-cache-llm-logs-usage.md`；迁移 `0008_s3_7`，新增 `llm_call_logs`、Redis QA/Embedding 缓存、`/admin/usage`；真实两次提问第一问 36.468s/4251 tokens/4 条日志，第二问 **0.014s / 0 tokens / 0 条新增日志**，`cached=true`；后端 **719 passed, 1 warning**。
 
 #### S3-8 前端问答页（本阶段的重头戏）
 - **产出**：`views/qa/Chat.vue`、`components/CitationCard.vue`、`components/ChatMessage.vue`
@@ -1013,7 +1014,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [x] S3-4 上下文组装 + Prompt 版本管理
 [ ] S3-5 问答 API（SSE）+ 会话落库
 [ ] S3-6 拒答与引用校验
-[ ] S3-7 缓存 + 调用日志 + 用量统计
+[x] S3-7 缓存 + 调用日志 + 用量统计
 [ ] S3-8 前端问答页（流式 + 引用跳转）★关键
 [ ] S3-9 抽查扩展到线上链路 + 三种配置对照
 
