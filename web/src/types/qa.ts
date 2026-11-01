@@ -68,3 +68,15 @@ export interface QaAskPayload {
   scope?: QaScope | null
   conversation_id?: string | null
 }
+
+export interface QaUiMessage extends QaMessage {
+  localId: string
+  error: string
+  streaming: boolean
+  done: {
+    tokens: number
+    latency_ms: number
+    cached: boolean
+    suggestions: QaSuggestion[]
+  } | null
+}
