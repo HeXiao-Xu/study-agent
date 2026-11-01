@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MdPreview } from 'md-editor-v3'
 
@@ -18,6 +18,8 @@ const error = ref('')
 const manualNotice = ref(false)
 const previewHost = ref<HTMLElement | null>(null)
 let appliedQuery = ''
+let applying = false
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
 
 function queryString(key: string): string {
   const value = route.query[key]
@@ -25,25 +27,29 @@ function queryString(key: string): string {
 }
 
 async function applyHighlight(): Promise<void> {
-  const host = previewHost.value
-  const snippet = queryString('snippet')
-  const heading = queryString('heading')
-  const signature = `${snippet}|${heading}`
-  if (!host || !note.value || !signature || signature === appliedQuery) return
-  await nextTick()
-  if (!host.textContent?.trim()) return
-  appliedQuery = signature
+  const signature = `${queryString('snippet')}|${queryString('heading')}`
+  if (!signature || signature === appliedQuery || applying) return
+  applying = true
+  try {
+    await nextTick()
+    const host = previewHost.value
+    if (!host?.textContent?.trim()) return
+    appliedQuery = signature
 
-  if (snippet) {
-    const mark = highlightSnippet(host, snippet)
-    if (mark) {
-      manualNotice.value = false
-      return
+    const snippet = queryString('snippet')
+    const heading = queryString('heading')
+    if (snippet) {
+      const mark = highlightSnippet(host, snippet)
+      if (mark) {
+        manualNotice.value = false
+        return
+      }
     }
+    scrollToHeading(host, heading)
+    manualNotice.value = true
+  } finally {
+    applying = false
   }
-  const located = heading ? scrollToHeading(host, heading) : null
-  manualNotice.value = true
-  if (!located && !snippet) manualNotice.value = true
 }
 
 async function load(): Promise<void> {
@@ -52,12 +58,18 @@ async function load(): Promise<void> {
   try {
     note.value = await getNote(Number(route.params.id))
     loading.value = false
-    await nextTick()
-    await applyHighlight()
   } catch {
     error.value = '笔记不存在或无权访问'
     loading.value = false
   }
+}
+
+function scheduleHighlight(): void {
+  if (highlightTimer !== undefined) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightTimer = undefined
+    void applyHighlight()
+  }, 80)
 }
 
 function toEdit(): void {
@@ -70,11 +82,14 @@ watch(
   () => route.query,
   () => {
     appliedQuery = ''
-    void applyHighlight()
+    scheduleHighlight()
   },
 )
 
 onMounted(load)
+onUnmounted(() => {
+  if (highlightTimer !== undefined) clearTimeout(highlightTimer)
+})
 </script>
 
 <template>
@@ -109,7 +124,7 @@ onMounted(load)
           :model-value="note.content_md"
           :no-mermaid="true"
           preview-theme="github"
-          :on-html-changed="applyHighlight"
+          :on-html-changed="scheduleHighlight"
         />
       </div>
     </template>

@@ -25,6 +25,30 @@ describe('highlightSnippet', () => {
     expect(highlightSnippet(root, '第一段 第二段')).not.toBeNull()
     expect(highlightSnippet(root, '不存在')).toBeNull()
   })
+
+  it('falls back to prose when the snippet contains latex', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<h2>单调性</h2><p>定义：区间内自变量增大时函数值也增大。</p>'
+    const mark = highlightSnippet(
+      root,
+      '单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx$$',
+    )
+    expect(mark).not.toBeNull()
+    expect(root.querySelector('mark.citation-hit')).not.toBeNull()
+  })
+
+  it('does not drop block content when the snippet crosses blocks', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<h1>单调性</h1><p>定义：区间内自变量增大时函数值也增大。</p>' +
+      '<p class="katex">∫</p>'
+    highlightSnippet(
+      root,
+      '单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx$$',
+    )
+    expect(root.textContent).toContain('定义：区间内自变量增大时函数值也增大。')
+  })
 })
 
 describe('scrollToHeading', () => {

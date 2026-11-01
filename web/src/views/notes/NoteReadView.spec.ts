@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { defineComponent, h, onMounted } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,10 +9,16 @@ import { getNote } from '@/api/notes'
 
 vi.mock('@/api/notes', () => ({ getNote: vi.fn() }))
 
-const PreviewStub = {
-  props: ['modelValue'],
-  template: '<div class="md-preview">{{ modelValue }}</div>',
-}
+const PreviewStub = defineComponent({
+  props: {
+    modelValue: { type: String, default: '' },
+    onHtmlChanged: { type: Function, default: undefined },
+  },
+  setup(props) {
+    onMounted(() => props.onHtmlChanged?.(props.modelValue))
+    return () => h('div', { class: 'md-preview' }, props.modelValue)
+  },
+})
 
 async function mountAt(path: string) {
   const router = createRouter({
@@ -33,6 +40,8 @@ async function mountAt(path: string) {
       stubs: { MdPreview: PreviewStub },
     },
   })
+  await flushPromises()
+  await new Promise((resolve) => setTimeout(resolve, 120))
   await flushPromises()
   return { wrapper, router }
 }
