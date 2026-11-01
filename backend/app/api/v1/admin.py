@@ -1,7 +1,7 @@
 """S3-1 管理端接口：索引重建与进度（API.md §11）。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -11,7 +11,8 @@ from app.models.user import User
 from app.schemas.common import Envelope
 from app.schemas.indexing import RebuildProgress, RebuildStart
 from app.schemas.prompt import PromptCreate, PromptTemplateOut
-from app.services import index_service, prompt_service
+from app.schemas.usage import UsageReport
+from app.services import index_service, prompt_service, usage_service
 from app.tasks.queue import TaskQueue, get_task_queue
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -43,6 +44,20 @@ def get_rebuild_run(
     session: Session = Depends(get_db),
 ) -> Envelope[RebuildProgress]:
     data = index_service.get_rebuild_progress(session, run_id=run_id)
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.get(
+    "/usage",
+    response_model=Envelope[UsageReport],
+    summary="查询 LLM/Embedding 用量（UTC 日 × scene × model）",
+)
+def get_usage(
+    range: str = Query("7d", pattern="^(1d|7d|30d)$"),
+    current_user: User = Depends(require_role("admin")),
+    session: Session = Depends(get_db),
+) -> Envelope[UsageReport]:
+    data = usage_service.get_usage(session, range_key=range)
     return Envelope(trace_id=get_trace_id(), data=data)
 
 
