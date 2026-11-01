@@ -88,6 +88,7 @@ eval/{datasets,configs,results}
 - 外部 HTTP 调用超时必设、失败必处理
 - 学生数据接口（S2-3）：先过 `require_student_access` / `ensure_student_access`，再查库；SQL 显式 `where(<Model>.user_id == student_id)`，越权统一 `403/40300`，不泄露目标是否存在
 - 列表接口（S2-4）：统一用 `page_params` / `sort_params` / `paginate_query` / `apply_sort`（utils/pagination.py）；禁止手写 `limit/offset`、禁止字符串拼接 `order_by`；排序字段必须来自白名单映射
+- 问答会话列表例外（S3-8）：`GET /qa/conversations` 是前端会话切换栏的“最近会话”有界列表，使用 `limit`（1–100，默认 50），不套 `page_params/PageData`、不提供页码；避免会话栏承担分页职责。需要全量历史时另加分页接口，不复用本接口
 - 文件上传（S2-6）：必须分块流式读写（禁止 `await file.read()` 全量入内存）；先校验扩展名 + 文件头 magic，再落库；对象键内容寻址、原始文件名只做展示；同用户 `sha256` 去重靠唯一约束，冲突复用赢家；MinIO 异常统一 `StorageUnavailableError`（500/50000，不泄露 endpoint）；上传成功后按 `parse_status ∈ {pending, failed}` 入队 `parse.document`，`done/parsing` 去重命中不重复入队
 - 异步任务（S2-7）：提交必须走 `task_service.create_task`（先写 `async_tasks` 再入队，入队失败置 `failed`）；处理函数是同步 `(Session, payload)`，**不得自行 commit**，由 `tasks/runner.py` 统一提交/回滚；重试只由 runner 决策（3 次、2s/4s 退避）；ARQ `enqueue_job` 不接受 `_max_tries`/`_job_timeout`（配在 `WorkerSettings`）；Redis 一律 `127.0.0.1`（Windows IPv6 坑）
 - 知识点树（S2-9）：树查询必须一次 SQL 查完同 subject 全部节点再内存组树（禁止 N+1 递归）；`level` 只由父节点推导（根 1、最深 4），移动节点先校验环与子树高度并 BFS 重算后代 level；`code` 创建后不可改；删除保护顺序 子节点 → `note_kps` → `knowledge_edges`（409，不级联）；导入 `append` 只 upsert、`overwrite` 同步删除缺失项，被引用或仍有保留子节点的节点 skip 并打印原因；写接口仅 admin/teacher

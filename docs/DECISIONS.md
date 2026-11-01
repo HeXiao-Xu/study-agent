@@ -554,3 +554,23 @@
 - 决策 7（迁移）：新增 `0008_s3_7`，`cost NUMERIC(14,8)`、`user_id ON DELETE SET NULL`、scene/status CHECK 与三个索引；已对真实 Postgres 执行 `alembic upgrade head`。
 - 决策 8（测试与验收）：新增模型 4、缓存 7、Embedding 缓存 4、调用日志/适配器 10、用量 5、QA 缓存流程 3，基线 686 → **719 passed, 1 warning**。真实验收（`test1` id=18，DashScope `qwen-plus`/`text-embedding-v4`，真实 Postgres+Redis）：最终一轮第一问 36.468s、`cached=false`、`tokens=4251`、新增 4 条调用日志、缓存已写入；第二问 **0.014s**、`cached=true`、`tokens=0`、**新增 0 条调用日志**、答案一致且落新消息。真实 `GET /api/v1/admin/usage?range=7d` 返回 200，累计 `totals.calls=8`、`prompt_tokens=5386`、`completion_tokens=3047`、`total_tokens=8433`、`cost_yuan=0.010392`、`avg_latency_ms=8730.88`，items 覆盖 embed/qa/query_rewrite；临时 admin 已删除。
 - 已知限制：缓存 key 不含历史；缓存不区分 Prompt 版本/模型（版本变更后需手动清 `qa:v1:*`）；Redis 故障时每次请求最多多 0.5s 连接超时；失败调用无 usage 仍记 0；未做限流；未迁移 query_rewrite 的进程内 LRU 缓存。
+
+## D-042 前端问答页与会话回放（S3-8）
+
+- 背景：S3-5/6 已有 `POST /qa/ask` SSE 与引用，但前端没有可用的问答页、会话回放和引用跳转；S3-8 补齐 `views/qa/Chat.vue`、消息/引用组件、只读笔记页与 4 个会话接口。spec/plan 见 `docs/spec/s3-8-qa-chat.md`、`docs/plan/s3-8-qa-chat.md`。
+- 决策 1（会话接口）：新增 `GET /qa/conversations`（最近会话有界列表，`limit` 1–100 默认 50）、`GET /qa/conversations/{id}/messages`、`PATCH /qa/conversations/{id}`、`DELETE /qa/conversations/{id}`（204，物理删除，依赖消息/引用级联）。`id` 对外字符串；标题 trim/折叠空白后 1–80 字，空标题回退首条 user 问题前 50 字，再回退「新对话」；越权/不存在统一 404。
+- 决策 2（列表分页例外）：会话切换栏只需要“最近 50 条”，不套 `page_params/PageData`，已在 AGENTS §9.2 明确记录为 S3-8 例外；需要全量历史时另加分页接口，避免把分页器塞进侧栏。
+- 决策 3（历史回放）：消息按 id 升序；引用左连接 `notes/note_chunks` 取标题/章节/页码，软删或缺失时 `note_available=false`；历史拒答只能按正文与 `REFUSAL_TEXT` 精确相等推导，`refusal_reason/suggestions` 当时未落库，回放只显示固定建议，不伪造原始原因。
+- 决策 4（流式与打字机）：前端用 `fetch` + 自写 SSE reader（POST + Bearer 不能使用 EventSource），支持空行分帧、CRLF、多行 `data:`、注释行、跨 chunk UTF-8；协议仍是 `meta` → 0..N `delta` → `done/error`。打字机 16ms/帧、约 12–20 字/帧，`done` 先到也先排空队列再结束 `streaming`；切换会话/新建/删除时 abort 当前流。UI 消息用 reactive proxy，避免直接改原始数组对象不触发渲染。
+- 决策 5（刷新与切换）：`/qa?conversation=<id>` 作为可刷新入口；加载会话时回放消息与引用，scope 取会话保存值；新对话提交首问后由后端自动建会话并回填 URL。会话列表切换/改名/删除均在前端完成，不新增路由页。
+- 决策 6（引用跳转）：新增只读 `/notes/:id`（`note-read`），用 `MdPreview` 渲染；`snippet` 在 DOM 文本中做空白归一化匹配，支持跨文本节点，命中包 `<mark class="citation-hit">` 并滚动；匹配失败按 `heading` 最后一段滚到标题，并明确显示「未能精确定位引用片段」，不伪装成功；`note_available=false` 禁用点击。
+- 决策 7（公式片段修正）：真实 UI 验收发现含 `$$...$$` 的引用片段在 DOM 中已被 KaTeX 渲染，原始 LaTeX 文本无法命中，原实现只能整段回退。`highlightSnippet` 改为多候选：完整片段 → 去公式片段 → 仅非公式行；同时补块级文本分隔，避免跨 `<h1>/<p>` 时丢空格。`NoteReadView` 不再在 `nextTick` 立即标注，而是监听 `MdPreview` 的 `on-html-changed` 后 80ms 去抖再标注，避免在预览未渲染完时改 DOM 导致段落丢失；`appliedQuery`/`applying` 防重复标注。
+- 决策 8（scope 与权限）：沿用 `subject_id/folder/start_date/end_date`，不新增文件夹接口；`/qa` 仅 student，教师访问落到 `/403`；`/notes/:id` 的读写权限仍由后端 `GET /notes/{id}` 判定，前端只读页不额外放权。
+- 决策 9（测试与验收）：后端新增 16 条（service 7 + API 9），全量 **735 passed, 1 warning**；前端新增 29 条/9 个文件（SSE 4、API 2、typewriter 3、highlight 6、CitationCard 2、ChatMessage 3、scope 4、Chat 3、NoteReadView 2），全量 **114 passed / 29 files**，`npm run build` 退出 0（仅 775KB chunk 警告）。
+- 真实验收（2026-11-02，真实 Postgres + Redis + DashScope `qwen-plus`，`test1` id=18；Chrome headless + CDP 操作真实页面）：
+  - 10 轮 SSE：总耗时 **93.7s**、done tokens 合计 **22,092**；首字延迟 1.590–34.627s；第 1 轮命中既有缓存（**248ms / cached=true / tokens=0**）、第 5 轮拒答（**2.868s / refused=true / 30 字**）、第 9 轮 chitchat 无引用（**1.599s / 0 citations**）；其余 7 轮均正常落库；10 轮共 30 条引用、20 条消息、1 条拒答。
+  - 会话接口：列表 22 条、首条会话 20 条消息；改名 200「S3-8 验收会话」；临时会话删除 204，再查详情 404/40400。UI 侧新建→改名→删除临时会话（id=24）全链路通过，删除后自动回到 id=22。
+  - 引用：真实点击引用落到 `/notes/55?snippet=...&chunk=255`，`mark.citation-hit` 命中「一、适用条件」+ 正文片段，无回退；含公式的 note 49 引用落到 `/notes/49?...&heading=单调性`，命中「单调性」+「定义：区间内自变量增大时函数值也增大。」，无回退、无正文丢失；章节卡片显示 `单调性`。
+  - 刷新：`/qa?conversation=22` 刷新后 22 条消息、32 条引用、拒答样式 1 条仍在；教师账号访问 `/qa` 落到 `/403`「没有访问权限」。
+  - UI 流式采样：19 次/250ms，首帧 7 字符、最终 827 字符；短缓存答案只观察到 3 个长度（打字机约 0.2s 排空），未做逐帧像素级流畅度测量，顺滑度以 typewriter/SSE 单测与首 delta 时间为准，不夸大为逐帧数据。
+- 已知限制：会话列表固定最多 50 条且无分页；历史拒答原因/建议不落库；引用高亮依赖文本匹配，公式/强排版片段按“去公式正文”命中，仍可能退化为章节定位；`message_citations` 不存标题/章节，依赖切片重建；删除会话物理级联、不可恢复；未引入浏览器自动化依赖，本轮用本机 Chrome CDP 做验收，CI 无 E2E。

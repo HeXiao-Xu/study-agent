@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6/S3-7 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-7 缓存 + LLM 调用日志 + 用量统计（Redis QA/Embedding 缓存、`llm_call_logs`、`/admin/usage`）；后端 **719 passed, 1 warning**，前端 **85 passed / 20 files**，build 0
-- 下一步：S3-8 前端问答页（流式 + 引用跳转）★；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6/S3-7/S3-8 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-8 前端问答页（流式 + 引用跳转 + 会话回放/改名/删除）；后端 **735 passed, 1 warning**，前端 **114 passed / 29 files**，build 0
+- 下一步：S3-9 抽查扩展到线上链路 + 三种配置对照；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -54,7 +54,7 @@
 - [x] S3-5 问答 API（SSE）+ 会话落库
 - [x] S3-6 拒答与引用校验
 - [x] S3-7 缓存 + 调用日志 + 用量统计
-- [ ] S3-8 前端问答页（流式 + 引用跳转）★
+- [x] S3-8 前端问答页（流式 + 引用跳转）★
 - [ ] S3-9 抽查扩展到线上链路 + 三种配置对照
 
 ### 阶段 4：错题与知识图谱（M3）
@@ -175,6 +175,16 @@
 | 77 | 断连在静默生成阶段只能等下一次 chunk 到达才关闭上游（S3-6） | 立即停止计费无保证 | 需要时把 LLM 适配器改 async 取消 |
 
 ## 变更日志
+
+### 2026-11-02（S3-8）
+- S3-8 完成（按 §10 全流程：spec `docs/spec/s3-8-qa-chat.md` + plan `docs/plan/s3-8-qa-chat.md`，均经用户确认）。交付：4 个会话接口（列表/回放/PATCH/DELETE）与 `QaConversationOut/QaHistory*` schemas；前端 `types/qa.ts`、`api/qa.ts`、`utils/{sse,typewriter,highlight}.ts`、`components/qa/{CitationCard,ChatMessage}.vue`、`views/qa/{scope.ts,Chat.vue}`、`views/notes/NoteReadView.vue`；`/qa` 与 `/notes/:id` 路由。
+- 拍板（D-042）：会话列表是有界最近列表（`limit` 1–100 默认 50），在 AGENTS §9.2 记录为分页例外；历史引用左连接 notes/note_chunks，缺失 `note_available=false`；历史拒答只按正文精确匹配；引用高亮在 `on-html-changed` 后 80ms 去抖，并支持“去公式”候选匹配。
+- 测试：后端新增 16 条（service 7 + API 9），基线 719 → **735 passed, 1 warning**；前端新增 29 条/9 文件，基线 85/20 → **114 passed / 29 files**；`npm run build` 退出 0（仅 775KB chunk 警告）。
+- 真实 10 轮 SSE（真实 Postgres + Redis + DashScope `qwen-plus`，`test1` id=18）：总耗时 **93.7s**、done tokens **22,092**；首字 1.590–34.627s；第 1 轮缓存命中 **248ms/tokens=0**，第 5 轮拒答 **2.868s/30 字/refused=true**，第 9 轮 chitchat **1.599s/0 citations**；10 轮共 20 条消息、30 条引用、1 条拒答。
+- 真实接口：列表 22 条，首条 20 条消息；改名 200「S3-8 验收会话」；临时会话删除 204、再查 404/40400。
+- 真实浏览器（Chrome headless + CDP，`localhost:5173`）：引用点击落 `/notes/55?...&chunk=255`，`mark.citation-hit` 命中标题/正文且无回退；含公式的 note 49 落 `/notes/49?...&heading=单调性`，命中「单调性 + 定义：…」且正文未丢；刷新 `/qa?conversation=22` 恢复 22 条消息/32 条引用/1 条拒答；UI 新建→改名→删除临时会话成功；教师访问 `/qa` 落 `/403`。
+- 实测抓修（偏差，已写入 D-042）：① 公式片段原文本无法在 KaTeX DOM 命中，`highlightSnippet` 改为完整→去公式→非公式行的候选匹配，并补块级分隔；② 预览未渲染完就标注会导致段落丢失，改为 `on-html-changed` 后 80ms 去抖 + `appliedQuery/applying` 防重入；③ 测试 PreviewStub 改为在 mounted 时触发 `onHtmlChanged`，与真实组件事件路径一致。
+- 已知不足（不粉饰）：会话列表固定 50 条无分页；历史拒答 reason/suggestions 不恢复；引用高亮仍是文本匹配，公式/强排版可能退化为章节定位；删除会话物理级联不可恢复；未引 E2E 依赖，本轮用本机 Chrome CDP，CI 无浏览器自动化。
 
 ### 2026-11-02（S3-7）
 - S3-7 完成（spec `docs/spec/s3-7-cache-llm-logs-usage.md` + plan `docs/plan/s3-7-cache-llm-logs-usage.md`，用户确认后内联执行）。交付：迁移 `0008_s3_7` 与 `models/llm_call_log.py`；`core/cache.py`（Redis/Memory/Null，fail-open）；`services/qa_cache_service.py`；`ai/embedding/cached.py`；`core/llm_log.py`；`ai/llm`/`ai/embedding` 适配器埋点；`services/usage_service.py`、`schemas/usage.py`、`GET /api/v1/admin/usage`；`qa_service` 缓存命中/写回与 `done.cached`；`scripts/cache_eval.py`
