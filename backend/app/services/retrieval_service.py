@@ -39,6 +39,7 @@ def search_chunks(
     query: str,
     top_k: int | None = None,
     rerank: bool | None = None,
+    retrieval: str | None = None,
     scope: RetrievalScopeIn | None = None,
     debug: bool = False,
 ) -> RetrievalSearchResponse:
@@ -51,20 +52,29 @@ def search_chunks(
     if not 1 <= resolved_top_k <= MAX_TOP_K:
         raise InvalidParamError(f"top_k 必须在 1–{MAX_TOP_K} 之间")
 
-    use_rerank = settings.retrieval_rerank_enabled if rerank is None else rerank
+    if retrieval not in (None, "vector", "hybrid", "hybrid_rerank"):
+        raise InvalidParamError("retrieval 必须是 vector/hybrid/hybrid_rerank")
+
+    if retrieval is None:
+        use_rerank = settings.retrieval_rerank_enabled if rerank is None else rerank
+        mode = "hybrid_rerank" if use_rerank else "hybrid"
+    else:
+        mode = retrieval
+        use_rerank = mode == "hybrid_rerank"
+
     retrieval_scope = RetrievalScope(**scope.model_dump()) if scope else None
 
-    if use_rerank:
-        result = retrieve_hybrid_reranked(
+    if mode == "vector":
+        result = retrieve_hybrid(
             session,
             clean_query,
             user_id=user_id,
             top_k=settings.retrieval_recall_k,
-            rerank_top_k=resolved_top_k,
+            final_k=resolved_top_k,
             scope=retrieval_scope,
         )
-        chosen = result.reranked
-    else:
+        chosen = result.vector[:resolved_top_k]
+    elif mode == "hybrid":
         result = retrieve_hybrid(
             session,
             clean_query,
@@ -74,6 +84,16 @@ def search_chunks(
             scope=retrieval_scope,
         )
         chosen = result.fused
+    else:
+        result = retrieve_hybrid_reranked(
+            session,
+            clean_query,
+            user_id=user_id,
+            top_k=settings.retrieval_recall_k,
+            rerank_top_k=resolved_top_k,
+            scope=retrieval_scope,
+        )
+        chosen = result.reranked
 
     titles = _load_titles(session, user_id, _note_ids(result))
     debug_out = None

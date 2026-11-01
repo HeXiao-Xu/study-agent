@@ -31,6 +31,7 @@ def search_chunks(
         query=payload.query,
         top_k=payload.top_k,
         rerank=payload.rerank,
+        retrieval=payload.retrieval,
         scope=payload.scope,
         debug=payload.debug,
     )

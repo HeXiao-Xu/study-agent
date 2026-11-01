@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.ai.rag.retriever import RerankInfo
 
 RetrievalChunkType = Literal["question", "note", "formula"]
+RetrievalMode = Literal["vector", "hybrid", "hybrid_rerank"]
 
 
 class RetrievalScopeIn(BaseModel):
@@ -42,8 +43,19 @@ class RetrievalSearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     top_k: int | None = Field(None, ge=1, le=20)
     rerank: bool | None = None
+    retrieval: RetrievalMode | None = None
     debug: bool = False
     scope: RetrievalScopeIn | None = None
+
+    @model_validator(mode="after")
+    def _check_retrieval_conflict(self) -> "RetrievalSearchRequest":
+        if self.retrieval == "vector" and self.rerank is True:
+            raise ValueError("retrieval=vector 时 rerank 不能为 true")
+        if self.retrieval == "hybrid" and self.rerank is True:
+            raise ValueError("retrieval=hybrid 时 rerank 不能为 true")
+        if self.retrieval == "hybrid_rerank" and self.rerank is False:
+            raise ValueError("retrieval=hybrid_rerank 时 rerank 不能为 false")
+        return self
 
 
 class RetrievalHit(BaseModel):

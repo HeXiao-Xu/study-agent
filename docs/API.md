@@ -302,8 +302,12 @@
   | query | string | 是 | 1–500 字，去空白后非空 |
   | top_k | int | 否 | 1–20，缺省 `RETRIEVAL_TOP_K=6` |
   | rerank | bool | 否 | 缺省 `RETRIEVAL_RERANK_ENABLED=true`；false 走 RRF 顺序 |
+  | retrieval | string | 否 | `vector`/`hybrid`/`hybrid_rerank`；缺省保持原行为 |
   | debug | bool | 否 | 默认 false；true 才返回候选明细 |
   | scope | object | 否 | `{subject_id?, folder?, start_date?, end_date?, chunk_types?}` |
+
+- `retrieval` 与 `rerank` 冲突：vector/hybrid + rerank=true、hybrid_rerank + rerank=false 均 422。
+- `vector` 复用混合检索的向量召回后取前 top_k，延迟口径偏保守。
 
 - scope 语义：`folder` 精确匹配 `notes.folder`（当前无 notebook 表）；`start_date/end_date` 按 `notes.created_at`（UTC 日期，end 含当天）；`chunk_types ∈ {question,note,formula}`，传 `[]` 为 422；未知字段 422。
 - 出参：`query/top_k/rerank/elapsed_ms/embedding_ms/rerank_info/hits[]/debug?`

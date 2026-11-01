@@ -222,3 +222,61 @@ def test_search_empty_chunk_types_is_422(client: TestClient) -> None:
         headers=_headers(user),
     )
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("mode", ["vector", "hybrid", "hybrid_rerank"])
+def test_search_accepts_retrieval_mode(client: TestClient, mode: str) -> None:
+    user = _user()
+    _override_user(user)
+
+    response = client.post(
+        "/api/v1/retrieval/search",
+        json={"query": "函数", "retrieval": mode},
+        headers=_headers(user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == 0
+
+
+def test_search_passes_retrieval_to_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_search(session: object, **kwargs: Any) -> RetrievalSearchResponse:
+        captured.update(kwargs)
+        return _response()
+
+    monkeypatch.setattr(retrieval_service, "search_chunks", fake_search)
+    user = _user()
+    _override_user(user)
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/v1/retrieval/search",
+            json={"query": "函数", "retrieval": "vector"},
+            headers=_headers(user),
+        )
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert captured["retrieval"] == "vector"
+
+
+@pytest.mark.parametrize(
+    ("mode", "rerank"),
+    [("vector", True), ("hybrid", True), ("hybrid_rerank", False)],
+)
+def test_search_rejects_conflicting_rerank(
+    client: TestClient, mode: str, rerank: bool
+) -> None:
+    user = _user()
+    _override_user(user)
+
+    response = client.post(
+        "/api/v1/retrieval/search",
+        json={"query": "函数", "retrieval": mode, "rerank": rerank},
+        headers=_headers(user),
+    )
+
+    assert response.status_code == 422
