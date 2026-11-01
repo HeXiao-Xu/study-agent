@@ -4,13 +4,16 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.ai.embedding.base import BatchStats, EmbeddingClient
+from app.ai.embedding.cached import CachedEmbeddingClient
 from app.ai.embedding.errors import EmbeddingError
 from app.ai.embedding.local import LocalEmbeddingClient
 from app.ai.embedding.openai_compat import OpenAICompatibleEmbeddingClient
+from app.core.cache import get_cache
 from app.core.config import get_settings
 
 __all__ = [
     "BatchStats",
+    "CachedEmbeddingClient",
     "EmbeddingClient",
     "EmbeddingError",
     "LocalEmbeddingClient",
@@ -23,13 +26,21 @@ __all__ = [
 def get_embedding_client() -> EmbeddingClient:
     settings = get_settings()
     if settings.embedding_provider == "local":
-        return LocalEmbeddingClient()
-    return OpenAICompatibleEmbeddingClient(
-        api_key=settings.embedding_api_key,
-        base_url=settings.embedding_base_url,
-        model=settings.embedding_model,
-        dim=settings.embedding_dim,
-        batch_size=settings.embedding_batch_size,
-        timeout=settings.embedding_timeout_seconds,
-        max_retries=settings.embedding_max_retries,
+        inner: EmbeddingClient = LocalEmbeddingClient()
+    else:
+        inner = OpenAICompatibleEmbeddingClient(
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url,
+            model=settings.embedding_model,
+            dim=settings.embedding_dim,
+            batch_size=settings.embedding_batch_size,
+            timeout=settings.embedding_timeout_seconds,
+            max_retries=settings.embedding_max_retries,
+        )
+    if not settings.embedding_cache_enabled:
+        return inner
+    return CachedEmbeddingClient(
+        inner,
+        get_cache(),
+        settings.embedding_cache_ttl_seconds,
     )
