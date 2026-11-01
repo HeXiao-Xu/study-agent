@@ -25,8 +25,11 @@ def get_usage(
     end_date = today or datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=days - 1)
     start_at = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    end_at = datetime.combine(
+        end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+    )
 
-    day = func.date(LLMCallLog.created_at).label("day")
+    day = func.date(func.timezone("UTC", LLMCallLog.created_at)).label("day")
     failed = func.coalesce(
         func.sum(case((LLMCallLog.status == "failed", 1), else_=0)),
         0,
@@ -51,7 +54,10 @@ def get_usage(
             func.coalesce(func.sum(LLMCallLog.cost), 0).label("cost"),
             func.coalesce(func.sum(LLMCallLog.latency_ms), 0).label("latency"),
         )
-        .where(LLMCallLog.created_at >= start_at)
+        .where(
+            LLMCallLog.created_at >= start_at,
+            LLMCallLog.created_at < end_at,
+        )
         .group_by(day, LLMCallLog.scene, LLMCallLog.model)
         .order_by(day.asc(), LLMCallLog.scene.asc(), LLMCallLog.model.asc())
     )
