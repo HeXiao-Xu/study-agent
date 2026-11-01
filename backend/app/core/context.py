@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 
 _trace_id: ContextVar[str] = ContextVar("trace_id", default="-")
+_current_user_id: ContextVar[int | None] = ContextVar("current_user_id", default=None)
 
 
 def get_trace_id() -> str:
@@ -23,3 +24,16 @@ def set_trace_id(value: str) -> Token[str]:
 
 def reset_trace_id(token: Token[str]) -> None:
     _trace_id.reset(token)
+
+
+def get_current_user_id() -> int | None:
+    """当前请求的登录用户；脚本/后台任务无请求上下文时为 None。"""
+    return _current_user_id.get()
+
+
+def set_current_user_id(value: int | None) -> Token[int | None]:
+    return _current_user_id.set(value)
+
+
+def reset_current_user_id(token: Token[int | None]) -> None:
+    _current_user_id.reset(token)

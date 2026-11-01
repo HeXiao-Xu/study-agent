@@ -15,6 +15,7 @@ import tiktoken
 
 from app.ai.llm.base import LLMClient, LLMMessage, LLMResponse, LLMStreamChunk
 from app.ai.llm.errors import LLMError
+from app.core.llm_log import record_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class OpenAICompatibleLLMClient(LLMClient):
         max_output_tokens: int = 1200,
         price_input_per_million: float = 0.8,
         price_output_per_million: float = 2.0,
+        log_calls: bool = False,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -50,6 +52,7 @@ class OpenAICompatibleLLMClient(LLMClient):
         self._max_output_tokens = max_output_tokens
         self._price_in = price_input_per_million
         self._price_out = price_output_per_million
+        self._log_calls = log_calls
         self._sleep = sleep
         self._client = httpx.Client(
             timeout=httpx.Timeout(timeout),
@@ -73,7 +76,18 @@ class OpenAICompatibleLLMClient(LLMClient):
             stream=False,
         )
         started = time.perf_counter()
-        data = self._post_with_retry(payload)
+        try:
+            data = self._post_with_retry(payload)
+        except Exception:
+            self._record(
+                scene=scene,
+                status="failed",
+                prompt_tokens=None,
+                completion_tokens=None,
+                cost_yuan=None,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
+            raise
         latency_ms = int((time.perf_counter() - started) * 1000)
         text = self._extract_text(data)
         prompt_tokens, completion_tokens, total_tokens = self._parse_usage(data)
@@ -95,6 +109,14 @@ class OpenAICompatibleLLMClient(LLMClient):
                 "cost_yuan": round(cost, 8),
             },
         )
+        self._record(
+            scene=scene,
+            status="success",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_yuan=cost,
+            latency_ms=latency_ms,
+        )
         return LLMResponse(
             text=text,
             model=self.model,
@@ -103,6 +125,28 @@ class OpenAICompatibleLLMClient(LLMClient):
             total_tokens=total_tokens,
             latency_ms=latency_ms,
             cost_yuan=cost,
+        )
+
+    def _record(
+        self,
+        *,
+        scene: str,
+        status: str,
+        prompt_tokens: int | None,
+        completion_tokens: int | None,
+        cost_yuan: float | None,
+        latency_ms: int | None,
+    ) -> None:
+        if not self._log_calls:
+            return
+        record_llm_call(
+            scene=scene,
+            model=self.model,
+            status=status,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_yuan=cost_yuan,
+            latency_ms=latency_ms,
         )
 
     def _build_payload(
@@ -128,6 +172,58 @@ class OpenAICompatibleLLMClient(LLMClient):
         return payload
 
     def chat_stream(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        scene: str = "qa",
+    ) -> Iterator[LLMStreamChunk]:
+        started = time.perf_counter()
+        recorded = False
+        try:
+            for chunk in self._chat_stream_impl(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                scene=scene,
+            ):
+                if chunk.response is not None:
+                    response = chunk.response
+                    self._record(
+                        scene=scene,
+                        status="success",
+                        prompt_tokens=response.prompt_tokens,
+                        completion_tokens=response.completion_tokens,
+                        cost_yuan=response.cost_yuan,
+                        latency_ms=response.latency_ms,
+                    )
+                    recorded = True
+                yield chunk
+        except GeneratorExit:
+            if not recorded:
+                self._record(
+                    scene=scene,
+                    status="failed",
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    cost_yuan=None,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            raise
+        except Exception:
+            if not recorded:
+                self._record(
+                    scene=scene,
+                    status="failed",
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    cost_yuan=None,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            raise
+
+    def _chat_stream_impl(
         self,
         messages: list[LLMMessage],
         *,

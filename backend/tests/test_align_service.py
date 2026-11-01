@@ -34,7 +34,7 @@ class FakeLLM:
         self.text = text
         self.calls = 0
 
-    def chat(self, messages, *, temperature=None, max_tokens=None):
+    def chat(self, messages, *, temperature=None, max_tokens=None, scene="qa"):
         from app.ai.llm import LLMResponse
 
         self.calls += 1

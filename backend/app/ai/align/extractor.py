@@ -70,7 +70,9 @@ def extract_matches(
     messages = [LLMMessage(role="user", content=prompt)]
     last_error: Exception | None = None
     for _ in range(max_retries + 1):
-        response = client.chat(messages, temperature=0.0, max_tokens=800)
+        response = client.chat(
+            messages, temperature=0.0, max_tokens=800, scene="kp_align"
+        )
         try:
             output = AlignOutput.model_validate(_loads_json(response.text))
         except (ValueError, ValidationError) as exc:

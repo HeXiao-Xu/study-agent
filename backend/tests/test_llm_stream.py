@@ -146,3 +146,47 @@ def test_chat_stream_does_not_retry_after_delta() -> None:
     with pytest.raises(LLMError):
         next(stream)
     assert calls == 1
+
+
+def test_chat_stream_logs_success_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.llm.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    body = _sse(
+        {"choices": [{"delta": {"content": "你"}}]},
+        {"choices": [{"delta": {"content": "好"}}]},
+        {
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 8,
+                "completion_tokens": 2,
+                "total_tokens": 10,
+            },
+        },
+    )
+    client = _client(lambda request: httpx.Response(200, content=body), log_calls=True)
+    chunks = list(client.chat_stream([LLMMessage("user", "问题")]))
+
+    assert chunks[-1].response is not None
+    assert captured[-1]["scene"] == "qa"
+    assert captured[-1]["status"] == "success"
+    assert captured[-1]["prompt_tokens"] == 8
+    assert len(captured) == 1
+
+
+def test_chat_stream_logs_failure_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.llm.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(
+        lambda request: httpx.Response(400, json={"error": "bad"}), log_calls=True
+    )
+    with pytest.raises(LLMError):
+        list(client.chat_stream([LLMMessage("user", "问题")]))
+
+    assert captured[-1]["status"] == "failed"
+    assert captured[-1]["prompt_tokens"] is None

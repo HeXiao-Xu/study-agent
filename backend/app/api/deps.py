@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.context import set_current_user_id
 from app.core.db import new_session
 from app.core.exceptions import AuthError
 from app.core.security import decode_access_token
@@ -38,4 +39,5 @@ def get_current_user(
     user = session.scalar(select(User).where(User.id == claims.user_id))
     if user is None:
         raise AuthError("账号不存在或已被删除")
+    set_current_user_id(user.id)
     return user

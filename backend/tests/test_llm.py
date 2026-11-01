@@ -164,3 +164,54 @@ def test_llm_chat_scene_is_logged(caplog) -> None:
 
     record = next(item for item in caplog.records if item.message == "llm_call")
     assert record.scene == "query_rewrite"
+
+
+def test_chat_logs_success_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.llm.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(
+        lambda request: _ok(
+            "答[1]",
+            {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+        ),
+        log_calls=True,
+    )
+    client.chat([LLMMessage("user", "问题")])
+
+    assert captured[0]["scene"] == "qa"
+    assert captured[0]["status"] == "success"
+    assert captured[0]["prompt_tokens"] == 10
+    assert captured[0]["completion_tokens"] == 2
+    assert captured[0]["latency_ms"] is not None
+
+
+def test_chat_logs_failure_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.llm.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(
+        lambda request: httpx.Response(400, json={"error": "bad"}),
+        log_calls=True,
+    )
+    with pytest.raises(LLMError):
+        client.chat([LLMMessage("user", "问题")])
+
+    assert captured[0]["status"] == "failed"
+    assert captured[0]["prompt_tokens"] is None
+    assert captured[0]["cost_yuan"] is None
+
+
+def test_chat_does_not_log_when_disabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.llm.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(lambda request: _ok())
+    client.chat([LLMMessage("user", "问题")])
+    assert captured == []

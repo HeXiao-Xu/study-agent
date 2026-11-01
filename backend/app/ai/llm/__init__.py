@@ -22,6 +22,7 @@ def get_llm_client() -> LLMClient:
         max_output_tokens=settings.llm_max_output_tokens,
         price_input_per_million=settings.llm_price_input_per_million,
         price_output_per_million=settings.llm_price_output_per_million,
+        log_calls=True,
     )
 
 

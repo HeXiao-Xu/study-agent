@@ -14,7 +14,9 @@ class FakeLLM(LLMClient):
         self.texts = list(texts)
         self.calls: list[list] = []
 
-    def chat(self, messages, *, temperature=None, max_tokens=None) -> LLMResponse:
+    def chat(
+        self, messages, *, temperature=None, max_tokens=None, scene="qa"
+    ) -> LLMResponse:
         self.calls.append(messages)
         text = self.texts.pop(0)
         return LLMResponse(text=text, model="fake-llm", total_tokens=10)

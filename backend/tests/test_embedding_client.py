@@ -137,3 +137,46 @@ def test_repr_hides_key() -> None:
 def test_local_client_is_placeholder() -> None:
     with pytest.raises(NotImplementedError, match="占位"):
         LocalEmbeddingClient().encode(["x"])
+
+
+def test_embedding_logs_success_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.embedding.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(_ok_response, log_calls=True, price_per_million=0.5)
+    client.encode(["t0"])
+
+    assert captured[0]["scene"] == "embed"
+    assert captured[0]["status"] == "success"
+    assert captured[0]["prompt_tokens"] == 3
+    assert captured[0]["cost_yuan"] == pytest.approx(3 / 1_000_000 * 0.5)
+
+
+def test_embedding_logs_failure_when_enabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.embedding.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    client = _client(
+        lambda request: httpx.Response(400, json={"error": "bad"}),
+        log_calls=True,
+    )
+    with pytest.raises(EmbeddingError):
+        client.encode(["t0"])
+
+    assert captured[-1]["scene"] == "embed"
+    assert captured[-1]["status"] == "failed"
+    assert captured[-1]["prompt_tokens"] is None
+
+
+def test_embedding_does_not_log_when_disabled(monkeypatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        "app.ai.embedding.openai_compat.record_llm_call",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    _client(_ok_response).encode(["t0"])
+    assert captured == []

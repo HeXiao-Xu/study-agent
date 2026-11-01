@@ -36,6 +36,8 @@ def get_embedding_client() -> EmbeddingClient:
             batch_size=settings.embedding_batch_size,
             timeout=settings.embedding_timeout_seconds,
             max_retries=settings.embedding_max_retries,
+            log_calls=True,
+            price_per_million=settings.embedding_price_per_million,
         )
     if not settings.embedding_cache_enabled:
         return inner

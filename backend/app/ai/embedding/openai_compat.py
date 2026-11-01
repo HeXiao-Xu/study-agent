@@ -14,6 +14,7 @@ import httpx
 
 from app.ai.embedding.base import BatchStats, EmbeddingClient
 from app.ai.embedding.errors import EmbeddingError
+from app.core.llm_log import record_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
         batch_size: int = 10,
         timeout: float = 60.0,
         max_retries: int = 4,
+        log_calls: bool = False,
+        price_per_million: float = 0.5,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -45,6 +48,8 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
         self._url = base_url.rstrip("/") + "/embeddings"
         self._batch_size = batch_size
         self._max_retries = max_retries
+        self._log_calls = log_calls
+        self._price_per_million = price_per_million
         self._sleep = sleep
         self._http = httpx.Client(timeout=timeout, transport=transport)
 
@@ -69,11 +74,27 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
         vectors: list[list[float]] = []
         for batch_index, batch in enumerate(batches):
             started = time.perf_counter()
-            payload = self._post_with_retry(batch, batch_index=batch_index)
-            vectors.extend(self._parse_vectors(payload, expected=len(batch)))
+            try:
+                payload = self._post_with_retry(batch, batch_index=batch_index)
+                vectors.extend(self._parse_vectors(payload, expected=len(batch)))
+            except Exception:
+                self._record(
+                    status="failed",
+                    tokens=None,
+                    cost_yuan=None,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+                raise
             latency_ms = int((time.perf_counter() - started) * 1000)
             tokens = int((payload.get("usage") or {}).get("total_tokens", 0))
+            cost = tokens * self._price_per_million / 1_000_000
             self.usage_tokens += tokens
+            self._record(
+                status="success",
+                tokens=tokens,
+                cost_yuan=cost,
+                latency_ms=latency_ms,
+            )
             logger.info(
                 "embedding_call",
                 extra={
@@ -96,6 +117,26 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
                     )
                 )
         return vectors
+
+    def _record(
+        self,
+        *,
+        status: str,
+        tokens: int | None,
+        cost_yuan: float | None,
+        latency_ms: int,
+    ) -> None:
+        if not self._log_calls:
+            return
+        record_llm_call(
+            scene="embed",
+            model=self.model,
+            status=status,
+            prompt_tokens=tokens,
+            completion_tokens=0 if tokens is not None else None,
+            cost_yuan=cost_yuan,
+            latency_ms=latency_ms,
+        )
 
     def _post_with_retry(self, batch: list[str], *, batch_index: int) -> dict:
         payload = {
