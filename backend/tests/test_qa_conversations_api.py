@@ -166,3 +166,73 @@ def test_conversations_require_student(client: TestClient) -> None:
     )
     assert response.status_code == 403
     assert response.json()["code"] == 40300
+
+
+def test_rename_conversation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    app.dependency_overrides[get_db] = lambda: FakeSession(user)
+    monkeypatch.setattr(
+        qa_service,
+        "rename_conversation",
+        lambda session, **kwargs: _summary(),
+    )
+
+    response = client.patch(
+        "/api/v1/qa/conversations/12",
+        headers=_headers(user),
+        json={"title": "新标题"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["id"] == "12"
+
+
+def test_rename_conversation_rejects_blank_title(client: TestClient) -> None:
+    user = _user()
+    app.dependency_overrides[get_db] = lambda: FakeSession(user)
+    response = client.patch(
+        "/api/v1/qa/conversations/12",
+        headers=_headers(user),
+        json={"title": "   "},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == 42200
+
+
+def test_delete_conversation_returns_204(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    app.dependency_overrides[get_db] = lambda: FakeSession(user)
+    called = {}
+    monkeypatch.setattr(
+        qa_service,
+        "delete_conversation",
+        lambda session, **kwargs: called.update(kwargs),
+    )
+
+    response = client.delete(
+        "/api/v1/qa/conversations/12", headers=_headers(user)
+    )
+
+    assert response.status_code == 204
+    assert called["conversation_id"] == 12
+
+
+def test_delete_conversation_returns_404(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user()
+    app.dependency_overrides[get_db] = lambda: FakeSession(user)
+
+    def missing(session, **kwargs):
+        raise NotFoundError("会话不存在")
+
+    monkeypatch.setattr(qa_service, "delete_conversation", missing)
+    response = client.delete(
+        "/api/v1/qa/conversations/999", headers=_headers(user)
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == 40400

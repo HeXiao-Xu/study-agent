@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidParamError, NotFoundError
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.message_citation import MessageCitation
@@ -151,3 +151,40 @@ def test_get_conversation_detail_returns_404_for_other_user() -> None:
 
     with pytest.raises(NotFoundError):
         qa_service.get_conversation_detail(session, user_id=1, conversation_id=99)
+
+
+def test_rename_conversation_trims_and_returns_summary() -> None:
+    conversation = _conversation()
+    session = FakeSession(
+        scalar_results=[conversation],
+        execute_rows=[[(2, datetime(2026, 11, 2, 10, 0, 1, tzinfo=timezone.utc))]],
+    )
+
+    result = qa_service.rename_conversation(
+        session, user_id=1, conversation_id=12, title="  新标题  "
+    )
+
+    assert conversation.title == "新标题"
+    assert result.title == "新标题"
+    assert result.message_count == 2
+    assert session.commits == 1
+
+
+def test_rename_conversation_rejects_blank_title() -> None:
+    conversation = _conversation()
+    session = FakeSession(scalar_results=[conversation])
+
+    with pytest.raises(InvalidParamError):
+        qa_service.rename_conversation(
+            session, user_id=1, conversation_id=12, title="   "
+        )
+
+
+def test_delete_conversation_deletes_owned_row() -> None:
+    conversation = _conversation()
+    session = FakeSession(scalar_results=[conversation])
+
+    qa_service.delete_conversation(session, user_id=1, conversation_id=12)
+
+    assert session.deleted == [conversation]
+    assert session.commits == 1

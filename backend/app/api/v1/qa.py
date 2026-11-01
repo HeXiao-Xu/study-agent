@@ -19,6 +19,7 @@ from app.schemas.qa import (
     QaAskRequest,
     QaConversationDetailOut,
     QaConversationOut,
+    QaConversationRename,
     QaHistoryCitationOut,
     QaHistoryMessageOut,
     QaMessageCitationOut,
@@ -162,6 +163,42 @@ def conversation_messages(
             conversation=_conversation_out(detail.conversation),
             messages=messages,
         ),
+    )
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=Envelope[QaConversationOut],
+    summary="重命名本人会话",
+)
+def rename_conversation(
+    conversation_id: int,
+    payload: QaConversationRename,
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+) -> Envelope[QaConversationOut]:
+    item = qa_service.rename_conversation(
+        session,
+        user_id=current_user.id,
+        conversation_id=conversation_id,
+        title=payload.title,
+    )
+    return Envelope(trace_id=get_trace_id(), data=_conversation_out(item))
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=204,
+    response_model=None,
+    summary="删除本人会话",
+)
+def delete_conversation(
+    conversation_id: int,
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+) -> None:
+    qa_service.delete_conversation(
+        session, user_id=current_user.id, conversation_id=conversation_id
     )
 
 

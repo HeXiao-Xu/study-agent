@@ -133,3 +133,17 @@ class QaHistoryMessageOut(BaseModel):
 class QaConversationDetailOut(BaseModel):
     conversation: QaConversationOut
     messages: list[QaHistoryMessageOut]
+
+
+class QaConversationRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=80)
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, value: str) -> str:
+        clean = " ".join(value.split())
+        if not clean:
+            raise ValueError("title 不能为空")
+        return clean

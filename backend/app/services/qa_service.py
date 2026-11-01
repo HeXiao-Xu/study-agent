@@ -1076,3 +1076,37 @@ def get_conversation_detail(
             for item in messages
         ],
     )
+
+
+def rename_conversation(
+    session: Session, *, user_id: int, conversation_id: int, title: str
+) -> ConversationSummary:
+    conversation = _find_conversation(
+        session, user_id=user_id, conversation_id=conversation_id
+    )
+    clean = " ".join(title.split())
+    if not clean:
+        raise InvalidParamError("会话标题不能为空")
+    conversation.title = clean[:80]
+    session.commit()
+    count, last = session.execute(
+        select(func.count(Message.id), func.max(Message.created_at)).where(
+            Message.conversation_id == conversation.id
+        )
+    ).one()
+    return _summary(
+        conversation,
+        first_question=None,
+        message_count=int(count),
+        last_message_at=last,
+    )
+
+
+def delete_conversation(
+    session: Session, *, user_id: int, conversation_id: int
+) -> None:
+    conversation = _find_conversation(
+        session, user_id=user_id, conversation_id=conversation_id
+    )
+    session.delete(conversation)
+    session.commit()
