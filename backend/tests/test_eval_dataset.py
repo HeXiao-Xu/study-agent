@@ -177,3 +177,40 @@ def test_validate_gold_chunks_rejects_missing() -> None:
 def test_validate_gold_chunks_accepts_present() -> None:
     cases = [QACase(**_case(1))]
     validate_gold_chunks(cases, {1: 102})
+
+
+def test_m2_dataset_has_30_answerable_and_10_refusal() -> None:
+    path = ROOT / "eval" / "datasets" / "qa_set_m2.jsonl"
+    cases = load_dataset(path, min_items=40, max_items=40)
+
+    assert len(cases) == 40
+    assert sum(1 for case in cases if not case.should_refuse) == 30
+    assert sum(1 for case in cases if case.should_refuse) == 10
+    assert cases[0].id == "q001"
+    assert cases[-1].id == "q040"
+
+
+def test_m2_gold_ids_are_current_chunks() -> None:
+    path = ROOT / "eval" / "datasets" / "qa_set_m2.jsonl"
+    cases = load_dataset(path, min_items=40, max_items=40)
+    gold = {chunk for case in cases for chunk in case.gold_chunk_ids}
+    assert gold
+    assert gold <= set(range(250, 287))
+
+
+def test_load_dataset_accepts_40_with_explicit_bounds(tmp_path) -> None:
+    cases = [_case(i) for i in range(1, 31)] + [
+        _case(i, refuse=True) for i in range(31, 41)
+    ]
+    loaded = load_dataset(
+        _write_cases(tmp_path, cases), min_items=40, max_items=40
+    )
+    assert len(loaded) == 40
+
+
+def test_load_dataset_rejects_39_for_m2_bounds(tmp_path) -> None:
+    cases = [_case(i) for i in range(1, 31)] + [
+        _case(i, refuse=True) for i in range(31, 40)
+    ]
+    with pytest.raises(DatasetError, match="40"):
+        load_dataset(_write_cases(tmp_path, cases), min_items=40, max_items=40)
