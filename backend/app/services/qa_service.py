@@ -7,10 +7,11 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Literal
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.llm import LLMClient, LLMMessage, LLMResponse
@@ -33,6 +34,7 @@ from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.message_citation import MessageCitation
 from app.models.note import Note
+from app.models.note_chunk import NoteChunk
 from app.schemas.qa import QaScopeIn
 from app.services import prompt_service, qa_cache_service
 from app.services.citation_checker import (
@@ -57,6 +59,45 @@ class QaCitationMeta:
     heading_path: str | None
     page_no: int | None
     snippet: str
+
+
+@dataclass(frozen=True)
+class ConversationSummary:
+    id: int
+    title: str
+    scope: QaScopeIn | None
+    created_at: datetime
+    last_message_at: datetime | None
+    message_count: int
+
+
+@dataclass(frozen=True)
+class ConversationCitation:
+    index: int
+    note_id: int | None
+    chunk_id: int | None
+    title: str | None
+    heading_path: str | None
+    page_no: int | None
+    snippet: str | None
+    score: float | None
+    note_available: bool
+
+
+@dataclass(frozen=True)
+class ConversationMessage:
+    id: int
+    role: Literal["user", "assistant"]
+    content_md: str
+    created_at: datetime
+    refused: bool
+    citations: list[ConversationCitation]
+
+
+@dataclass(frozen=True)
+class ConversationDetail:
+    conversation: ConversationSummary
+    messages: list[ConversationMessage]
 
 
 @dataclass(frozen=True)
@@ -888,4 +929,150 @@ def get_message_citations(
             .where(MessageCitation.message_id == message_id)
             .order_by(MessageCitation.rank.asc(), MessageCitation.id.asc())
         ).all()
+    )
+
+
+def _display_title(conversation: Conversation, first_question: str | None) -> str:
+    raw = conversation.title or first_question or ""
+    clean = " ".join(str(raw).split())
+    return clean[:50] or "新对话"
+
+
+def _summary(
+    conversation: Conversation,
+    *,
+    first_question: str | None,
+    message_count: int,
+    last_message_at: datetime | None,
+) -> ConversationSummary:
+    return ConversationSummary(
+        id=conversation.id,
+        title=_display_title(conversation, first_question),
+        scope=_stored_scope(conversation),
+        created_at=conversation.created_at,
+        last_message_at=last_message_at,
+        message_count=message_count,
+    )
+
+
+def list_conversations(
+    session: Session, *, user_id: int, limit: int = 50
+) -> list[ConversationSummary]:
+    first_question = (
+        select(Message.content_md)
+        .where(
+            Message.conversation_id == Conversation.id,
+            Message.role == "user",
+        )
+        .order_by(Message.id.asc())
+        .limit(1)
+        .correlate(Conversation)
+        .scalar_subquery()
+    )
+    activity = func.coalesce(func.max(Message.created_at), Conversation.created_at)
+    rows = session.execute(
+        select(
+            Conversation,
+            func.count(Message.id).label("message_count"),
+            func.max(Message.created_at).label("last_message_at"),
+            first_question.label("first_question"),
+        )
+        .outerjoin(Message, Message.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user_id)
+        .group_by(Conversation.id)
+        .order_by(activity.desc(), Conversation.id.desc())
+        .limit(limit)
+    ).all()
+    return [
+        _summary(
+            conversation,
+            first_question=question,
+            message_count=int(count),
+            last_message_at=last,
+        )
+        for conversation, count, last, question in rows
+    ]
+
+
+def get_conversation_detail(
+    session: Session, *, user_id: int, conversation_id: int
+) -> ConversationDetail:
+    conversation = _find_conversation(
+        session, user_id=user_id, conversation_id=conversation_id
+    )
+    messages = list(
+        session.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.role.in_(("user", "assistant")),
+            )
+            .order_by(Message.id.asc())
+        ).all()
+    )
+    by_message: dict[int, list[ConversationCitation]] = {
+        item.id: [] for item in messages
+    }
+    if messages:
+        rows = session.execute(
+            select(
+                MessageCitation,
+                Note.title,
+                Note.deleted_at,
+                NoteChunk.heading_path,
+            )
+            .outerjoin(Note, Note.id == MessageCitation.note_id)
+            .outerjoin(NoteChunk, NoteChunk.id == MessageCitation.chunk_id)
+            .where(
+                MessageCitation.message_id.in_([item.id for item in messages])
+            )
+            .order_by(MessageCitation.rank.asc(), MessageCitation.id.asc())
+        ).all()
+        for citation, title, deleted_at, heading_path in rows:
+            by_message[citation.message_id].append(
+                ConversationCitation(
+                    index=citation.rank or 0,
+                    note_id=citation.note_id,
+                    chunk_id=citation.chunk_id,
+                    title=title,
+                    heading_path=heading_path,
+                    page_no=citation.page_no,
+                    snippet=citation.snippet,
+                    score=(
+                        float(citation.score)
+                        if citation.score is not None
+                        else None
+                    ),
+                    note_available=(
+                        citation.note_id is not None
+                        and title is not None
+                        and deleted_at is None
+                    ),
+                )
+            )
+    first_question = next(
+        (item.content_md for item in messages if item.role == "user"), None
+    )
+    last_message_at = max((item.created_at for item in messages), default=None)
+    return ConversationDetail(
+        conversation=_summary(
+            conversation,
+            first_question=first_question,
+            message_count=len(messages),
+            last_message_at=last_message_at,
+        ),
+        messages=[
+            ConversationMessage(
+                id=item.id,
+                role=item.role,  # type: ignore[arg-type]
+                content_md=item.content_md,
+                created_at=item.created_at,
+                refused=(
+                    item.role == "assistant"
+                    and item.content_md.strip() == REFUSAL_TEXT
+                ),
+                citations=by_message[item.id],
+            )
+            for item in messages
+        ],
     )

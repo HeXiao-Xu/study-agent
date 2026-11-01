@@ -1,7 +1,7 @@
 """S3-5 问答接口出入参（API.md §5）。"""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -98,3 +98,38 @@ class QaMessageCitationOut(BaseModel):
     page_no: int | None = None
     bbox_json: dict[str, object] | None = None
     rank: int | None = None
+
+
+class QaConversationOut(BaseModel):
+    id: str
+    title: str
+    scope: QaScopeIn | None = None
+    created_at: datetime
+    last_message_at: datetime | None = None
+    message_count: int = 0
+
+
+class QaHistoryCitationOut(BaseModel):
+    index: int
+    note_id: int | None = None
+    chunk_id: int | None = None
+    title: str | None = None
+    heading_path: str | None = None
+    page_no: int | None = None
+    snippet: str | None = None
+    score: float | None = None
+    note_available: bool = True
+
+
+class QaHistoryMessageOut(BaseModel):
+    id: int
+    role: Literal["user", "assistant"]
+    content_md: str
+    created_at: datetime
+    refused: bool = False
+    citations: list[QaHistoryCitationOut] = Field(default_factory=list)
+
+
+class QaConversationDetailOut(BaseModel):
+    conversation: QaConversationOut
+    messages: list[QaHistoryMessageOut]

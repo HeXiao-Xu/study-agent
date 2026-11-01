@@ -348,6 +348,38 @@
 - 出参：`message_citations` 表字段 `id/message_id/chunk_id/note_id/question_id/score/snippet/page_no/bbox_json/rank`，按 `rank,id` 升序
 - 错误：不存在/越权统一 404/40400「消息不存在」
 
+### GET /api/v1/qa/conversations
+- 权限：student（仅本人会话）
+- 类型：同步
+- 入参：`limit`（可选，默认 50，1–100）
+- 出参：`Envelope[QaConversationOut[]]`，按最近消息时间倒序；无消息按 `created_at`
+- `QaConversationOut`：`id`（字符串）/ `title` / `scope`（同 `POST /qa/ask` 的 scope，可为 null）/ `created_at` / `last_message_at` / `message_count`
+- 备注：`title` 为空时回退首条 user 消息前 50 字，再回退「新对话」；`message_count` 只统计 `role in ('user','assistant')`
+- 错误：401/40100；403/40300；422/42200
+
+### GET /api/v1/qa/conversations/{conversation_id}/messages
+- 权限：student（仅本人会话）
+- 类型：同步
+- 出参：`Envelope[QaConversationDetailOut]`：`conversation` 同上，`messages` 按消息 id 升序
+- `QaHistoryMessageOut`：`id` / `role`（user|assistant）/ `content_md` / `created_at` / `refused` / `citations`
+- `QaHistoryCitationOut`：`index`（=rank，空为 0）/ `note_id` / `chunk_id` / `title` / `heading_path` / `page_no` / `snippet` / `score` / `note_available`
+- 备注：引用按 `rank,id` 升序；`title/heading_path` 左连接 `notes/note_chunks`；软删笔记 `note_available=false`；历史拒答仅按正文与 `REFUSAL_TEXT` 相等推导，不恢复当时 reason/suggestions
+- 错误：404/40400「会话不存在」（含越权）；401/40100；403/40300
+
+### PATCH /api/v1/qa/conversations/{conversation_id}
+- 权限：student（仅本人会话）
+- 类型：同步
+- 入参：`{"title": "新标题"}`；trim 后 1–80 字
+- 出参：`Envelope[QaConversationOut]`
+- 错误：404/40400；422/42200 空白或超长
+
+### DELETE /api/v1/qa/conversations/{conversation_id}
+- 权限：student（仅本人会话）
+- 类型：同步（物理删除）
+- 出参：`204` 无响应体
+- 备注：依赖 `messages` / `message_citations` 的数据库级联
+- 错误：404/40400；401/40100；403/40300
+
 ## 6. 错题本
 
 ### POST /api/v1/mistakes

@@ -5,7 +5,7 @@ import json
 import threading
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -15,7 +15,14 @@ from app.core.context import get_trace_id
 from app.core.permissions import require_role
 from app.models.user import User
 from app.schemas.common import Envelope
-from app.schemas.qa import QaAskRequest, QaMessageCitationOut
+from app.schemas.qa import (
+    QaAskRequest,
+    QaConversationDetailOut,
+    QaConversationOut,
+    QaHistoryCitationOut,
+    QaHistoryMessageOut,
+    QaMessageCitationOut,
+)
 from app.services import qa_service
 
 router = APIRouter(prefix="/qa", tags=["qa"])
@@ -80,6 +87,81 @@ def ask(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+def _conversation_out(item: qa_service.ConversationSummary) -> QaConversationOut:
+    return QaConversationOut(
+        id=str(item.id),
+        title=item.title,
+        scope=item.scope,
+        created_at=item.created_at,
+        last_message_at=item.last_message_at,
+        message_count=item.message_count,
+    )
+
+
+@router.get(
+    "/conversations",
+    response_model=Envelope[list[QaConversationOut]],
+    summary="本人会话列表",
+)
+def list_conversations(
+    limit: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+) -> Envelope[list[QaConversationOut]]:
+    items = qa_service.list_conversations(
+        session, user_id=current_user.id, limit=limit
+    )
+    return Envelope(
+        trace_id=get_trace_id(), data=[_conversation_out(item) for item in items]
+    )
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages",
+    response_model=Envelope[QaConversationDetailOut],
+    summary="本人会话消息与引用",
+)
+def conversation_messages(
+    conversation_id: int,
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+) -> Envelope[QaConversationDetailOut]:
+    detail = qa_service.get_conversation_detail(
+        session, user_id=current_user.id, conversation_id=conversation_id
+    )
+    messages = [
+        QaHistoryMessageOut(
+            id=item.id,
+            role=item.role,
+            content_md=item.content_md,
+            created_at=item.created_at,
+            refused=item.refused,
+            citations=[
+                QaHistoryCitationOut(
+                    index=citation.index,
+                    note_id=citation.note_id,
+                    chunk_id=citation.chunk_id,
+                    title=citation.title,
+                    heading_path=citation.heading_path,
+                    page_no=citation.page_no,
+                    snippet=citation.snippet,
+                    score=citation.score,
+                    note_available=citation.note_available,
+                )
+                for citation in item.citations
+            ],
+        )
+        for item in detail.messages
+    ]
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=QaConversationDetailOut(
+            conversation=_conversation_out(detail.conversation),
+            messages=messages,
+        ),
     )
 
 
