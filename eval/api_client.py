@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Iterator
 
@@ -53,6 +54,7 @@ class ApiCitation:
     title: str | None
     heading_path: str | None
     snippet: str
+    index: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ class AnswerResponse:
     refused: bool
     refusal_reason: str | None
     citations: list[ApiCitation]
+    cited_chunk_ids: list[int]
     tokens: int
     latency_ms: int
     cost_yuan: float
@@ -139,8 +142,11 @@ class OnlineClient:
                             title=item.get("title"),
                             heading_path=item.get("heading_path"),
                             snippet=str(item.get("snippet") or ""),
+                            index=int(item.get("index", position)),
                         )
-                        for item in data.get("citations", [])
+                        for position, item in enumerate(
+                            data.get("citations", []), start=1
+                        )
                     ]
                 elif event == "delta":
                     text_parts.append(str(data.get("text") or ""))
@@ -152,11 +158,19 @@ class OnlineClient:
                     )
         if done is None:
             raise OnlineEvalError("SSE 结束但没有 done 事件")
+        text = "".join(text_parts)
+        by_index = {item.index: item.chunk_id for item in citations}
+        cited_chunk_ids = [
+            by_index[int(match.group(1))]
+            for match in re.finditer(r"\[(\d+)\]", text)
+            if int(match.group(1)) in by_index
+        ]
         return AnswerResponse(
-            text="".join(text_parts),
+            text=text,
             refused=bool(done.get("refused")),
             refusal_reason=done.get("refusal_reason"),
             citations=citations,
+            cited_chunk_ids=list(dict.fromkeys(cited_chunk_ids)),
             tokens=int(done.get("tokens") or 0),
             latency_ms=int(done.get("latency_ms") or 0),
             cost_yuan=float(done.get("cost_yuan") or 0.0),

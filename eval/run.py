@@ -175,7 +175,7 @@ def _answer_case(
 
 
 def _api_answer_row(case: QACase, result: AnswerResponse) -> CaseAnswer:
-    cited = [item.chunk_id for item in result.citations]
+    cited = result.cited_chunk_ids
     gold = set(case.gold_chunk_ids)
     if case.should_refuse:
         precision = None
@@ -239,7 +239,7 @@ def _run_api_config(
                 "text": answer.text,
                 "refused": answer.refused,
                 "refusal_reason": answer.refusal_reason,
-                "cited_chunk_ids": [item.chunk_id for item in answer.citations],
+                "cited_chunk_ids": answer.cited_chunk_ids,
                 "citations": [
                     {
                         "chunk_id": item.chunk_id,

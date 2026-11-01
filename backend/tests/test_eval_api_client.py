@@ -93,10 +93,10 @@ def test_ask_collects_citations_text_and_cost() -> None:
     body = "\n".join(
         [
             "event: meta",
-            'data: {"conversation_id":"7","citations":[{"chunk_id":250,"title":"属性","heading_path":"单调性","snippet":"定义"}]}',
+            'data: {"conversation_id":"7","citations":[{"index":1,"chunk_id":250,"title":"属性","heading_path":"单调性","snippet":"定义"},{"index":2,"chunk_id":251,"title":"属性","heading_path":"单调性","snippet":"定义2"}]}',
             "",
             "event: delta",
-            'data: {"text":"答"}',
+            'data: {"text":"答 [1]"}',
             "",
             "event: done",
             'data: {"refused":false,"tokens":9,"latency_ms":120,"cost_yuan":0.0012,"conversation_id":"7"}',
@@ -118,8 +118,9 @@ def test_ask_collects_citations_text_and_cost() -> None:
     answer = client.ask("单调性是什么")
     client.close()
 
-    assert answer.text == "答"
+    assert answer.text == "答 [1]"
     assert answer.citations[0].chunk_id == 250
+    assert answer.cited_chunk_ids == [250]
     assert answer.cost_yuan == pytest.approx(0.0012)
     assert answer.conversation_id == "7"
 
