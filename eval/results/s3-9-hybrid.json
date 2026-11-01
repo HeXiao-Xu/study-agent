@@ -1,0 +1,532 @@
+{
+  "dataset": "qa_set_m2",
+  "config": "hybrid",
+  "mode": "api",
+  "api_base_url": "http://127.0.0.1:8000/api/v1",
+  "user_id": null,
+  "generated_at": "2026-11-01T18:34:35.236298+00:00",
+  "case_count": 40,
+  "answerable_count": 30,
+  "refusal_count": 10,
+  "answer_skipped": true,
+  "retrieval": {
+    "hit_at_5": 1.0,
+    "mrr_at_5": 0.7899999999999998,
+    "avg_latency_ms": 14.7
+  },
+  "answer": null,
+  "cases": [
+    {
+      "id": "q001",
+      "question": "函数的定义域怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q002",
+      "question": "函数的三要素是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q003",
+      "question": "单调性的定义是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        250,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q004",
+      "question": "如何判断一个函数在区间上的单调性？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q005",
+      "question": "复合函数“同增异减”是什么意思？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q006",
+      "question": "已知奇函数在 x≥0 的解析式，怎么求 x<0 的解析式？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        258,
+        260,
+        262
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q007",
+      "question": "求奇函数分段解析式的套路是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        262
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 3,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q008",
+      "question": "错位相减法的适用条件是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        255
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 20,
+      "answer": null
+    },
+    {
+      "id": "q009",
+      "question": "错位相减法的五个步骤是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        257
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 19,
+      "answer": null
+    },
+    {
+      "id": "q010",
+      "question": "用错位相减法求 S_n=1·2+3·2^2+…+(2n-1)·2^n。",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        261,
+        263
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 18,
+      "answer": null
+    },
+    {
+      "id": "q011",
+      "question": "错位相减法最后化简得到的 S_n 是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        263
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 19,
+      "answer": null
+    },
+    {
+      "id": "q012",
+      "question": "错位相减法有哪些易错点？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        264
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 5,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q013",
+      "question": "错位相减法的口诀是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        265
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q014",
+      "question": "试卷第 1 题：下列对应关系中能构成函数的是？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        268,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q015",
+      "question": "试卷第 2 题：f(x)=√(3-x)+ln(x+1) 的定义域是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        269,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q016",
+      "question": "试卷第 3 题：下列函数在 (0,+∞) 上单调递增的是？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        270,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q017",
+      "question": "试卷第 4 题：偶函数 f(2)=3，f(-2) 等于多少？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        271
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 18,
+      "answer": null
+    },
+    {
+      "id": "q018",
+      "question": "试卷第 5 题：f(x)=x^3+x 的图象关于什么对称？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        272
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q019",
+      "question": "试卷第 6 题：f(x)=2x+1，f(f(x)) 等于多少？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        273
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q020",
+      "question": "试卷第 7 题：f(x)=x^2-2x+3 在 [0,m] 上最大 3 最小 2，m 范围？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        274
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q021",
+      "question": "试卷第 8 题：奇函数在 (0,+∞) 增且 f(1)=0，f(x)>0 的解集？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        275,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q022",
+      "question": "试卷第 9 题：分段函数 f(f(-1)) 怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        277
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 3,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q023",
+      "question": "试卷第 10 题：f(x)=x+4/x（x>0）的最小值？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        278
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 3,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q024",
+      "question": "试卷第 11 题：f(x)=(k-2)x^2+(k-1)x+3 是偶函数，k 等于？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        279
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 14,
+      "answer": null
+    },
+    {
+      "id": "q025",
+      "question": "试卷第 12 题：f(x) 增函数且 f(m-1)>f(2m)，m 范围？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        280,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q026",
+      "question": "试卷第 13 题：求三个函数的定义域。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        282,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": null
+    },
+    {
+      "id": "q027",
+      "question": "试卷第 14 题：用定义证明 f(x)=x+1/x 在 (1,+∞) 上单调递增。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        283,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q028",
+      "question": "试卷第 15 题：奇函数在 (-2,2) 减，f(1-a)+f(1-2a)>0，求 a。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        284,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 2,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q029",
+      "question": "试卷第 16 题：二次函数过 (0,3)，对称轴 x=1，f(-1)=0，求解析式及 [-2,2] 最值。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        285
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q030",
+      "question": "试卷第 17 题：商品进价 40，售价 50 卖 500，每涨 1 元少 10 件，求利润函数和最大利润。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        286
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q031",
+      "question": "今天北京天气怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 10,
+      "answer": null
+    },
+    {
+      "id": "q032",
+      "question": "怎么用 Python 写一个网页爬虫？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 12,
+      "answer": null
+    },
+    {
+      "id": "q033",
+      "question": "《红楼梦》的作者是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 16,
+      "answer": null
+    },
+    {
+      "id": "q034",
+      "question": "出国留学需要准备哪些材料？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": null
+    },
+    {
+      "id": "q035",
+      "question": "今天股市行情怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": null
+    },
+    {
+      "id": "q036",
+      "question": "如何做番茄炒蛋？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 12,
+      "answer": null
+    },
+    {
+      "id": "q037",
+      "question": "世界杯冠军是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 13,
+      "answer": null
+    },
+    {
+      "id": "q038",
+      "question": "电脑蓝屏怎么修？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 12,
+      "answer": null
+    },
+    {
+      "id": "q039",
+      "question": "怎样提高英语听力？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 12,
+      "answer": null
+    },
+    {
+      "id": "q040",
+      "question": "汽车轮胎多久换一次？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": null
+    }
+  ]
+}

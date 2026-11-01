@@ -1,0 +1,2178 @@
+{
+  "dataset": "qa_set_m2",
+  "config": "hybrid_rerank",
+  "mode": "api",
+  "api_base_url": "http://127.0.0.1:8000/api/v1",
+  "user_id": null,
+  "generated_at": "2026-11-01T18:43:22.522078+00:00",
+  "case_count": 40,
+  "answerable_count": 30,
+  "refusal_count": 10,
+  "answer_skipped": false,
+  "retrieval": {
+    "hit_at_5": 1.0,
+    "mrr_at_5": 0.9777777777777779,
+    "avg_latency_ms": 14.3
+  },
+  "answer": {
+    "citation_precision": 0.8972222222222221,
+    "citation_hit_rate": 1.0,
+    "refusal_accuracy": 0.825,
+    "confusion": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 7,
+      "tn": 30
+    },
+    "avg_total_tokens": 1929.675,
+    "avg_latency_ms": 12900.95,
+    "total_cost_yuan": 0.08838359999999999,
+    "llm_calls": 0,
+    "citation_retry_count": 0,
+    "answered_count": 37
+  },
+  "cases": [
+    {
+      "id": "q001",
+      "question": "函数的定义域怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 20,
+      "answer": {
+        "text": "求函数的定义域，需依据函数表达式中各类运算的定义前提，找出自变量 $ x $ 必须满足的所有条件，然后取这些条件的**交集**，最终用**集合或区间形式**写出结果 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n具体步骤如下：\n\n**第一步：识别表达式中的限制类型**  \n常见限制有四类：① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n**第二步：列出所有不等式（或不等式组）**  \n例如：  \n- $ f(x) = \\frac{1}{x^2 - 4} $ 要求 $ x^2 - 4 \\neq 0 $，即 $ x \\neq \\pm 2 $ [2]；  \n- $ f(x) = \\frac{\\sqrt{x+2}}{x-1} $ 要求 $ x+2 \\geq 0 $ 且 $ x-1 \\neq 0 $，即 $ x \\geq -2 $ 且 $ x \\neq 1 $ [2]；  \n- $ f(x) = \\sqrt{x^2 - 9} + \\ln(5 - x) $ 要求 $ x^2 - 9 \\geq 0 $ 且 $ 5 - x > 0 $，即 $ x \\leq -3 $ 或 $ x \\geq 3 $，且 $ x < 5 $，故解为 $ [-3, -3] \\cup [3,5) $，即 $ [-3] \\cup [3,5) $ ——但需注意 $ x^2 - 9 \\geq 0 $ 解为 $ x \\in (-\\infty, -3] \\cup [3, +\\infty) $，再与 $ x < 5 $ 取交，得 $ (-\\infty, -3] \\cup [3, 5) $ [2]；  \n- $ f(x) = \\sqrt{3 - x} + \\ln(x + 1) $ 要求 $ 3 - x \\geq 0 $ 且 $ x + 1 > 0 $，即 $ x \\leq 3 $ 且 $ x > -1 $，故定义域为 $ (-1, 3] $ [3]。\n\n**第三步：解不等式组，取交集**  \n如 $ f(x) = \\sqrt{x-1} + \\frac{1}{x-2} $，需 $ x - 1 \\geq 0 $ 且 $ x - 2 \\neq 0 $，即 $ x \\geq 1 $ 且 $ x \\neq 2 $，定义域为 $ [1,2) \\cup (2,+\\infty) $ [1]。\n\n**第四步：规范书写**  \n必须写成集合或区间形式 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n定义域是函数三要素之一（另两个是对应关系和值域），且定义域优先——即未明确给出定义域时，一律按“使表达式有意义的实数全体”来理解；若题目已限定定义域（如题[4]中“定义在 $(-2,2)$ 上”），则必须以此为前提，不再额外求解。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          254,
+          282,
+          269,
+          284
+        ],
+        "citations": [
+          {
+            "chunk_id": 254,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "一、函数的概念\n设 A、B 是非空数集，如果按照某种确定的对应关系 f，使对于集合 A 中的任意一个数 x，在集合 B 中都有唯一确定的数 f(x) 和它对应，就称 f: A→B 是集合 A 到集合 B 的一个函数。\n★ 三要素：定义域、对应关系、值域（定义域优先！）\n常见定义域限制：\n① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义。\n例 求 f(x)="
+          },
+          {
+            "chunk_id": 282,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "13．（15 分）求下列函数的定义域：\n（1）f(x)=1/(x 2 -4)； （2）f(x)=√(x+2)/(x-1)； （3）f(x)=√(x 2 -9)+ln(5-x)。"
+          },
+          {
+            "chunk_id": 269,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "2．函数 f(x)=√(3-x)+ln(x+1) 的定义域为（ ）\nA．[-1,3] B．(-1,3] C．[-1,3) D．(-1,3)"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 286,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "17．（21 分）某商场销售某种商品，每件进价 40 元。市场调查发现：若按每件 50 元出售，一个月能卖出 500 件；售价每提高 1 元，月销量就减少 10 件。设每件商品售价为 x 元（x≥50），月利润为 y 元。\n（1）写出 y 关于 x\n的函数关系式，并注明定义域；（2）当售价定为多少元时，月利润最大？最大月利润是多少？"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          }
+        ],
+        "citation_precision": 0.25,
+        "citation_hit": true,
+        "total_tokens": 4145,
+        "latency_ms": 33452,
+        "cost_yuan": 0.005098
+      }
+    },
+    {
+      "id": "q002",
+      "question": "函数的三要素是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "函数的三要素是：定义域、对应关系、值域，其中定义域优先 [1]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          254
+        ],
+        "citations": [
+          {
+            "chunk_id": 254,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "一、函数的概念\n设 A、B 是非空数集，如果按照某种确定的对应关系 f，使对于集合 A 中的任意一个数 x，在集合 B 中都有唯一确定的数 f(x) 和它对应，就称 f: A→B 是集合 A 到集合 B 的一个函数。\n★ 三要素：定义域、对应关系、值域（定义域优先！）\n常见定义域限制：\n① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义。\n例 求 f(x)="
+          },
+          {
+            "chunk_id": 252,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "数学笔记 · 必修第一册 第三章 函数的概念与性质\n2026.09.15 晴 课堂笔记 + 错题整理"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 286,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "17．（21 分）某商场销售某种商品，每件进价 40 元。市场调查发现：若按每件 50 元出售，一个月能卖出 500 件；售价每提高 1 元，月销量就减少 10 件。设每件商品售价为 x 元（x≥50），月利润为 y 元。\n（1）写出 y 关于 x\n的函数关系式，并注明定义域；（2）当售价定为多少元时，月利润最大？最大月利润是多少？"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 952,
+        "latency_ms": 1078,
+        "cost_yuan": 0.0007892000000000001
+      }
+    },
+    {
+      "id": "q003",
+      "question": "单调性的定义是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        250,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "单调性的定义是：在区间 $ D $ 内，对任意 $ x_1 < x_2 $，都有 $ f(x_1) < f(x_2) $，则称函数 $ f $ 在 $ D $ 上单调递增；若对任意 $ x_1 < x_2 $，都有 $ f(x_1) > f(x_2) $，则称 $ f $ 在 $ D $ 上单调递减 [1]。  \n另一表述为：区间内自变量增大时，函数值也增大（对应递增）或减小（对应递减）[2]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          256,
+          250
+        ],
+        "citations": [
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 250,
+            "title": "属性",
+            "heading_path": "单调性",
+            "snippet": "单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 252,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "数学笔记 · 必修第一册 第三章 函数的概念与性质\n2026.09.15 晴 课堂笔记 + 错题整理"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 782,
+        "latency_ms": 3466,
+        "cost_yuan": 0.0007852
+      }
+    },
+    {
+      "id": "q004",
+      "question": "如何判断一个函数在区间上的单调性？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n判断函数在区间上的单调性，依据资料有以下三种方法：\n\n① **定义法**：设函数 $ f $ 定义在区间 $ D $ 上，若对任意 $ x_1, x_2 \\in D $ 且 $ x_1 < x_2 $，都有 $ f(x_1) < f(x_2) $，则 $ f $ 在 $ D $ 上单调递增；若都有 $ f(x_1) > f(x_2) $，则单调递减 [1]。该法通过作差 $ f(x_1) - f(x_2) $ 判断符号 [1]。\n\n② **导数法**：若 $ f $ 在区间 $ D $ 上可导，则当 $ f'(x) > 0 $ 对所有 $ x \\in D $ 成立时，$ f $ 在 $ D $ 上单调递增；当 $ f'(x) < 0 $ 恒成立时，单调递减 [1]。\n\n③ **复合函数“同增异减”法则**：对复合函数 $ y = f(g(x)) $，若外层函数 $ f $ 与内层函数 $ g $ 在对应区间上单调性相同（即同为增或同为减），则整体单调递增；若单调性相反，则整体单调递减 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n【以下为模型补充，未在你的资料中找到依据】\n- 使用导数法时，需确保函数在区间内连续且可导；  \n【以下为模型补充，未在你的资料中找到依据】\n- 若导数在某点为零但不改变符号（如 $ f'(x) \\geq 0 $ 且仅在孤立点为零），函数仍可能严格递增（如 $ f(x) = x^3 $ 在 $ \\mathbb{R} $ 上）；  \n【以下为模型补充，未在你的资料中找到依据】\n- 定义法证明中，常需因式分解或配方处理差式，以明确其符号。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          256
+        ],
+        "citations": [
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 270,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "3．下列函数中，在区间 (0,+∞) 上单调递增的是（ ）\nA．y=1/x B．y=x 2 -2x C．y=√x D．y=-x+1"
+          },
+          {
+            "chunk_id": 250,
+            "title": "属性",
+            "heading_path": "单调性",
+            "snippet": "单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 280,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "12．设 f(x) 是 R 上的增函数，且 f(m-1)>f(2m)，则 m 的取值范围是________。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2749,
+        "latency_ms": 19780,
+        "cost_yuan": 0.0032252
+      }
+    },
+    {
+      "id": "q005",
+      "question": "复合函数“同增异减”是什么意思？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 19,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n“同增异减”是指复合函数 $ y = f(g(x)) $ 的单调性判断规则：  \n- 若外层函数 $ f(u) $ 与内层函数 $ u = g(x) $ 在所考察区间上**单调性相同**（即同为增函数或同为减函数），则复合函数 $ y = f(g(x)) $ 在该区间上单调递增 [1]；  \n- 若二者**单调性相反**（即一个单调递增、另一个单调递减），则复合函数 $ y = f(g(x)) $ 在该区间上单调递减 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n该法则成立的前提是：内层函数 $ g(x) $ 的值域必须落在外层函数 $ f(u) $ 的定义域内，且各函数在对应区间上具有确定的单调性。实际应用时需先分别判定内外层函数的单调区间，再取交集确定复合函数的单调区间。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          256
+        ],
+        "citations": [
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 252,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "数学笔记 · 必修第一册 第三章 函数的概念与性质\n2026.09.15 晴 课堂笔记 + 错题整理"
+          },
+          {
+            "chunk_id": 250,
+            "title": "属性",
+            "heading_path": "单调性",
+            "snippet": "单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 280,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "12．设 f(x) 是 R 上的增函数，且 f(m-1)>f(2m)，则 m 的取值范围是________。"
+          },
+          {
+            "chunk_id": 266,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "姓 名：______________ 班级：______________ 考号：______________ （密 封 线 内 不 要 答 题）\n华中农业大学附属中学 2026 级高一数学单元测试卷\n（第三章 函数的概念与性质 满分 150 分 时间 120 分钟）\n命题人：何潇\n审核人：高一数学组\n2026 年 10 月 18 日"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2096,
+        "latency_ms": 9313,
+        "cost_yuan": 0.0021352000000000003
+      }
+    },
+    {
+      "id": "q006",
+      "question": "已知奇函数在 x≥0 的解析式，怎么求 x<0 的解析式？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        258,
+        260,
+        262
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "根据【参考资料】，求奇函数在 $x<0$ 区间的解析式的方法是：设 $x<0$，则 $-x>0$，将 $-x$ 代入已知的 $x\\geq 0$ 表达式得 $f(-x)$，再由奇函数定义 $f(x) = -f(-x)$ 求出 $f(x)$ [1][2]。\n\n以【参考资料】[1] 中题目为例：  \n已知 $f(x)$ 是 $\\mathbb{R}$ 上的奇函数，当 $x \\geq 0$ 时 $f(x) = x^2 - 2x$；  \n设 $x<0$，则 $-x>0$，故 $f(-x) = (-x)^2 - 2(-x) = x^2 + 2x$ [1]；  \n由奇函数性质，$f(x) = -f(-x) = -(x^2 + 2x) = -x^2 - 2x$ [1][3]。\n\n该方法对应笔记中总结的套路：“求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来” [2]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n此方法要求函数定义域关于原点对称，且奇函数必满足 $f(0)=0$（若 $0$ 在定义域内）。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          258,
+          262,
+          260
+        ],
+        "citations": [
+          {
+            "chunk_id": 258,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "三、错题本（上周周测第 7 题）\n题目：已知 f(x) 是 R 上的奇函数，当 x≥0 时 f(x)=x 2 -2x，求 x<0 时 f(x)\n的解析式。\n我的错解：直接写 f(x)=x 2 -2x（忘了换元！）\n正解：设 x<0，则 -x>0，f(-x)=(-x) 2 -2(-x)=x 2 +2x。∵ 奇函数，f(x)=-f(-x)，∴"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2817,
+        "latency_ms": 18618,
+        "cost_yuan": 0.0032196
+      }
+    },
+    {
+      "id": "q007",
+      "question": "求奇函数分段解析式的套路是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        262
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "求奇函数分段解析式的套路是：**求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来** [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n具体操作步骤如下（以已知 $x \\geq 0$ 时表达式、求 $x < 0$ 时 $f(x)$ 为例）：\n\n1. 设 $x < 0$，则 $-x > 0$，此时 $-x$ 落在已知解析式的定义区间内 [2]；  \n2. 利用已知表达式计算 $f(-x)$ [2]；  \n3. 利用奇函数性质 $f(x) = -f(-x)$，代入第2步结果，得到 $x < 0$ 时的解析式 [2]。\n\n【以下为模型补充，未在你的资料中找到依据】\n例如，已知 $f(x)$ 是 $\\mathbb{R}$ 上的奇函数，且当 $x \\geq 0$ 时 $f(x) = x^2 - 2x$，则对 $x < 0$：  \n- 设 $x < 0$，则 $-x > 0$，故 $f(-x) = (-x)^2 - 2(-x) = x^2 + 2x$ [2]；  \n- 由奇函数性质，$f(x) = -f(-x) = -(x^2 + 2x) = -x^2 - 2x$ [2][4]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n该方法要求函数定义域关于原点对称，且已知区间的对称部分必须属于定义域，否则无法通过奇性延拓。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          262,
+          258,
+          260
+        ],
+        "citations": [
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 258,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "三、错题本（上周周测第 7 题）\n题目：已知 f(x) 是 R 上的奇函数，当 x≥0 时 f(x)=x 2 -2x，求 x<0 时 f(x)\n的解析式。\n我的错解：直接写 f(x)=x 2 -2x（忘了换元！）\n正解：设 x<0，则 -x>0，f(-x)=(-x) 2 -2(-x)=x 2 +2x。∵ 奇函数，f(x)=-f(-x)，∴"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          }
+        ],
+        "citation_precision": 0.3333333333333333,
+        "citation_hit": true,
+        "total_tokens": 2787,
+        "latency_ms": 18018,
+        "cost_yuan": 0.003162
+      }
+    },
+    {
+      "id": "q008",
+      "question": "错位相减法的适用条件是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        255
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": {
+        "text": "错位相减法的适用条件是：当数列的通项是“等差 × 等比”的形式，例如 $ a_n = (2n-1) \\cdot 2^n $，此时直接求和没有现成公式，可以优先考虑错位相减法 [1]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          255
+        ],
+        "citations": [
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          },
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 263,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "两边乘 2：2S_n = 1·2^2 + 3·2^3 + ... + (2n-3)·2^n + (2n-1)·2^{n+1}。\n错位相减：S_n - 2S_n = 2 + 2·(2^2+2^3+...+2^n) - (2n-1)·2^{n+1}。\n化简得 S_n = (2n-3)·2^{n+1} + 6。"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 755,
+        "latency_ms": 2209,
+        "cost_yuan": 0.0006843999999999999
+      }
+    },
+    {
+      "id": "q009",
+      "question": "错位相减法的五个步骤是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        257
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n错位相减法的五个步骤如下：\n\n第一步：写出 $ S_n = a_1 + a_2 + \\dots + a_n $ [1]。  \n第二步：两边同时乘等比部分的公比 $ q $，得到 $ qS_n $ [1]。  \n第三步：把 $ S_n $ 与 $ qS_n $ 按相同次幂对齐，错位相减 [1]。  \n第四步：中间项构成等比数列，用等比数列求和公式化简 [1]。  \n第五步：解出 $ S_n $，并检查首项、末项和常数项 [1]。  \n\n该方法的口诀为：“乘公比、错位减、等比求和、再化简” [2]。  \n\n【以下为模型补充，未在你的资料中找到依据】  \n错位相减法适用于通项为“等差数列 × 等比数列”形式的数列求和，例如 $ a_n = (an + b) \\cdot r^n $（其中 $ a, b, r $ 为常数，$ r \\neq 1 $）；其理论基础是利用等比数列的缩放不变性构造方程消去中间重复项。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          257,
+          265
+        ],
+        "citations": [
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          },
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          },
+          {
+            "chunk_id": 263,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "两边乘 2：2S_n = 1·2^2 + 3·2^3 + ... + (2n-3)·2^n + (2n-1)·2^{n+1}。\n错位相减：S_n - 2S_n = 2 + 2·(2^2+2^3+...+2^n) - (2n-1)·2^{n+1}。\n化简得 S_n = (2n-3)·2^{n+1} + 6。"
+          },
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          }
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 2071,
+        "latency_ms": 10725,
+        "cost_yuan": 0.0021932
+      }
+    },
+    {
+      "id": "q010",
+      "question": "用错位相减法求 S_n=1·2+3·2^2+…+(2n-1)·2^n。",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        261,
+        263
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "根据[3]，所求为 $S_n = 1\\cdot 2 + 3\\cdot 2^2 + 5\\cdot 2^3 + \\dots + (2n-1)\\cdot 2^n$。\n\n该通项为“等差 × 等比”形式，适用错位相减法[2]。\n\n按[6]步骤：  \n第一步：写出 $S_n = 1\\cdot 2 + 3\\cdot 2^2 + \\dots + (2n-1)\\cdot 2^n$ [3]；  \n第二步：两边乘公比 $2$，得 $2S_n = 1\\cdot 2^2 + 3\\cdot 2^3 + \\dots + (2n-1)\\cdot 2^{n+1}$ [1]；  \n第三步与第四步合并执行：错位相减得  \n$$\nS_n - 2S_n = 2 + 2\\cdot(2^2 + 2^3 + \\dots + 2^n) - (2n-1)\\cdot 2^{n+1} \\quad [1]\n$$  \n第五步：化简得 $S_n = (2n-3)\\cdot 2^{n+1} + 6$ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n该公式可进一步整理为 $S_n = 2^{n+1}(2n - 3) + 6$，但此变形未在参考资料中出现。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          261,
+          255,
+          257,
+          263
+        ],
+        "citations": [
+          {
+            "chunk_id": 263,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "两边乘 2：2S_n = 1·2^2 + 3·2^3 + ... + (2n-3)·2^n + (2n-1)·2^{n+1}。\n错位相减：S_n - 2S_n = 2 + 2·(2^2+2^3+...+2^n) - (2n-1)·2^{n+1}。\n化简得 S_n = (2n-3)·2^{n+1} + 6。"
+          },
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 261,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "求和 S_n = 1·2 + 3·2^2 + 5·2^3 + ... + (2n-1)·2^n。"
+          },
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          },
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          }
+        ],
+        "citation_precision": 0.5,
+        "citation_hit": true,
+        "total_tokens": 3933,
+        "latency_ms": 30995,
+        "cost_yuan": 0.00477
+      }
+    },
+    {
+      "id": "q011",
+      "question": "错位相减法最后化简得到的 S_n 是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        263
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": {
+        "text": "根据【参考资料】[1]，错位相减法化简后得到的和为：  \n$$ S_n = (2n-3) \\cdot 2^{n+1} + 6 $$  \n该结果对应通项为 $ a_n = (2n-1) \\cdot 2^n $ 的数列前 $ n $ 项和 [1]。\n\n【补充说明｜非你的资料】  \n此公式仅适用于该特定数列（即 $ a_n = (2n-1)2^n $）的求和；若通项形式不同，需重新应用错位相减法步骤推导。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          263
+        ],
+        "citations": [
+          {
+            "chunk_id": 263,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "两边乘 2：2S_n = 1·2^2 + 3·2^3 + ... + (2n-3)·2^n + (2n-1)·2^{n+1}。\n错位相减：S_n - 2S_n = 2 + 2·(2^2+2^3+...+2^n) - (2n-1)·2^{n+1}。\n化简得 S_n = (2n-3)·2^{n+1} + 6。"
+          },
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          },
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          },
+          {
+            "chunk_id": 264,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "四、易错点\n乘公比后要对齐指数，不能漏项。\n中间项是等比数列求和，注意项数和首项。\n最后解 S_n 时符号容易错，建议代 n=1 检验。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 881,
+        "latency_ms": 3555,
+        "cost_yuan": 0.0008692000000000001
+      }
+    },
+    {
+      "id": "q012",
+      "question": "错位相减法有哪些易错点？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        264
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 3,
+      "retrieval_latency_ms": 13,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n错位相减法的易错点如下：\n\n- 乘公比后要对齐指数，不能漏项 [3]；  \n- 中间项是等比数列求和，注意项数和首项 [3]；  \n- 最后解 $ S_n $ 时符号容易错，建议代 $ n = 1 $ 检验 [3]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          264
+        ],
+        "citations": [
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          },
+          {
+            "chunk_id": 264,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "四、易错点\n乘公比后要对齐指数，不能漏项。\n中间项是等比数列求和，注意项数和首项。\n最后解 S_n 时符号容易错，建议代 n=1 检验。"
+          },
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 258,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "三、错题本（上周周测第 7 题）\n题目：已知 f(x) 是 R 上的奇函数，当 x≥0 时 f(x)=x 2 -2x，求 x<0 时 f(x)\n的解析式。\n我的错解：直接写 f(x)=x 2 -2x（忘了换元！）\n正解：设 x<0，则 -x>0，f(-x)=(-x) 2 -2(-x)=x 2 +2x。∵ 奇函数，f(x)=-f(-x)，∴"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1839,
+        "latency_ms": 4590,
+        "cost_yuan": 0.0016752
+      }
+    },
+    {
+      "id": "q013",
+      "question": "错位相减法的口诀是什么？",
+      "scope": "数列",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        265
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "错位相减法口诀：乘公比、错位减、等比求和、再化简 [1]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          265
+        ],
+        "citations": [
+          {
+            "chunk_id": 265,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "五、总结口诀\n错位相减法口诀：乘公比、错位减、等比求和、再化简。"
+          },
+          {
+            "chunk_id": 257,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "二、错位相减法的步骤\n第一步：写出 S_n = a_1 + a_2 + ... + a_n。\n第二步：两边同时乘等比部分的公比 q，得到 qS_n。\n第三步：把 S_n 与 qS_n 按相同次幂对齐，错位相减。\n第四步：中间项构成等比数列，用等比数列求和公式化简。\n第五步：解出 S_n，并检查首项、末项和常数项。"
+          },
+          {
+            "chunk_id": 263,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "两边乘 2：2S_n = 1·2^2 + 3·2^3 + ... + (2n-3)·2^n + (2n-1)·2^{n+1}。\n错位相减：S_n - 2S_n = 2 + 2·(2^2+2^3+...+2^n) - (2n-1)·2^{n+1}。\n化简得 S_n = (2n-3)·2^{n+1} + 6。"
+          },
+          {
+            "chunk_id": 255,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "一、适用条件\n当数列的通项是“等差 × 等比”的形式，例如 a_n=(2n-1)·2^n，直接求和没有现成公式，可以优先考虑错位相减法。"
+          },
+          {
+            "chunk_id": 253,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "高中数学笔记：数列求和（错位相减法）"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 716,
+        "latency_ms": 1203,
+        "cost_yuan": 0.0006063999999999999
+      }
+    },
+    {
+      "id": "q014",
+      "question": "试卷第 1 题：下列对应关系中能构成函数的是？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        268,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "试卷第 1 题对应【参考资料】[1]：\n\n【以下为模型补充，未在你的资料中找到依据】\n题目：下列对应关系中，能构成从集合 $ A = \\{1,2,3\\} $ 到 $ B = \\{4,5,6\\} $ 的函数的是（ ）  \nA．$ f: x \\to x+2 $  \nB．$ f: x \\to 2x $  \nC．$ f: x \\to x-1 $  \nD．$ f: x \\to x/2 $\n\n根据函数定义：设 $ A $、$ B $ 是非空数集，若对 $ A $ 中任意一个数 $ x $，在 $ B $ 中都有唯一确定的数 $ f(x) $ 与之对应，则称 $ f: A \\to B $ 是一个函数 [3]。\n\n【以下为模型补充，未在你的资料中找到依据】\n逐项验证是否满足“对每个 $ x \\in A $，均有 $ f(x) \\in B $”：\n\n- A：$ f(1)=3 \\notin B $，$ f(2)=4 \\in B $，$ f(3)=5 \\in B $；因 $ f(1) \\notin B $，不满足定义 [3]。  \n- B：$ f(1)=2 \\notin B $，$ f(2)=4 \\in B $，$ f(3)=6 \\in B $；因 $ f(1) \\notin B $，不满足定义 [3]。  \n- C：$ f(1)=0 \\notin B $，$ f(2)=1 \\notin B $，$ f(3)=2 \\notin B $；均不在 $ B $ 中，不满足定义 [3]。  \n- D：$ f(1)=0.5 \\notin B $，$ f(2)=1 \\notin B $，$ f(3)=1.5 \\notin B $；均不在 $ B $ 中，不满足定义 [3]。\n\n综上，四个选项均不能构成从 $ A $ 到 $ B $ 的函数 [1][3]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n该题在标准教学实践中通常预期答案为 A，理由是：尽管 $ f(1)=3 \\notin B $，但若将陪域理解为包含像集的集合（常见于部分习题简化处理），则 $ f(2)=4 $、$ f(3)=5 $ 均在 $ B $ 中，且 $ f $ 在 $ A $ 上处处有定义并单值；但此解释与[3]中“在集合 $ B $ 中都有唯一确定的数 $ f(x) $”的严格表述冲突。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          268,
+          254
+        ],
+        "citations": [
+          {
+            "chunk_id": 268,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "1．下列对应关系中，能构成从集合 A={1,2,3} 到 B={4,5,6} 的函数的是（ ）\nA．f: x→x+2 B．f: x→2x C．f: x→x-1 D．f: x→x/2"
+          },
+          {
+            "chunk_id": 270,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "3．下列函数中，在区间 (0,+∞) 上单调递增的是（ ）\nA．y=1/x B．y=x 2 -2x C．y=√x D．y=-x+1"
+          },
+          {
+            "chunk_id": 254,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "一、函数的概念\n设 A、B 是非空数集，如果按照某种确定的对应关系 f，使对于集合 A 中的任意一个数 x，在集合 B 中都有唯一确定的数 f(x) 和它对应，就称 f: A→B 是集合 A 到集合 B 的一个函数。\n★ 三要素：定义域、对应关系、值域（定义域优先！）\n常见定义域限制：\n① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义。\n例 求 f(x)="
+          },
+          {
+            "chunk_id": 282,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "13．（15 分）求下列函数的定义域：\n（1）f(x)=1/(x 2 -4)； （2）f(x)=√(x+2)/(x-1)； （3）f(x)=√(x 2 -9)+ln(5-x)。"
+          },
+          {
+            "chunk_id": 273,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "6．已知 f(x)=2x+1，则 f(f(x))=（ ）\nA．4x+1 B．4x+2 C．2x+2 D．4x+3"
+          },
+          {
+            "chunk_id": 266,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "姓 名：______________ 班级：______________ 考号：______________ （密 封 线 内 不 要 答 题）\n华中农业大学附属中学 2026 级高一数学单元测试卷\n（第三章 函数的概念与性质 满分 150 分 时间 120 分钟）\n命题人：何潇\n审核人：高一数学组\n2026 年 10 月 18 日"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 4920,
+        "latency_ms": 40164,
+        "cost_yuan": 0.006072
+      }
+    },
+    {
+      "id": "q015",
+      "question": "试卷第 2 题：f(x)=√(3-x)+ln(x+1) 的定义域是什么？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        269,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n我们来求函数 $ f(x) = \\sqrt{3 - x} + \\ln(x + 1) $ 的定义域。\n\n偶次根号下必须 ≥ 0，即 $ 3 - x \\geq 0 $ [3]；  \n对数真数必须 > 0，即 $ x + 1 > 0 $ [3]。\n\n解得：  \n$ x \\leq 3 $ 且 $ x > -1 $，即 $ -1 < x \\leq 3 $ [3]。\n\n区间表示为 $ (-1,\\, 3] $ [1]。\n\n该选项对应题干中选项 B [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n无。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          254,
+          269
+        ],
+        "citations": [
+          {
+            "chunk_id": 269,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "2．函数 f(x)=√(3-x)+ln(x+1) 的定义域为（ ）\nA．[-1,3] B．(-1,3] C．[-1,3) D．(-1,3)"
+          },
+          {
+            "chunk_id": 282,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "13．（15 分）求下列函数的定义域：\n（1）f(x)=1/(x 2 -4)； （2）f(x)=√(x+2)/(x-1)； （3）f(x)=√(x 2 -9)+ln(5-x)。"
+          },
+          {
+            "chunk_id": 254,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "一、函数的概念\n设 A、B 是非空数集，如果按照某种确定的对应关系 f，使对于集合 A 中的任意一个数 x，在集合 B 中都有唯一确定的数 f(x) 和它对应，就称 f: A→B 是集合 A 到集合 B 的一个函数。\n★ 三要素：定义域、对应关系、值域（定义域优先！）\n常见定义域限制：\n① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义。\n例 求 f(x)="
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 286,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "17．（21 分）某商场销售某种商品，每件进价 40 元。市场调查发现：若按每件 50 元出售，一个月能卖出 500 件；售价每提高 1 元，月销量就减少 10 件。设每件商品售价为 x 元（x≥50），月利润为 y 元。\n（1）写出 y 关于 x\n的函数关系式，并注明定义域；（2）当售价定为多少元时，月利润最大？最大月利润是多少？"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2597,
+        "latency_ms": 9955,
+        "cost_yuan": 0.0025684
+      }
+    },
+    {
+      "id": "q016",
+      "question": "试卷第 3 题：下列函数在 (0,+∞) 上单调递增的是？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        270,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n我们逐项分析选项，判断其在区间 $(0,+\\infty)$ 上是否单调递增。\n\n根据【参考资料】[5]，单调递增的定义是：对任意 $x_1, x_2 \\in (0,+\\infty)$，若 $x_1 < x_2$，则 $f(x_1) < f(x_2)$；常用判断方法包括定义法、导数法或复合函数法则 [5]。\n\n---\n\n**A．$y = \\frac{1}{x}$**  \n该函数在 $(0,+\\infty)$ 上导数为 $y' = -\\frac{1}{x^2} < 0$，故严格递减 [5]。  \n→ 不满足。\n\n---\n\n**B．$y = x^2 - 2x$**  \n该函数为二次函数，对称轴 $x = 1$，在 $(0,1)$ 上递减，在 $(1,+\\infty)$ 上递增，因此在 $(0,+\\infty)$ 上不单调递增 [5]。  \n→ 不满足。\n\n---\n\n**C．$y = \\sqrt{x}$**  \n其导数为 $y' = \\frac{1}{2\\sqrt{x}} > 0$（对所有 $x > 0$），故在 $(0,+\\infty)$ 上严格单调递增 [5]。  \n→ 满足。\n\n---\n\n**D．$y = -x + 1$**  \n斜率为负，是严格递减的一次函数，在 $(0,+\\infty)$ 上亦递减 [5]。  \n→ 不满足。\n\n---\n\n综上，唯一在 $(0,+\\infty)$ 上单调递增的是 **C．$y = \\sqrt{x}$** [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n无。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          256,
+          270
+        ],
+        "citations": [
+          {
+            "chunk_id": 270,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "3．下列函数中，在区间 (0,+∞) 上单调递增的是（ ）\nA．y=1/x B．y=x 2 -2x C．y=√x D．y=-x+1"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 266,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "姓 名：______________ 班级：______________ 考号：______________ （密 封 线 内 不 要 答 题）\n华中农业大学附属中学 2026 级高一数学单元测试卷\n（第三章 函数的概念与性质 满分 150 分 时间 120 分钟）\n命题人：何潇\n审核人：高一数学组\n2026 年 10 月 18 日"
+          },
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3475,
+        "latency_ms": 25690,
+        "cost_yuan": 0.0041288
+      }
+    },
+    {
+      "id": "q017",
+      "question": "试卷第 4 题：偶函数 f(2)=3，f(-2) 等于多少？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        271
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "偶函数的定义是：对任意 $ x \\in \\mathbb{R} $，都有 $ f(-x) = f(x) $。  \n已知 $ f(x) $ 是 $ \\mathbb{R} $ 上的偶函数，且 $ f(2) = 3 $，  \n则令 $ x = 2 $，代入定义得：  \n$$\nf(-2) = f(2) = 3.\n$$  \n因此答案为 B．3 [1]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          271
+        ],
+        "citations": [
+          {
+            "chunk_id": 271,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "4．设 f(x) 是 R 上的偶函数，且 f(2)=3，则 f(-2)=（ ）\nA．-3 B．3 C．0 D．无法确定"
+          },
+          {
+            "chunk_id": 279,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "11．若 f(x)=(k-2)x 2 +(k-1)x+3 是偶函数，则 k=________。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 719,
+        "latency_ms": 2940,
+        "cost_yuan": 0.0007048
+      }
+    },
+    {
+      "id": "q018",
+      "question": "试卷第 5 题：f(x)=x^3+x 的图象关于什么对称？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        272
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "函数 $ f(x) = x^3 + x $ 满足 $ f(-x) = -f(x) $，是奇函数，其图象关于坐标原点对称 [1]。\n\n选项 C “坐标原点” 正确 [1]。\n\n该函数不满足 $ f(-x) = f(x) $，故不关于 y 轴对称 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n奇函数的图象关于坐标原点中心对称，这是数学中的基本定义；偶函数图象才关于 y 轴对称。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          272
+        ],
+        "citations": [
+          {
+            "chunk_id": 272,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "5．函数 f(x)=x 3 +x 的图象关于（ ）对称。\nA．y 轴 B．直线 y=x C．坐标原点 D．直线 y=-x"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1996,
+        "latency_ms": 9364,
+        "cost_yuan": 0.0020552
+      }
+    },
+    {
+      "id": "q019",
+      "question": "试卷第 6 题：f(x)=2x+1，f(f(x)) 等于多少？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        273
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": {
+        "text": "题目要求计算 $ f(f(x)) $，其中 $ f(x) = 2x + 1 $ [1]。  \n将 $ f(x) $ 代入自身：$ f(f(x)) = f(2x + 1) $ [1]。  \n由 $ f(t) = 2t + 1 $，得 $ f(2x + 1) = 2(2x + 1) + 1 = 4x + 3 $ [1]。  \n该结果对应选项 D [1]。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          273
+        ],
+        "citations": [
+          {
+            "chunk_id": 273,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "6．已知 f(x)=2x+1，则 f(f(x))=（ ）\nA．4x+1 B．4x+2 C．2x+2 D．4x+3"
+          },
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 279,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "11．若 f(x)=(k-2)x 2 +(k-1)x+3 是偶函数，则 k=________。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1752,
+        "latency_ms": 7020,
+        "cost_yuan": 0.0017364
+      }
+    },
+    {
+      "id": "q020",
+      "question": "试卷第 7 题：f(x)=x^2-2x+3 在 [0,m] 上最大 3 最小 2，m 范围？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        274
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 14,
+      "answer": {
+        "text": "函数 $ f(x) = x^2 - 2x + 3 $ 的对称轴为 $ x = 1 $ [1]。  \n顶点处函数值为 $ f(1) = 2 $ [1]。  \n$ f(0) = 3 $ [1]。  \n题目给定在区间 $ [0, m] $ 上最小值为 2，最大值为 3 [1]。  \n为使最小值 2 可达，必须有 $ 1 \\in [0, m] $，即 $ m \\geq 1 $ [1]。  \n为使最大值不超过 3，需 $ f(m) \\leq 3 $，即 $ m^2 - 2m + 3 \\leq 3 $，化简得 $ m(m - 2) \\leq 0 $，故 $ m \\in [0, 2] $ [1]。  \n联立 $ m \\geq 1 $ 与 $ m \\leq 2 $，得 $ m \\in [1, 2] $ [1]。  \n选项 C 为 $ [1,2] $ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n无。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          274
+        ],
+        "citations": [
+          {
+            "chunk_id": 274,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "7．函数 f(x)=x 2 -2x+3 在 [0, m] 上的最大值为 3，最小值为 2，则 m 的取值范围是（ ）\nA．[1,+∞) B．[0,2] C．[1,2] D．(-∞,2]"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 280,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "12．设 f(x) 是 R 上的增函数，且 f(m-1)>f(2m)，则 m 的取值范围是________。"
+          },
+          {
+            "chunk_id": 258,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "三、错题本（上周周测第 7 题）\n题目：已知 f(x) 是 R 上的奇函数，当 x≥0 时 f(x)=x 2 -2x，求 x<0 时 f(x)\n的解析式。\n我的错解：直接写 f(x)=x 2 -2x（忘了换元！）\n正解：设 x<0，则 -x>0，f(-x)=(-x) 2 -2(-x)=x 2 +2x。∵ 奇函数，f(x)=-f(-x)，∴"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3446,
+        "latency_ms": 24427,
+        "cost_yuan": 0.0040264
+      }
+    },
+    {
+      "id": "q021",
+      "question": "试卷第 8 题：奇函数在 (0,+∞) 增且 f(1)=0，f(x)>0 的解集？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        275,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n题目要求解不等式 $ f(x) > 0 $ 的解集，已知：\n\n- $ f(x) $ 是定义在 $ \\mathbb{R} $ 上的奇函数 [1]；\n- $ f(x) $ 在 $ (0, +\\infty) $ 上为增函数 [1]；\n- $ f(1) = 0 $ [1]。\n\n因 $ f $ 在 $ (0, +\\infty) $ 上单调递增且 $ f(1) = 0 $，故当 $ x > 1 $ 时，$ f(x) > f(1) = 0 $；当 $ 0 < x < 1 $ 时，$ f(x) < f(1) = 0 $ [1]。\n\n由奇函数性质 $ f(-x) = -f(x) $，得：  \n若 $ 0 < x < 1 $，则 $ f(x) < 0 $，所以 $ f(-x) = -f(x) > 0 $；而 $ -x \\in (-1, 0) $，故对所有 $ x \\in (-1, 0) $，有 $ f(x) > 0 $ [1]。\n\n又 $ f(0) = 0 $（奇函数在原点有定义时必满足），故 $ x = 0 $ 不满足 $ f(x) > 0 $ [1]。\n\n综上，$ f(x) > 0 $ 当且仅当 $ x \\in (-1, 0) \\cup (1, +\\infty) $ [1]。\n\n答案：**A．(-1,0)∪(1,+∞)** [1]\n\n【以下为模型补充，未在你的资料中找到依据】  \n该结论依赖奇函数关于原点对称、单调性在正负区间符号相反的基本性质，属函数奇偶性与单调性结合的标准推论。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          275
+        ],
+        "citations": [
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 270,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "3．下列函数中，在区间 (0,+∞) 上单调递增的是（ ）\nA．y=1/x B．y=x 2 -2x C．y=√x D．y=-x+1"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3139,
+        "latency_ms": 23880,
+        "cost_yuan": 0.00377
+      }
+    },
+    {
+      "id": "q022",
+      "question": "试卷第 9 题：分段函数 f(f(-1)) 怎么求？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        277
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n我们来求分段函数 $ f(f(-1)) $，依据题设：\n\n已知函数  \n$$\nf(x) =\n\\begin{cases}\nx + 1, & x \\leq 0 \\\\\nx^2, & x > 0\n\\end{cases}\n$$  \n该定义来自【参考资料】[1]。\n\n**第一步：计算内层 $ f(-1) $**  \n由于 $ -1 \\leq 0 $，适用第一段：$ f(-1) = (-1) + 1 = 0 $ [1]。\n\n**第二步：计算外层 $ f(f(-1)) = f(0) $**  \n由于 $ 0 \\leq 0 $，适用第一段：$ f(0) = 0 + 1 = 1 $ [1]。\n\n因此，  \n$$\nf(f(-1)) = 1\n$$  \n答案为 $ 1 $ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n无。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          277
+        ],
+        "citations": [
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 273,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "6．已知 f(x)=2x+1，则 f(f(x))=（ ）\nA．4x+1 B．4x+2 C．2x+2 D．4x+3"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 1992,
+        "latency_ms": 10282,
+        "cost_yuan": 0.0021024
+      }
+    },
+    {
+      "id": "q023",
+      "question": "试卷第 10 题：f(x)=x+4/x（x>0）的最小值？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        278
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "【以下为模型补充，未在你的资料中找到依据】\n题目要求函数 $ f(x) = x + \\frac{4}{x} $（$ x > 0 $）的最小值。\n\n该题对应【参考资料】[1]，题干完全一致：“10．函数 $ f(x)=x + 4/x $（x>0）的最小值为________。” [1]\n\n【以下为模型补充，未在你的资料中找到依据】  \n利用基本不等式：对 $ x > 0 $，有 $ x + \\frac{4}{x} \\geq 2\\sqrt{x \\cdot \\frac{4}{x}} = 2\\sqrt{4} = 4 $，当且仅当 $ x = \\frac{4}{x} $ 即 $ x = 2 $ 时取等。故最小值为 4。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          278
+        ],
+        "citations": [
+          {
+            "chunk_id": 278,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "10．函数 f(x)=x + 4/x（x>0）的最小值为________。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 277,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "9．已知函数 f(x)={x+1 (x≤0); x 2 (x>0)}，则 f(f(-1))=________。"
+          },
+          {
+            "chunk_id": 279,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "11．若 f(x)=(k-2)x 2 +(k-1)x+3 是偶函数，则 k=________。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2476,
+        "latency_ms": 15545,
+        "cost_yuan": 0.0027776000000000003
+      }
+    },
+    {
+      "id": "q024",
+      "question": "试卷第 11 题：f(x)=(k-2)x^2+(k-1)x+3 是偶函数，k 等于？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        279
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "题目要求：若 $ f(x) = (k-2)x^2 + (k-1)x + 3 $ 是偶函数，求 $ k $ 的值 [1]。\n\n偶函数满足 $ f(-x) = f(x) $ 对所有 $ x $ 成立 [1]。\n\n计算得：  \n$ f(-x) = (k-2)x^2 - (k-1)x + 3 $，  \n令其等于 $ f(x) = (k-2)x^2 + (k-1)x + 3 $，  \n相减得：$ - (k-1)x = (k-1)x $，即 $ 2(k-1)x = 0 $ 对所有 $ x $ 成立 [1]。\n\n故必有 $ k - 1 = 0 $，即 $ k = 1 $ [1]。\n\n验证：当 $ k = 1 $ 时，$ f(x) = -x^2 + 3 $，为偶函数 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n偶函数的代数特征是：解析式中只含 $ x $ 的偶次幂项（含常数项），不含奇次幂项。因此一次项系数必须为 0，即 $ k-1 = 0 $，得 $ k = 1 $。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          279
+        ],
+        "citations": [
+          {
+            "chunk_id": 279,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "11．若 f(x)=(k-2)x 2 +(k-1)x+3 是偶函数，则 k=________。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 271,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "4．设 f(x) 是 R 上的偶函数，且 f(2)=3，则 f(-2)=（ ）\nA．-3 B．3 C．0 D．无法确定"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2376,
+        "latency_ms": 15262,
+        "cost_yuan": 0.0026796000000000003
+      }
+    },
+    {
+      "id": "q025",
+      "question": "试卷第 12 题：f(x) 增函数且 f(m-1)>f(2m)，m 范围？",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        280,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 17,
+      "answer": {
+        "text": "由题设，$ f(x) $ 是 $ \\mathbb{R} $ 上的增函数 [1]。  \n增函数满足：对任意 $ x_1, x_2 \\in \\mathbb{R} $，若 $ x_1 < x_2 $，则 $ f(x_1) < f(x_2) $；等价地，若 $ f(x_1) > f(x_2) $，则必有 $ x_1 > x_2 $ [6]。  \n\n【以下为模型补充，未在你的资料中找到依据】\n已知 $ f(m-1) > f(2m) $，结合上述单调性性质，得：  \n$$\nm - 1 > 2m\n$$  \n\n【以下为模型补充，未在你的资料中找到依据】\n移项得：  \n$$\n-1 > m\n$$  \n\n【以下为模型补充，未在你的资料中找到依据】\n即：  \n$$\nm < -1\n$$  \n\n因此，$ m $ 的取值范围是 $ (-\\infty, -1) $ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n该解集为开区间，因不等式为严格（$>$），且 $ f $ 在 $ \\mathbb{R} $ 上定义、严格递增，故边界 $ m = -1 $ 不满足原不等式（此时 $ m-1 = 2m = -2 $，得 $ f(-2) > f(-2) $，矛盾）。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          280,
+          256
+        ],
+        "citations": [
+          {
+            "chunk_id": 280,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "12．设 f(x) 是 R 上的增函数，且 f(m-1)>f(2m)，则 m 的取值范围是________。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 274,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "7．函数 f(x)=x 2 -2x+3 在 [0, m] 上的最大值为 3，最小值为 2，则 m 的取值范围是（ ）\nA．[1,+∞) B．[0,2] C．[1,2] D．(-∞,2]"
+          },
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 2365,
+        "latency_ms": 12647,
+        "cost_yuan": 0.002528
+      }
+    },
+    {
+      "id": "q026",
+      "question": "试卷第 13 题：求三个函数的定义域。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        282,
+        254
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "我们逐小题求定义域，依据【参考资料】中明确列出的定义域限制规则：① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0 [3]。\n\n---\n\n**（1）** $ f(x) = \\dfrac{1}{x^2 - 4} $  \n分母不能为 0：$ x^2 - 4 \\ne 0 $，即 $ x \\ne \\pm 2 $ [1]。  \n定义域为 $ (-\\infty, -2) \\cup (-2, 2) \\cup (2, +\\infty) $ [1]。\n\n---\n\n**（2）** $ f(x) = \\dfrac{\\sqrt{x+2}}{x-1} $  \n需同时满足：$ x+2 \\geq 0 $（偶次根号下非负）[3]，且 $ x-1 \\ne 0 $（分母不为 0）[3]；  \n即 $ x \\geq -2 $ 且 $ x \\ne 1 $ [1]。  \n定义域为 $ [-2, 1) \\cup (1, +\\infty) $ [1]。\n\n---\n\n【以下为模型补充，未在你的资料中找到依据】\n**（3）** $ f(x) = \\sqrt{x^2 - 9} + \\ln(5 - x) $  \n需同时满足：  \n- $ x^2 - 9 \\geq 0 $（偶次根号下非负）[3]，解得 $ x \\leq -3 $ 或 $ x \\geq 3 $ [1]；  \n- $ 5 - x > 0 $（对数真数大于 0）[3]，即 $ x < 5 $ [1]；  \n取交集得：$ (-\\infty, -3] \\cup [3, 5) $ [1]。\n\n---\n\n【以下为模型补充，未在你的资料中找到依据】  \n本题所有解法均基于初等函数定义域的基本约束，不涉及值域、连续性或可导性等延伸性质。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          254,
+          282
+        ],
+        "citations": [
+          {
+            "chunk_id": 282,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "13．（15 分）求下列函数的定义域：\n（1）f(x)=1/(x 2 -4)； （2）f(x)=√(x+2)/(x-1)； （3）f(x)=√(x 2 -9)+ln(5-x)。"
+          },
+          {
+            "chunk_id": 269,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "2．函数 f(x)=√(3-x)+ln(x+1) 的定义域为（ ）\nA．[-1,3] B．(-1,3] C．[-1,3) D．(-1,3)"
+          },
+          {
+            "chunk_id": 254,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "一、函数的概念\n设 A、B 是非空数集，如果按照某种确定的对应关系 f，使对于集合 A 中的任意一个数 x，在集合 B 中都有唯一确定的数 f(x) 和它对应，就称 f: A→B 是集合 A 到集合 B 的一个函数。\n★ 三要素：定义域、对应关系、值域（定义域优先！）\n常见定义域限制：\n① 分母 ≠ 0；② 偶次根号下 ≥ 0；③ 对数真数 > 0；④ 实际问题要符合实际意义。\n例 求 f(x)="
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 286,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "17．（21 分）某商场销售某种商品，每件进价 40 元。市场调查发现：若按每件 50 元出售，一个月能卖出 500 件；售价每提高 1 元，月销量就减少 10 件。设每件商品售价为 x 元（x≥50），月利润为 y 元。\n（1）写出 y 关于 x\n的函数关系式，并注明定义域；（2）当售价定为多少元时，月利润最大？最大月利润是多少？"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3611,
+        "latency_ms": 24305,
+        "cost_yuan": 0.004163200000000001
+      }
+    },
+    {
+      "id": "q027",
+      "question": "试卷第 14 题：用定义证明 f(x)=x+1/x 在 (1,+∞) 上单调递增。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        283,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "我们用**定义法**证明函数 $ f(x) = x + \\frac{1}{x} $ 在区间 $ (1, +\\infty) $ 上单调递增 [1]。\n\n根据【参考资料】[2]，单调递增的定义是：对区间 $ D $ 内任意 $ x_1 < x_2 $，都有 $ f(x_1) < f(x_2) $；判断方法①为作差 $ f(x_1) - f(x_2) $ [2]。\n\n---\n\n任取 $ x_1, x_2 \\in (1, +\\infty) $，且 $ x_1 < x_2 $ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n计算：\n$$\nf(x_1) - f(x_2) = \\left(x_1 + \\frac{1}{x_1}\\right) - \\left(x_2 + \\frac{1}{x_2}\\right) = (x_1 - x_2) + \\left(\\frac{1}{x_1} - \\frac{1}{x_2}\\right)\n$$\n\n$$\n\\frac{1}{x_1} - \\frac{1}{x_2} = \\frac{x_2 - x_1}{x_1 x_2}\n$$\n\n【以下为模型补充，未在你的资料中找到依据】\n所以：\n$$\nf(x_1) - f(x_2) = (x_1 - x_2) + \\frac{x_2 - x_1}{x_1 x_2} = (x_1 - x_2)\\left(1 - \\frac{1}{x_1 x_2}\\right)\n$$\n\n因 $ x_1 > 1 $、$ x_2 > 1 $，故 $ x_1 x_2 > 1 $，得 $ \\frac{1}{x_1 x_2} < 1 $，即 $ 1 - \\frac{1}{x_1 x_2} > 0 $ [1]。\n\n又 $ x_1 < x_2 $，故 $ x_1 - x_2 < 0 $ [2]。\n\n【以下为模型补充，未在你的资料中找到依据】\n因此：\n$$\nf(x_1) - f(x_2) = \\text{负数} \\times \\text{正数} < 0\n$$\n\n即 $ f(x_1) < f(x_2) $ [2]。\n\n由定义知，$ f(x) = x + \\frac{1}{x} $ 在 $ (1, +\\infty) $ 上单调递增 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n---  \n【以下为模型补充，未在你的资料中找到依据】  \n该题分值为18分，属大题，书写需完整呈现“任取→作差→变形→判号→下结论”五个环节。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          283,
+          256
+        ],
+        "citations": [
+          {
+            "chunk_id": 283,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "14．（18 分）用定义证明：函数 f(x)=x + 1/x 在区间 (1,+∞) 上单调递增。"
+          },
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 270,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "3．下列函数中，在区间 (0,+∞) 上单调递增的是（ ）\nA．y=1/x B．y=x 2 -2x C．y=√x D．y=-x+1"
+          },
+          {
+            "chunk_id": 252,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "数学笔记 · 必修第一册 第三章 函数的概念与性质\n2026.09.15 晴 课堂笔记 + 错题整理"
+          },
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 250,
+            "title": "属性",
+            "heading_path": "单调性",
+            "snippet": "单调性\n定义：区间内自变量增大时函数值也增大。\n$$\\int_0^1 x^2 dx = \\frac{1}{3}$$"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3554,
+        "latency_ms": 29955,
+        "cost_yuan": 0.0044008
+      }
+    },
+    {
+      "id": "q028",
+      "question": "试卷第 15 题：奇函数在 (-2,2) 减，f(1-a)+f(1-2a)>0，求 a。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        284,
+        256
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "已知 $ f(x) $ 是定义在 $ (-2,2) $ 上的奇函数，且在定义域上为减函数 [1]。  \n不等式为 $ f(1-a) + f(1-2a) > 0 $ [1]。\n\n因 $ f $ 定义域为 $ (-2,2) $，故需同时满足：  \n$ -2 < 1 - a < 2 $ 且 $ -2 < 1 - 2a < 2 $ [1]。  \n解得：  \n由 $ -2 < 1 - a < 2 $ 得 $ -1 < a < 3 $；  \n由 $ -2 < 1 - 2a < 2 $ 得 $ -\\frac{1}{2} < a < \\frac{3}{2} $；  \n交集为 $ a \\in \\left( -\\frac{1}{2},\\ \\frac{3}{2} \\right) $ [1]。\n\n利用 $ f $ 是奇函数：$ f(1-2a) = -f(2a-1) $，代入原式得：  \n$$\nf(1-a) - f(2a-1) > 0 \\quad \\Leftrightarrow \\quad f(1-a) > f(2a-1)\n$$  \n[1]。\n\n又因 $ f $ 在 $ (-2,2) $ 上为减函数 [1]，故  \n$$\nf(1-a) > f(2a-1) \\quad \\Leftrightarrow \\quad 1-a < 2a-1\n$$  \n[1]。\n\n解该不等式：  \n$$\n1 - a < 2a - 1 \\Rightarrow 2 < 3a \\Rightarrow a > \\frac{2}{3}\n$$  \n[1]。\n\n联立定义域约束 $ a \\in \\left( -\\frac{1}{2},\\ \\frac{3}{2} \\right) $ 与 $ a > \\frac{2}{3} $，得：  \n$$\na \\in \\left( \\frac{2}{3},\\ \\frac{3}{2} \\right)\n$$  \n[1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n端点不可取：  \n- 若 $ a = \\frac{2}{3} $，则 $ 1-a = \\frac{1}{3} $，$ 1-2a = -\\frac{1}{3} $，有 $ f(1-a)+f(1-2a) = f\\left(\\frac{1}{3}\\right) + f\\left(-\\frac{1}{3}\\right) = f\\left(\\frac{1}{3}\\right) - f\\left(\\frac{1}{3}\\right) = 0 $，不满足“> 0” [1]；  \n- 若 $ a = \\frac{3}{2} $，则 $ 1-2a = -2 $，超出定义域 $ (-2,2) $，表达式无意义 [1]。\n\n故实数 $ a $ 的取值范围是 $ \\left( \\dfrac{2}{3},\\ \\dfrac{3}{2} \\right) $ [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n本题未使用参考资料 [2]–[6] 中的内容（如复合函数单调性判断法、二次函数解析式求法、指数函数图像、选项型奇函数不等式等），因其与题干条件和求解路径无直接关联。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          284,
+          262,
+          285
+        ],
+        "citations": [
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 275,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "8．定义在 R 上的奇函数 f(x) 在 (0,+∞) 上为增函数，且 f(1)=0，则不等式 f(x)>0 的解集为（ ）\nA．(-1,0)∪(1,+∞) B．(-∞,-1)∪(0,1) C．(1,+∞) D．(-1,0)"
+          },
+          {
+            "chunk_id": 256,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "二、单调性（重点！月考必考）\n定义：区间 D 内任意 x 1 <x 2 ，都有 f(x 1 )<f(x 2 )，则 f 在 D 上单调递增；反之递减。\n判断方法：① 定义法（作差 f(x 1 )-f(x 2 )） ② 导数法（f'(x)>0 增） ③ 复合函数\"同增异减\"\n复合函数 y=f(g(x))：内外层单调性相同则增，相异则减。"
+          },
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          }
+        ],
+        "citation_precision": 0.3333333333333333,
+        "citation_hit": true,
+        "total_tokens": 4813,
+        "latency_ms": 44191,
+        "cost_yuan": 0.006209600000000001
+      }
+    },
+    {
+      "id": "q029",
+      "question": "试卷第 16 题：二次函数过 (0,3)，对称轴 x=1，f(-1)=0，求解析式及 [-2,2] 最值。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        285
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "我们依据【参考资料】[1] 解答第 16 题。\n\n- 图象经过点 $ (0,3) $，故 $ f(0) = c = 3 $ [1]；  \n- 对称轴为 $ x = 1 $，即 $ -\\frac{b}{2a} = 1 $，得 $ b = -2a $ [1]；  \n- $ f(-1) = 0 $，代入得 $ a(-1)^2 + b(-1) + c = a - b + c = 0 $ [1]；  \n- 将 $ c = 3 $、$ b = -2a $ 代入上式：$ a - (-2a) + 3 = 3a + 3 = 0 $，解得 $ a = -1 $ [1]；  \n- 代入 $ b = -2a $ 得 $ b = 2 $，故 $ f(x) = -x^2 + 2x + 3 $ [1]；  \n- 在区间 $ [-2,2] $ 上，因开口向下且对称轴 $ x = 1 \\in [-2,2] $，最大值在顶点：$ f(1) = -1 + 2 + 3 = 4 $ [1]；  \n- 端点值：$ f(-2) = -4 -4 + 3 = -5 $，$ f(2) = -4 + 4 + 3 = 3 $，故最小值为 $ -5 $ [1]；  \n- 因此，最大值为 4，最小值为 $ -5 $ [1]；  \n- 解析式为 $ f(x) = -x^2 + 2x + 3 $ [1]；  \n- 该函数在 $ [-2,2] $ 上连续，最值存在且已求出 [1]；  \n- 所有计算均基于题设三个条件及二次函数基本性质 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】  \n无。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          285
+        ],
+        "citations": [
+          {
+            "chunk_id": 285,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "16．（18 分）已知二次函数 f(x)=ax 2 +bx+c 的图象经过点 (0,3)，对称轴为 x=1，且 f(-1)=0。 （1）求 f(x) 的解析式；（2）求 f(x) 在区间 [-2,2] 上的最大值与最小值。"
+          },
+          {
+            "chunk_id": 260,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "f(x)=-x 2 -2x。"
+          },
+          {
+            "chunk_id": 284,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "15．（18 分）已知 f(x) 是定义在 (-2,2) 上的奇函数，且在定义域上为减函数。若 f(1-a)+f(1-2a)>0，求实数 a 的取值范围。"
+          },
+          {
+            "chunk_id": 279,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "11．若 f(x)=(k-2)x 2 +(k-1)x+3 是偶函数，则 k=________。"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 274,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "7．函数 f(x)=x 2 -2x+3 在 [0, m] 上的最大值为 3，最小值为 2，则 m 的取值范围是（ ）\nA．[1,+∞) B．[0,2] C．[1,2] D．(-∞,2]"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 3239,
+        "latency_ms": 25925,
+        "cost_yuan": 0.0039483999999999995
+      }
+    },
+    {
+      "id": "q030",
+      "question": "试卷第 17 题：商品进价 40，售价 50 卖 500，每涨 1 元少 10 件，求利润函数和最大利润。",
+      "scope": "函数",
+      "should_refuse": false,
+      "gold_chunk_ids": [
+        286
+      ],
+      "hit_at_5": true,
+      "first_gold_rank": 1,
+      "retrieval_latency_ms": 16,
+      "answer": {
+        "text": "我们依据【参考资料】[1] 解答第 17 题。\n\n---\n\n【以下为模型补充，未在你的资料中找到依据】\n**（1）写出 $ y $ 关于 $ x $ 的函数关系式，并注明定义域**\n\n题设给出：售价为 $ x $ 元，且 $ x \\geq 50 $ [1]；  \n进价为 40 元；  \n当 $ x = 50 $ 时，销量为 500 件；  \n售价每提高 1 元，销量减少 10 件 → 销量为 $ 500 - 10(x - 50) $ [1]。  \n化简得销量：$ 500 - 10x + 500 = 1000 - 10x $ [1]。  \n\n每件利润为 $ x - 40 $，故月利润：  \n$$\ny = (x - 40)(1000 - 10x) \\quad [1]\n$$\n\n定义域需满足：$ x \\geq 50 $（题设限定）[1]，且销量 $ \\geq 0 $，即 $ 1000 - 10x \\geq 0 \\Rightarrow x \\leq 100 $ [1]。  \n因此定义域为 $ [50,\\, 100] $ [1]。\n\n---\n\n【以下为模型补充，未在你的资料中找到依据】\n**（2）当售价定为多少元时，月利润最大？最大月利润是多少？**\n\n函数 $ y = (x - 40)(1000 - 10x) $ 是二次函数，可整理为：  \n$$\ny = -10x^2 + 1400x - 40000 \\quad [1]\n$$\n\n其图像为开口向下的抛物线，最大值在顶点处，横坐标为：  \n$$\nx = -\\frac{1400}{2 \\times (-10)} = 70 \\quad [1]\n$$\n\n因 $ 70 \\in [50,\\, 100] $，故取到最大值 [1]。  \n代入得：  \n$$\ny = (70 - 40)(1000 - 10 \\times 70) = 30 \\times (1000 - 700) = 30 \\times 300 = 9000 \\quad [1]\n$$\n\n所以售价定为 70 元时月利润最大，最大利润为 9000 元 [1]。\n\n【以下为模型补充，未在你的资料中找到依据】\n---  \n【以下为模型补充，未在你的资料中找到依据】  \n该问题属于典型的“利润最大化”应用题，建模依赖线性需求假设与二次函数最值性质；顶点公式 $ x = -\\frac{b}{2a} $ 是初中至高中阶段标准解法。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [
+          286
+        ],
+        "citations": [
+          {
+            "chunk_id": 286,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "17．（21 分）某商场销售某种商品，每件进价 40 元。市场调查发现：若按每件 50 元出售，一个月能卖出 500 件；售价每提高 1 元，月销量就减少 10 件。设每件商品售价为 x 元（x≥50），月利润为 y 元。\n（1）写出 y 关于 x\n的函数关系式，并注明定义域；（2）当售价定为多少元时，月利润最大？最大月利润是多少？"
+          },
+          {
+            "chunk_id": 259,
+            "title": "高中数学笔记-数列求和错位相减",
+            "heading_path": null,
+            "snippet": "三、例题"
+          },
+          {
+            "chunk_id": 281,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "三、解答题（本题共 5 小题，共 90\n分。解答应写出文字说明、证明过程或演算步骤）"
+          },
+          {
+            "chunk_id": 266,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "姓 名：______________ 班级：______________ 考号：______________ （密 封 线 内 不 要 答 题）\n华中农业大学附属中学 2026 级高一数学单元测试卷\n（第三章 函数的概念与性质 满分 150 分 时间 120 分钟）\n命题人：何潇\n审核人：高一数学组\n2026 年 10 月 18 日"
+          },
+          {
+            "chunk_id": 262,
+            "title": "高中数学笔记-函数与导数",
+            "heading_path": null,
+            "snippet": "套路：求哪段，就设哪段的变量，把它转化到已知区间，再用奇偶性翻回来。\n明日计划：刷 5 道奇偶性综合题 + 整理指数函数图像笔记。"
+          },
+          {
+            "chunk_id": 267,
+            "title": "高中数学试卷-函数单元测试",
+            "heading_path": null,
+            "snippet": "一、选择题（本题共 8 小题，每小题 5 分，共 40\n分。每小题只有一个选项符合题意）"
+          }
+        ],
+        "citation_precision": 1.0,
+        "citation_hit": true,
+        "total_tokens": 4194,
+        "latency_ms": 36709,
+        "cost_yuan": 0.0052992000000000004
+      }
+    },
+    {
+      "id": "q031",
+      "question": "今天北京天气怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": {
+        "text": "我无法获取实时天气信息，建议您查看天气预报App或网站哦！",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 15,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q032",
+      "question": "怎么用 Python 写一个网页爬虫？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 12,
+      "answer": {
+        "text": "在你的笔记中没找到相关内容。可以换个问法，或先补充相关笔记。",
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 215,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q033",
+      "question": "《红楼梦》的作者是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 15,
+      "answer": {
+        "text": "在你的笔记中没找到相关内容。可以换个问法，或先补充相关笔记。",
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 224,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q034",
+      "question": "出国留学需要准备哪些材料？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 9,
+      "answer": {
+        "text": "这是关于留学申请的问题，不属于学习笔记、题目或概念解释范畴。需要帮助的话，我可以提供常见材料清单哦！",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 14,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q035",
+      "question": "今天股市行情怎么样？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 10,
+      "answer": {
+        "text": "我无法提供实时股市行情，建议查看财经新闻或股票交易软件获取最新信息。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 14,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q036",
+      "question": "如何做番茄炒蛋？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 9,
+      "answer": {
+        "text": "番茄炒蛋是家常菜哦～不过我主要帮您处理学习相关的问题，比如数学、物理或编程等。需要这方面的帮助吗？",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 15,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q037",
+      "question": "世界杯冠军是谁？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 13,
+      "answer": {
+        "text": "这是个有趣的问题！不过世界杯冠军属于体育领域，和学习内容关系不大哦～",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 15,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q038",
+      "question": "电脑蓝屏怎么修？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": {
+        "text": "这是个电脑硬件或系统问题，不属于学习类内容哦～需要技术支持可以联系IT人员或查阅设备手册。",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 16,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q039",
+      "question": "怎样提高英语听力？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 11,
+      "answer": {
+        "text": "在你的笔记中没找到相关内容。可以换个问法，或先补充相关笔记。",
+        "refused": true,
+        "refusal_reason": "low_score",
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 233,
+        "cost_yuan": 0.0
+      }
+    },
+    {
+      "id": "q040",
+      "question": "汽车轮胎多久换一次？",
+      "scope": "无关",
+      "should_refuse": true,
+      "gold_chunk_ids": [],
+      "hit_at_5": null,
+      "first_gold_rank": null,
+      "retrieval_latency_ms": 10,
+      "answer": {
+        "text": "这是个生活常识问题，和学习内容关系不大哦～需要了解汽车保养知识的话，我可以帮你查资料！",
+        "refused": false,
+        "refusal_reason": null,
+        "cited_chunk_ids": [],
+        "citations": [],
+        "citation_precision": null,
+        "citation_hit": null,
+        "total_tokens": 0,
+        "latency_ms": 14,
+        "cost_yuan": 0.0
+      }
+    }
+  ]
+}

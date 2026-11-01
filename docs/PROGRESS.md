@@ -5,9 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6/S3-7/S3-8 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S3-8 前端问答页（流式 + 引用跳转 + 会话回放/改名/删除）；后端 **735 passed, 1 warning**，前端 **114 passed / 29 files**，build 0
-- 下一步：S3-9 抽查扩展到线上链路 + 三种配置对照；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 2（基础框架，M1）已完成；阶段 3（RAG 问答上线，M2）进行中，S3-1/S3-2/S3-3/S3-4/S3-5/S3-6/S3-7/S3-8/S3-9 已完成；阶段 0/1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S3-9 在线评测（40 条 M2 数据集 + vector/hybrid/hybrid_rerank 三配置对照 + 逐题核对）；后端 **770 passed, 1 warning**，前端沿用 S3-8 的 **114 passed / 29 files**（本卡未改前端）
+- 下一步：S4-1 题库表 + 试卷切题；`m2-rag-done` tag 由用户验收后决定，跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -55,7 +55,7 @@
 - [x] S3-6 拒答与引用校验
 - [x] S3-7 缓存 + 调用日志 + 用量统计
 - [x] S3-8 前端问答页（流式 + 引用跳转）★
-- [ ] S3-9 抽查扩展到线上链路 + 三种配置对照
+- [x] S3-9 抽查扩展到线上链路 + 三种配置对照
 
 ### 阶段 4：错题与知识图谱（M3）
 - [ ] S4-1 题库表 + 试卷切题
@@ -175,6 +175,15 @@
 | 77 | 断连在静默生成阶段只能等下一次 chunk 到达才关闭上游（S3-6） | 立即停止计费无保证 | 需要时把 LLM 适配器改 async 取消 |
 
 ## 变更日志
+
+### 2026-11-02（S3-9）
+- S3-9 完成（按 §10 全流程：spec `docs/spec/s3-9-online-eval.md` + plan `docs/plan/s3-9-online-eval.md`，均经用户确认）。交付：`retrieval` 三配置（vector/hybrid/hybrid_rerank）与冲突校验；`done.cost_yuan`；`eval/datasets/qa_set_m2.jsonl` 40 条；`eval/api_client.py`；`eval/run.py` 在线模式与 `--config all` 对照输出；`docs/EVAL_M2.md`。
+- 拍板（D-043）：扩展现有 `/retrieval/search` 的 `retrieval` 字段；新建 M2 数据集保留 S1 数据；回答只跑生产 `hybrid_rerank`；人工核对为 AI 初核 + 用户抽查；在线评测只走 HTTP，不直连 DB；token/密码不落盘。
+- 测试：新增 8 条 schema、4 条 service 分支、7 条 API、4 条数据集、7 条在线客户端、3 条在线编排；基线 735 → **770 passed, 1 warning**。
+- 真实三配置（真实 Postgres + Redis + DashScope，`test1` id=18，2026-11-02 02:34–02:43）：vector hit@5 **1.000**/MRR **0.957**/检索 **14ms**；hybrid **1.000**/**0.790**/**15ms**；hybrid_rerank **1.000**/**0.978**/**14ms**。生产回答 40 条：引用精确率 **0.897**、命中率 **1.000**、拒答准确率 **82.5%**、平均 tokens **1929.7**、平均回答延迟 **12901ms**、总费用 **¥0.088384**。
+- 实测偏差：① 首次重跑命中 S3-7 QA 缓存（tokens=0/费用=0），清空 `qa:v1:*` 后重跑，报告采用清缓存结果；② 在线客户端原先把 `meta` 全部上下文当引用，引用精确率 0.228，改为只统计正文 `[n]` 后 0.897；③ 7 条应拒题走 chitchat 分支，回复内容上拒绝但不置 `refused`，自动拒答 82.5%（人工语义 10/10），已在 EVAL_M2 说明，不粉饰成 100%。
+- 文档同步：API.md（`retrieval`/`cost_yuan`）、EVAL_M2、DECISIONS D-043、PROGRESS、实施计划 S3-9 勾选、spec/plan 实施记录；无 SCHEMA/迁移/新依赖。
+- 已知不足：40 条样本与 37 块语料统计意义有限；q028 的“未使用 [2]–[6]”被正则误计为引用；q014 题面本身有歧义；chitchat 拒绝与 RAG 拒答语义未统一；未自动打 `m2-rag-done` tag，未 push。
 
 ### 2026-11-02（S3-8）
 - S3-8 完成（按 §10 全流程：spec `docs/spec/s3-8-qa-chat.md` + plan `docs/plan/s3-8-qa-chat.md`，均经用户确认）。交付：4 个会话接口（列表/回放/PATCH/DELETE）与 `QaConversationOut/QaHistory*` schemas；前端 `types/qa.ts`、`api/qa.ts`、`utils/{sse,typewriter,highlight}.ts`、`components/qa/{CitationCard,ChatMessage}.vue`、`views/qa/{scope.ts,Chat.vue}`、`views/notes/NoteReadView.vue`；`/qa` 与 `/notes/:id` 路由。

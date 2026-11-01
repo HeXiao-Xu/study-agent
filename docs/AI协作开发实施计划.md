@@ -646,6 +646,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **可复用**：判定标准自己写几条规则 + 逐条人工核对即可；规模小不需要引入 RAGAS 这类完整评测框架。**用例的标准答案必须自己标注**
 - **验收**：跑出三种配置的对照表，数字真实并记录到文档
 - **里程碑**：tag `m2-rag-done`。**中期检查材料基本够**（有系统 + 有自测数据）
+- **实施记录（2026-11-02）**：spec/plan 见 `docs/spec/s3-9-online-eval.md`、`docs/plan/s3-9-online-eval.md`；新增 40 条 `eval/datasets/qa_set_m2.jsonl`、`eval/api_client.py`、`run.py --api-base-url/--config all`、`retrieval` 三配置、`done.cost_yuan`、`docs/EVAL_M2.md`。真实三配置：hit@5 均 1.000，MRR 0.957/0.790/0.978；生产引用精确率 0.897、命中率 1.000、自动拒答准确率 82.5%（人工语义 10/10）、平均 tokens 1929.7、平均回答 12901ms、总费用 ¥0.088384。后端 770 passed。`m2-rag-done` 未自动打，待用户验收。
 
 ---
 
@@ -1017,7 +1018,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [ ] S3-6 拒答与引用校验
 [x] S3-7 缓存 + 调用日志 + 用量统计
 [x] S3-8 前端问答页（流式 + 引用跳转）★关键
-[ ] S3-9 抽查扩展到线上链路 + 三种配置对照
+[x] S3-9 抽查扩展到线上链路 + 三种配置对照
 
 ## 阶段 4：错题与知识图谱（M3）
 [ ] S4-1 题库表 + 试卷切题

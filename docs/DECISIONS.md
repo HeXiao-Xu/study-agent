@@ -574,3 +574,17 @@
   - 刷新：`/qa?conversation=22` 刷新后 22 条消息、32 条引用、拒答样式 1 条仍在；教师账号访问 `/qa` 落到 `/403`「没有访问权限」。
   - UI 流式采样：19 次/250ms，首帧 7 字符、最终 827 字符；短缓存答案只观察到 3 个长度（打字机约 0.2s 排空），未做逐帧像素级流畅度测量，顺滑度以 typewriter/SSE 单测与首 delta 时间为准，不夸大为逐帧数据。
 - 已知限制：会话列表固定最多 50 条且无分页；历史拒答原因/建议不落库；引用高亮依赖文本匹配，公式/强排版片段按“去公式正文”命中，仍可能退化为章节定位；`message_citations` 不存标题/章节，依赖切片重建；删除会话物理级联、不可恢复；未引入浏览器自动化依赖，本轮用本机 Chrome CDP 做验收，CI 无 E2E。
+
+## D-043 在线评测与检索三配置（S3-9）
+
+- 背景：S1-7 评测是脚本级、旧 gold 25–106 已与当前 37 块语料（250–286）脱节；S3-9 需要在线 API 链路、三配置对照、40 条 M2 数据和逐题核对。spec/plan 见 `docs/spec/s3-9-online-eval.md`、`docs/plan/s3-9-online-eval.md`。
+- 决策 1（检索模式）：扩展现有 `POST /api/v1/retrieval/search`，加可选 `retrieval=vector|hybrid|hybrid_rerank`；缺省保持 `rerank`/配置的旧行为。`vector`/`hybrid` 与 `rerank=true`、`hybrid_rerank` 与 `rerank=false` 在 schema 层 422。service 里 `vector` 复用 `retrieve_hybrid` 的向量召回后截前 `top_k`，不是独立纯向量 SQL；延迟口径因此偏保守，文档明确标注。
+- 决策 2（问答费用）：`done` 增加 `cost_yuan`，等于所有回答尝试（含重试）+ 查询改写的真实 LLM 费用；缓存命中/未调 LLM 为 `0.0`。不新增费用表，不改既有 done 字段。
+- 决策 3（数据重建）：新建 `eval/datasets/qa_set_m2.jsonl`，保留 S1 `qa_set.jsonl` 与原结果；M2 固定 40 条（30 应答 + 10 应拒），30 条 gold 全部在 250–286，已用数据库核对存在；`load_dataset` 的 `min_items/max_items` 显式传 40。
+- 决策 4（在线边界）：`eval/run.py --api-base-url` 只走 `httpx` + `/api/v1/*`，不 import 业务 service、不直连 DB；鉴权 `--token` > `EVAL_TOKEN` > `--username/--password`/`EVAL_USERNAME/EVAL_PASSWORD`，token/密码不写文件、不写结果、不写日志。回答每题新建会话，结束 best-effort DELETE，失败只告警。在线结果保留回答正文与引用快照供逐题核对，仅落本地 `eval/results/`，不存 token/密码。
+- 决策 5（三配置）：`--config all` 仅在线模式；输出固定 `s3-9-{config}.json/md` 与 `s3-9-compare.md`，拒绝 `--output/--md-output`。vector/hybrid 只检索；只有 `hybrid_rerank` 跑 40 条真实回答。
+- 决策 6（引用口径）：在线客户端只把正文实际出现的 `[n]` 解析为引用，不用 `meta.citations` 全量上下文；否则引用精确率会被上下文条数稀释。gold 仍是人工锚点，多引相关块不判错，但精确率按 gold 计。
+- 决策 7（拒答口径）：自动指标严格按 `done.refused`；`chitchat` 分支的“礼貌拒绝”（天气/股票/菜谱等）不置 `refused`，因此自动拒答准确率 82.5%，人工按“是否给实质答案”判 10/10。该差异作为产品语义问题记录，不通过改评测脚本抹平；后续若要统一，应改查询改写/问答状态机。
+- 决策 8（测试与验收）：新增 schema 8、service 分支 4、API 7、数据集 4、在线客户端 7、编排 3；全量 **770 passed, 1 warning**。真实三配置（2026-11-02 02:34–02:43，`test1` id=18）：vector hit@5/MRR/检索 14ms 为 **1.000/0.957/14ms**，hybrid **1.000/0.790/15ms**，hybrid_rerank **1.000/0.978/14ms**；生产回答引用精确率 **0.897**、命中率 **1.000**、拒答准确率 **82.5%**、平均 tokens **1929.7**、平均回答延迟 **12901ms**、总费用 **¥0.088384**。
+- 实测偏差：首次重跑命中 S3-7 QA 缓存（tokens=0/费用=0），清空 `qa:v1:*` 后重跑；在线客户端初版把全上下文当引用，精确率 0.228，改为正文引用后 0.897；q028 正文“未使用 [2]–[6]”被正则误计为引用。
+- 已知限制：40 条/37 块统计意义有限；gold 是 AI 预标注 + 用户抽查；q014 题面有歧义；chitchat 拒绝与 RAG 拒答语义未统一；vector 非严格纯向量基准；在线评测依赖本机服务/Key/网络；未自动打 `m2-rag-done` tag，未 push。

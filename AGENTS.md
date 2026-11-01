@@ -131,7 +131,7 @@ eval/{datasets,configs,results}
 - 异步任务样例：backend/app/tasks/{registry,runner,queue,worker}.py + backend/app/services/task_service.py（注册表 import 副作用；提交先落库再入队；runner 状态机与指数退避；同步 handler 走 `asyncio.to_thread`；Worker 启动时 `setup_logging`）
 - 文档解析 Worker 样例：backend/app/tasks/parse_document.py（下载到临时文件 → 复用解析门面 → chunk → upsert 文档笔记 → index_chunks；阶段进度 10/50/80/100；失败先 commit 再 raise；Windows 临时文件清理 best-effort）
 - 索引服务样例：backend/app/services/index_service.py + backend/app/tasks/index_note.py + backend/app/api/v1/admin.py（Markdown 解析 → `chunk_document` → `index_chunks(replace=True)`；`TASK_INDEX_NOTE` 归 service；`run_id` 聚合 `async_tasks` 进度；管理端 202 启动 + 进度查询；软删同事务清切片）
-- 检索服务样例：backend/app/ai/rag/retriever.py + backend/app/services/retrieval_service.py + backend/app/api/v1/retrieval.py（`RetrievalScope` 条件下推 join `notes`；rerank 可请求覆盖；标题一次 `IN` 批查；`debug` 可选；压测见 `scripts/retrieval_bench.py`）
+- 检索服务样例：backend/app/ai/rag/retriever.py + backend/app/services/retrieval_service.py + backend/app/api/v1/retrieval.py（`RetrievalScope` 条件下推 join `notes`；rerank 可请求覆盖；`retrieval=vector|hybrid|hybrid_rerank` 三配置，vector 复用混合召回后截断；标题一次 `IN` 批查；`debug` 可选；压测见 `scripts/retrieval_bench.py`）
 - 查询改写样例：backend/app/ai/rag/query_rewriter.py + backend/app/services/query_rewrite.py（`HistoryTurn` 由调用方传入；`RewriteOutput` 校验非 chitchat 的非空查询/chitchat 的非空 reply；`scene="query_rewrite"`；`RewriteError` 带累计调用量；缓存 key=sha256(prompt_version|model|question|history)；验收见 `scripts/rewrite_eval.py`）
 - Prompt 版本样例：backend/app/models/prompt_template.py + backend/app/services/prompt_service.py + backend/app/api/v1/admin.py + backend/app/ai/rag/prompt_builder.py（`UNIQUE(name,version)` + 部分唯一 active；激活先 flush 停用再启用；`render_prompt_text` 为唯一 Jinja2 入口；`qa/v1` 由迁移 `0006_s3_4` 种子；`scripts/ask.py` 读 active 并打印 `Prompt：qa/vN`）
 - 知识点树样例：backend/app/models/knowledge_point.py + backend/app/services/kp_service.py + backend/app/api/v1/kp.py（一次查询内存组树；level 由父推导；移动校验环/子树高度；删除保护 409；`PUT /kp/order` 单事务完成改父+源/目标兄弟归一；待确认摘要见 `schemas/kp_align.py`；写接口 `require_role("admin", "teacher")`；导入见 `services/kp_import.py` 的纯函数 `plan_sync` + CLI `scripts/import_kp_tree.py`）
@@ -142,7 +142,7 @@ eval/{datasets,configs,results}
 - ai Rerank 适配器样例：backend/app/ai/rerank/client.py（契约 + DashScope 适配器 + 本地占位 + 门面；批量、3,600 token 截断、30s 超时、2 次重试、费用估算；失败由 retriever 回退）
 - ai LLM 适配器样例：backend/app/ai/llm/openai_compat.py（OpenAI 兼容 `/chat/completions`；httpx；超时/重试/usage/费用；错误不带响应正文；门面 `get_llm_client()`）
 - RAG 回答器样例：backend/app/ai/rag/answerer.py（阈值拒答 → 上下文 → LLM → 引用校验 → 一次重试；日志只记计数/耗时/费用，不记正文）
-- 评测运行器样例：eval/run.py + eval/qa_eval.py（纯函数指标与 CLI 分离；三配置只比检索，回答指标只在生产配置；数据/配置错误退出 2，外部调用失败 4；结果只存 ID/计数，不存正文/Key）
+- 评测运行器样例：eval/run.py + eval/qa_eval.py + eval/api_client.py（纯函数指标与 CLI 分离；三配置只比检索，回答指标只在生产配置；在线模式只走 HTTP，数据/配置错误退出 2，外部调用失败 4，API/鉴权 5；S1-7 脚本结果只存 ID/计数，S3-9 在线结果保留回答正文/引用快照供逐题核对，均不存 token/密码）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）
