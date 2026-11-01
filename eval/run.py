@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+
+import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -36,6 +40,13 @@ from app.ai.rerank import RerankError, get_rerank_client  # noqa: E402
 from app.core.context import set_trace_id  # noqa: E402
 from app.core.db import new_session  # noqa: E402
 from app.models.note_chunk import NoteChunk  # noqa: E402
+from eval.api_client import (  # noqa: E402
+    AnswerResponse,
+    OnlineClient,
+    OnlineEvalError,
+    login,
+    normalize_base_url,
+)
 from eval.qa_eval import (  # noqa: E402
     AnswerSummary,
     CaseAnswer,
@@ -163,11 +174,146 @@ def _answer_case(
     return answer, result.llm_calls, result.citation_retry_count
 
 
+def _api_answer_row(case: QACase, result: AnswerResponse) -> CaseAnswer:
+    cited = [item.chunk_id for item in result.citations]
+    gold = set(case.gold_chunk_ids)
+    if case.should_refuse:
+        precision = None
+        matched = None
+    elif result.refused:
+        precision = 0.0
+        matched = False
+    else:
+        precision = citation_precision(cited, gold)
+        matched = citation_hit(cited, gold)
+    return CaseAnswer(
+        case_id=case.id,
+        refused=result.refused,
+        refusal_reason=result.refusal_reason,
+        cited_chunk_ids=cited,
+        citation_precision=precision,
+        citation_hit=matched,
+        total_tokens=result.tokens,
+        latency_ms=result.latency_ms,
+        cost_yuan=result.cost_yuan,
+    )
+
+
+def _run_api_config(
+    client: OnlineClient,
+    cases: list[QACase],
+    cfg: RetrievalConfig,
+    *,
+    answer_enabled: bool,
+) -> tuple[list[CaseRetrieval], list[CaseAnswer], list[dict[str, Any]]]:
+    retrieval_rows: list[CaseRetrieval] = []
+    answer_rows: list[CaseAnswer] = []
+    case_rows: list[dict[str, Any]] = []
+
+    for case in cases:
+        retrieved = client.search(case.question, cfg.retrieval, top_k=cfg.top_n)
+        rank = (
+            first_gold_rank(
+                [SimpleNamespace(chunk_id=item) for item in retrieved.chunk_ids],
+                set(case.gold_chunk_ids),
+            )
+            if not case.should_refuse
+            else None
+        )
+        retrieval_rows.append(
+            CaseRetrieval(
+                case_id=case.id,
+                hit_at_5=rank is not None,
+                first_gold_rank=rank,
+                latency_ms=retrieved.latency_ms,
+            )
+        )
+        answer_row = None
+        answer_payload = None
+        if answer_enabled:
+            answer = client.ask(case.question)
+            answer_row = _api_answer_row(case, answer)
+            answer_rows.append(answer_row)
+            client.delete_conversation(answer.conversation_id)
+            answer_payload = {
+                "text": answer.text,
+                "refused": answer.refused,
+                "refusal_reason": answer.refusal_reason,
+                "cited_chunk_ids": [item.chunk_id for item in answer.citations],
+                "citations": [
+                    {
+                        "chunk_id": item.chunk_id,
+                        "title": item.title,
+                        "heading_path": item.heading_path,
+                        "snippet": item.snippet,
+                    }
+                    for item in answer.citations
+                ],
+                "citation_precision": answer_row.citation_precision,
+                "citation_hit": answer_row.citation_hit,
+                "total_tokens": answer.tokens,
+                "latency_ms": answer.latency_ms,
+                "cost_yuan": answer.cost_yuan,
+            }
+        case_rows.append(
+            {
+                "id": case.id,
+                "question": case.question,
+                "scope": case.scope,
+                "should_refuse": case.should_refuse,
+                "gold_chunk_ids": case.gold_chunk_ids,
+                "hit_at_5": rank is not None if not case.should_refuse else None,
+                "first_gold_rank": rank,
+                "retrieval_latency_ms": retrieved.latency_ms,
+                "answer": answer_payload,
+            }
+        )
+    return retrieval_rows, answer_rows, case_rows
+
+
+def _render_compare_markdown(payloads: list[dict[str, Any]]) -> str:
+    lines = [
+        "# S3-9 三配置对照",
+        "",
+        f"- 数据集：`{payloads[0]['dataset']}`（{payloads[0]['case_count']} 条）",
+        "",
+        "| 配置 | hit@5 | MRR@5 | 引用精确率 | 引用命中率 | 拒答准确率 | 平均检索延迟 | 平均回答延迟 | 平均 tokens | 总费用 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for payload in payloads:
+        retrieval = payload["retrieval"]
+        answer = payload["answer"]
+        if answer is None:
+            lines.append(
+                f"| {payload['config']} | {retrieval['hit_at_5']:.3f} | "
+                f"{retrieval['mrr_at_5']:.3f} | — | — | — | "
+                f"{retrieval['avg_latency_ms']:.0f}ms | — | — | — |"
+            )
+        else:
+            lines.append(
+                f"| {payload['config']} | {retrieval['hit_at_5']:.3f} | "
+                f"{retrieval['mrr_at_5']:.3f} | {answer['citation_precision']:.3f} | "
+                f"{answer['citation_hit_rate']:.3f} | "
+                f"{answer['refusal_accuracy'] * 100:.1f}% | "
+                f"{retrieval['avg_latency_ms']:.0f}ms | "
+                f"{answer['avg_latency_ms']:.0f}ms | "
+                f"{answer['avg_total_tokens']:.1f} | "
+                f"¥{answer['total_cost_yuan']:.6f} |"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _render_summary_markdown(payload: dict[str, Any]) -> str:
     retrieval = payload["retrieval"]
     answer = payload["answer"]
+    title = (
+        "S3-9 在线评测结果"
+        if payload.get("mode") == "api"
+        else "S1-7 自测结果"
+    )
     lines = [
-        "# S1-7 自测结果",
+        f"# {title}",
         "",
         f"- 数据集：`{payload['dataset']}`（{payload['case_count']} 条）",
         f"- 配置：`{payload['config']}`",
@@ -224,16 +370,20 @@ def _build_payload(
     *,
     dataset_name: str,
     config_name: str,
-    user_id: int,
+    user_id: int | None,
     cases: list[QACase],
     retrieval_summary,
     answer_summary: AnswerSummary | None,
     answer_skipped: bool,
     case_rows: list[dict[str, Any]],
+    mode: str = "script",
+    api_base_url: str | None = None,
 ) -> dict[str, Any]:
     return {
         "dataset": dataset_name,
         "config": config_name,
+        "mode": mode,
+        "api_base_url": api_base_url,
         "user_id": user_id,
         "generated_at": datetime.now(UTC).isoformat(),
         "case_count": len(cases),
@@ -263,27 +413,149 @@ def _build_payload(
     }
 
 
+def _resolve_token(args: argparse.Namespace, base_url: str) -> str:
+    if args.token:
+        return args.token
+    env_token = os.environ.get("EVAL_TOKEN")
+    if env_token:
+        return env_token
+    username = args.username or os.environ.get("EVAL_USERNAME")
+    password = args.password or os.environ.get("EVAL_PASSWORD")
+    if not username or not password:
+        raise OnlineEvalError(
+            "在线模式需要 --token，或 --username/--password"
+            "（也支持 EVAL_TOKEN/EVAL_PASSWORD）"
+        )
+    return login(base_url, username, password)
+
+
+def _run_api(
+    args: argparse.Namespace, dataset_path: Path, cases: list[QACase]
+) -> int:
+    if args.config == "all" and (args.output or args.md_output):
+        print("--config all 不支持 --output/--md-output", file=sys.stderr)
+        return 2
+
+    base_url = normalize_base_url(str(args.api_base_url))
+    try:
+        if args.config == "all":
+            configs = [
+                load_config(ROOT / "eval" / "configs" / f"{name}.json")
+                for name in ("vector", "hybrid", "hybrid_rerank")
+            ]
+        else:
+            configs = [load_config(_resolve_config(args.config))]
+    except EvalConfigError as exc:
+        print(f"数据/配置错误：{exc}", file=sys.stderr)
+        return 2
+
+    try:
+        token = _resolve_token(args, base_url)
+        client = OnlineClient(base_url, token)
+        payloads: list[dict[str, Any]] = []
+        try:
+            for cfg in configs:
+                answer_enabled = (
+                    cfg.retrieval == "hybrid_rerank" and not args.skip_answer
+                )
+                retrieval_rows, answer_rows, case_rows = _run_api_config(
+                    client, cases, cfg, answer_enabled=answer_enabled
+                )
+                retrieval_summary = summarize_retrieval(cases, retrieval_rows)
+                answer_summary = (
+                    None
+                    if not answer_enabled
+                    else summarize_answer(
+                        cases,
+                        answer_rows,
+                        llm_calls=0,
+                        citation_retry_count=0,
+                    )
+                )
+                payload = _build_payload(
+                    dataset_name=dataset_path.stem,
+                    config_name=cfg.name,
+                    user_id=None,
+                    cases=cases,
+                    retrieval_summary=retrieval_summary,
+                    answer_summary=answer_summary,
+                    answer_skipped=not answer_enabled,
+                    case_rows=case_rows,
+                    mode="api",
+                    api_base_url=base_url,
+                )
+                payloads.append(payload)
+                if len(configs) > 1:
+                    json_path = (
+                        ROOT / "eval" / "results" / f"s3-9-{cfg.name}.json"
+                    )
+                    md_path = ROOT / "eval" / "results" / f"s3-9-{cfg.name}.md"
+                else:
+                    json_path = args.output or (
+                        ROOT / "eval" / "results" / f"s3-9-{cfg.name}.json"
+                    )
+                    md_path = args.md_output or (
+                        ROOT / "eval" / "results" / f"s3-9-{cfg.name}.md"
+                    )
+                _write_outputs(payload, json_path, md_path)
+                print(_render_summary_markdown(payload))
+                print(f"JSON：{json_path}")
+                print(f"Markdown：{md_path}")
+            if len(configs) > 1:
+                compare_path = ROOT / "eval" / "results" / "s3-9-compare.md"
+                compare_text = _render_compare_markdown(payloads)
+                compare_path.write_text(compare_text, encoding="utf-8")
+                print(compare_text)
+                print(f"对照表：{compare_path}")
+        finally:
+            client.close()
+        return 0
+    except (OnlineEvalError, httpx.HTTPError) as exc:
+        print(f"在线评测失败：{exc}", file=sys.stderr)
+        return 5
+
+
 def main() -> int:
     _configure_stdio()
-    parser = argparse.ArgumentParser(description="S1-7 自测问答评测")
+    parser = argparse.ArgumentParser(description="S1-7/S3-9 问答评测")
     parser.add_argument("--dataset", required=True, help="qa_set 或 .jsonl 路径")
     parser.add_argument(
         "--config",
         required=True,
-        help="vector/hybrid/hybrid_rerank 或 .json 路径",
+        help="vector/hybrid/hybrid_rerank、all（仅在线）或 .json 路径",
     )
     parser.add_argument("--user-id", type=int, default=1)
     parser.add_argument("--skip-answer", action="store_true", help="只跑检索，不调 LLM")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--md-output", type=Path, default=None)
+    parser.add_argument("--api-base-url", default=None)
+    parser.add_argument("--token", default=None)
+    parser.add_argument("--username", default=None)
+    parser.add_argument("--password", default=None)
+    parser.add_argument("--min-items", type=int, default=20)
+    parser.add_argument("--max-items", type=int, default=30)
     args = parser.parse_args()
 
     dataset_path = _resolve_dataset(args.dataset)
+    try:
+        cases = load_dataset(
+            dataset_path, min_items=args.min_items, max_items=args.max_items
+        )
+    except DatasetError as exc:
+        print(f"数据/配置错误：{exc}", file=sys.stderr)
+        return 2
+
+    if args.api_base_url:
+        return _run_api(args, dataset_path, cases)
+
+    if args.config == "all":
+        print("--config all 只支持在线模式（--api-base-url）", file=sys.stderr)
+        return 2
+
     config_path = _resolve_config(args.config)
     try:
-        cases = load_dataset(dataset_path)
         cfg = load_config(config_path)
-    except (DatasetError, EvalConfigError) as exc:
+    except EvalConfigError as exc:
         print(f"数据/配置错误：{exc}", file=sys.stderr)
         return 2
 
