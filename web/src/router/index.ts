@@ -54,12 +54,8 @@ const router = createRouter({
         {
           path: 'qa',
           name: 'qa',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '智能问答',
-            task: 'S3-1',
-            description: '基于个人知识库回答问题，并给出可点击的原文引用。',
-          },
+          component: () => import('@/views/qa/Chat.vue'),
+          meta: { title: '智能问答', nav: 'qa', roles: ['student'] },
         },
         {
           path: 'mistakes',

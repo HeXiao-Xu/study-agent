@@ -10,13 +10,14 @@ import type {
 import { readSseStream } from '@/utils/sse'
 
 export class QaRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status = 0,
-    readonly code = 0,
-  ) {
+  readonly status: number
+  readonly code: number
+
+  constructor(message: string, status = 0, code = 0) {
     super(message)
     this.name = 'QaRequestError'
+    this.status = status
+    this.code = code
   }
 }
 
