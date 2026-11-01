@@ -560,6 +560,8 @@ def _done_data(
         "refusal_reason": refusal_reason,
         "suggestions": [asdict(item) for item in suggestions],
         "cached": plan.cached is not None,
+        "cost_yuan": sum(r.cost_yuan for r in responses)
+        + (plan.rewrite.cost_yuan if plan.rewrite is not None else 0.0),
     }
 
 

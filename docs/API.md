@@ -332,10 +332,11 @@
 - SSE 事件：
   - `meta`：`{conversation_id(字符串), user_message_id, citations:[{index,note_id,chunk_id,title,heading_path,page_no,snippet}]}`；`citations` 为全部上下文引用，编号供正文 `[n]` 使用
   - `delta`：`{text:"..."}`；校验后的文本块，0..N 个；拼接后等于最终正文（含补充声明）。S3-6 起完整生成、校验/最多重试一次后才发 `delta`，首字延迟增加
-  - `done`：`{message_id, conversation_id(字符串), tokens, latency_ms, refused, refusal_reason, suggestions, cached}`；`tokens`=所有 LLM 尝试（首轮+重试）的回答 token + 改写 token，`latency_ms`=服务端总耗时
+  - `done`：`{message_id, conversation_id(字符串), tokens, latency_ms, refused, refusal_reason, suggestions, cached, cost_yuan}`；`tokens`=所有 LLM 尝试（首轮+重试）的回答 token + 改写 token，`latency_ms`=服务端总耗时
     - `refusal_reason`：`null` / `no_context` / `low_score` / `empty_answer` / `no_valid_citation`
     - `suggestions`：`[{type:"rephrase"|"note", text, note_id}]`；正常回答为空数组，拒答固定返回换问法+补笔记两条
     - `cached`：S3-7 起；命中 Redis 问答缓存为 `true`，此时 `tokens=0`、不再调用 LLM/Embedding，但仍落新的 assistant 消息与引用
+    - `cost_yuan`：S3-9 起；本次回答真实 LLM 费用（含查询改写），缓存/未调 LLM 为 `0.0`
   - `error`：`{code:50000,message:"生成失败"}`；流中失败后连接关闭，不再发 `done`
 - 错误码：401 未登录 / 403 非 student / 404 会话不存在或不属于当前学生（40400，不泄露存在性）/ 422 入参非法（42200）/ 500 生成失败
 - 备注：

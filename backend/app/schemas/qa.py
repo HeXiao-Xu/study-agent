@@ -80,6 +80,7 @@ class QaDoneData(BaseModel):
     refusal_reason: str | None = None
     suggestions: list[QaSuggestion] = Field(default_factory=list)
     cached: bool = False
+    cost_yuan: float = 0.0
 
 
 class QaErrorData(BaseModel):

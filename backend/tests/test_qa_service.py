@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import replace
 from datetime import date, datetime, timezone
 
@@ -666,3 +667,52 @@ def test_stream_events_cancel_event_does_not_persist(monkeypatch) -> None:
 
     assert [event.event for event in events] == ["meta"]
     assert not any(isinstance(item, Message) for item in final_session.added)
+
+
+def test_done_data_sums_answer_and_rewrite_cost() -> None:
+    from types import SimpleNamespace
+    from app.services.qa_service import _done_data
+
+    plan = SimpleNamespace(
+        conversation_id=7,
+        started_at=time.perf_counter(),
+        rewrite=SimpleNamespace(total_tokens=3, cost_yuan=0.0003),
+        cached=None,
+    )
+    message = SimpleNamespace(id=9)
+    responses = [
+        SimpleNamespace(total_tokens=10, cost_yuan=0.001),
+        SimpleNamespace(total_tokens=20, cost_yuan=0.002),
+    ]
+
+    data = _done_data(
+        plan,
+        message,
+        refused=False,
+        responses=responses,
+        refusal_reason=None,
+        suggestions=[],
+    )
+
+    assert data["cost_yuan"] == pytest.approx(0.0033)
+
+
+def test_done_data_cost_is_zero_for_cached_answer() -> None:
+    from types import SimpleNamespace
+    from app.services.qa_service import _done_data
+
+    plan = SimpleNamespace(
+        conversation_id=7,
+        started_at=time.perf_counter(),
+        rewrite=None,
+        cached=None,
+    )
+    data = _done_data(
+        plan,
+        SimpleNamespace(id=9),
+        refused=False,
+        responses=[],
+        refusal_reason=None,
+        suggestions=[],
+    )
+    assert data["cost_yuan"] == 0.0
