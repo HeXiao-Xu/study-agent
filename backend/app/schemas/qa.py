@@ -79,6 +79,7 @@ class QaDoneData(BaseModel):
     refused: bool
     refusal_reason: str | None = None
     suggestions: list[QaSuggestion] = Field(default_factory=list)
+    cached: bool = False
 
 
 class QaErrorData(BaseModel):

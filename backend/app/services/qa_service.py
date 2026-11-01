@@ -26,6 +26,7 @@ from app.ai.rag.prompt_builder import Citation, ContextItem
 from app.ai.rag.query_rewriter import HistoryTurn
 from app.ai.rag.retriever import RetrievalScope
 from app.core.config import get_settings
+from app.core.cache import Cache, get_cache
 from app.core.db import new_session
 from app.core.exceptions import InvalidParamError, NotFoundError
 from app.models.conversation import Conversation
@@ -33,13 +34,14 @@ from app.models.message import Message
 from app.models.message_citation import MessageCitation
 from app.models.note import Note
 from app.schemas.qa import QaScopeIn
-from app.services import prompt_service
+from app.services import prompt_service, qa_cache_service
 from app.services.citation_checker import (
     annotate_uncited,
     build_correction,
     check_answer,
     strip_invalid_citations,
 )
+from app.services.qa_cache_service import CachedAnswer, CachedCitation
 from app.services.query_rewrite import FALLBACK_REPLY, RewriteResult, rewrite_query
 
 logger = logging.getLogger(__name__)
@@ -83,6 +85,8 @@ class QaPlan:
     prompt_version: str | None
     rewrite: RewriteResult | None
     started_at: float
+    cached: CachedAnswer | None = None
+    cache_key: str | None = None
 
 
 def _retrieval_scope(scope: QaScopeIn | None) -> RetrievalScope | None:
@@ -220,6 +224,39 @@ def prepare_ask(
     )
     session.commit()
 
+    cache = get_cache()
+    cache_key = qa_cache_service.cache_key(user_id, clean, resolved_scope)
+    cached = qa_cache_service.get(
+        cache, user_id=user_id, question=clean, scope=resolved_scope
+    )
+    if cached is not None:
+        return QaPlan(
+            user_id=user_id,
+            conversation_id=conversation.id,
+            user_message_id=user_message.id,
+            question=clean,
+            kind=cached.kind,  # type: ignore[arg-type]
+            prepared=None,
+            chitchat_reply=cached.answer if cached.kind == "chitchat" else None,
+            citations=[
+                QaCitationMeta(
+                    index=item.index,
+                    note_id=item.note_id,
+                    chunk_id=item.chunk_id,
+                    title=item.title,
+                    heading_path=item.heading_path,
+                    page_no=item.page_no,
+                    snippet=item.snippet,
+                )
+                for item in cached.citations
+            ],
+            prompt_version=cached.prompt_version,
+            rewrite=None,
+            started_at=started,
+            cached=cached,
+            cache_key=cache_key,
+        )
+
     rewrite = rewrite_query(clean, history=history)
     if rewrite.intent == "chitchat":
         reply = rewrite.reply or FALLBACK_REPLY
@@ -235,6 +272,7 @@ def prepare_ask(
             prompt_version=None,
             rewrite=rewrite,
             started_at=started,
+            cache_key=cache_key,
         )
 
     prompt = prompt_service.get_active_prompt(
@@ -262,6 +300,7 @@ def prepare_ask(
             prompt_version=prompt_version,
             rewrite=rewrite,
             started_at=started,
+            cache_key=cache_key,
         )
 
     assert prepared.built is not None
@@ -281,6 +320,7 @@ def prepare_ask(
         prompt_version=prompt_version,
         rewrite=rewrite,
         started_at=started,
+        cache_key=cache_key,
     )
 
 
@@ -327,23 +367,56 @@ def _persist_assistant(
     content: str,
     responses: list[LLMResponse],
     citation_indices: list[int],
+    cached_citations: tuple[CachedCitation, ...] | None = None,
 ) -> Message:
     latency_ms = int((time.perf_counter() - plan.started_at) * 1000)
-    model = responses[-1].model if responses else None
+    model = (
+        plan.cached.model
+        if cached_citations is not None and plan.cached is not None
+        else (responses[-1].model if responses else None)
+    )
+    token_usage = (
+        {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cost_yuan": 0.0,
+            "rewrite": None,
+        }
+        if cached_citations is not None
+        else _token_usage(responses, plan.rewrite)
+    )
     session = session_factory()
     try:
         message = Message(
             conversation_id=plan.conversation_id,
             role="assistant",
             content_md=content,
-            token_usage=_token_usage(responses, plan.rewrite),
+            token_usage=token_usage,
             latency_ms=latency_ms,
             model=model,
             prompt_version=plan.prompt_version,
         )
         session.add(message)
         session.flush()
-        if plan.prepared is not None and plan.prepared.built is not None:
+        if cached_citations is not None:
+            by_index = {item.index: item for item in cached_citations}
+            for index in citation_indices:
+                citation = by_index.get(index)
+                if citation is None:
+                    continue
+                session.add(
+                    MessageCitation(
+                        message_id=message.id,
+                        chunk_id=citation.chunk_id,
+                        note_id=citation.note_id,
+                        score=citation.score,
+                        snippet=citation.snippet,
+                        page_no=citation.page_no,
+                        rank=index,
+                    )
+                )
+        elif plan.prepared is not None and plan.prepared.built is not None:
             for index in citation_indices:
                 citation = plan.prepared.built.items[index - 1].citation
                 session.add(
@@ -381,6 +454,53 @@ def _suggestions() -> list[QaSuggestion]:
     ]
 
 
+def _cached_indices(cached: CachedAnswer, text: str) -> list[int]:
+    size = len(cached.citations)
+    return [index for index in extract_citation_indices(text) if 1 <= index <= size]
+
+
+def _put_answer_cache(
+    plan: QaPlan,
+    *,
+    answer: str,
+    kind: str,
+    refused: bool,
+    refusal_reason: str | None,
+    suggestions: list[QaSuggestion],
+    citations: tuple[CachedCitation, ...],
+    model: str | None,
+) -> None:
+    if plan.cache_key is None:
+        return
+    cache_suggestions = tuple(
+        qa_cache_service.CachedSuggestion(
+            type=item.type,
+            text=item.text,
+            note_id=item.note_id,
+        )
+        for item in suggestions
+    )
+    try:
+        qa_cache_service.put(
+            get_cache(),
+            key=plan.cache_key,
+            answer=answer,
+            kind=kind,
+            refused=refused,
+            refusal_reason=refusal_reason,
+            suggestions=cache_suggestions,
+            citations=citations,
+            prompt_version=plan.prompt_version,
+            model=model,
+            ttl_seconds=get_settings().qa_cache_ttl_seconds,
+        )
+    except Exception:
+        logger.warning(
+            "qa_cache_write_failed",
+            extra={"conversation_id": plan.conversation_id},
+        )
+
+
 def _done_data(
     plan: QaPlan,
     message: Message,
@@ -398,6 +518,7 @@ def _done_data(
         "refused": refused,
         "refusal_reason": refusal_reason,
         "suggestions": [asdict(item) for item in suggestions],
+        "cached": plan.cached is not None,
     }
 
 
@@ -469,6 +590,44 @@ def stream_events(
         },
     )
 
+    if plan.cached is not None:
+        cached = plan.cached
+        for part in _answer_parts(cached.answer):
+            yield QaStreamEvent(event="delta", data={"text": part})
+        cached_suggestions = [
+            QaSuggestion(
+                type=item.type,  # type: ignore[arg-type]
+                text=item.text,
+                note_id=item.note_id,
+            )
+            for item in cached.suggestions
+        ]
+        try:
+            message = _persist_assistant(
+                session_factory=session_factory,
+                plan=plan,
+                content=cached.answer,
+                responses=[],
+                citation_indices=_cached_indices(cached, cached.answer),
+                cached_citations=cached.citations,
+            )
+        except Exception:
+            logger.exception("qa_persist_cached_failed")
+            yield _error_event()
+            return
+        yield QaStreamEvent(
+            event="done",
+            data=_done_data(
+                plan,
+                message,
+                refused=cached.refused,
+                responses=[],
+                refusal_reason=cached.refusal_reason,
+                suggestions=cached_suggestions,
+            ),
+        )
+        return
+
     if plan.kind == "chitchat":
         text = plan.chitchat_reply or FALLBACK_REPLY
         yield QaStreamEvent(event="delta", data={"text": text})
@@ -484,6 +643,16 @@ def stream_events(
             logger.exception("qa_persist_chitchat_failed")
             yield _error_event()
             return
+        _put_answer_cache(
+            plan,
+            answer=text,
+            kind="chitchat",
+            refused=False,
+            refusal_reason=None,
+            suggestions=[],
+            citations=(),
+            model=get_settings().llm_model,
+        )
         yield QaStreamEvent(
             event="done",
             data=_done_data(
@@ -516,6 +685,17 @@ def stream_events(
             if plan.prepared is not None and plan.prepared.refused is not None
             else "no_context"
         ) or "no_context"
+        refusal_suggestions = _suggestions()
+        _put_answer_cache(
+            plan,
+            answer=REFUSAL_TEXT,
+            kind="refused",
+            refused=True,
+            refusal_reason=reason,
+            suggestions=refusal_suggestions,
+            citations=(),
+            model=get_settings().llm_model,
+        )
         yield QaStreamEvent(
             event="done",
             data=_done_data(
@@ -524,7 +704,7 @@ def stream_events(
                 refused=True,
                 responses=[],
                 refusal_reason=reason,
-                suggestions=_suggestions(),
+                suggestions=refusal_suggestions,
             ),
         )
         return
@@ -641,6 +821,40 @@ def stream_events(
         logger.exception("qa_persist_assistant_failed")
         yield _error_event()
         return
+
+    if plan.prepared.built is not None:
+        cache_citations = tuple(
+            CachedCitation(
+                index=index,
+                note_id=plan.prepared.built.items[index - 1].citation.note_id,
+                chunk_id=plan.prepared.built.items[index - 1].citation.chunk_id,
+                title=next(
+                    (
+                        item.title
+                        for item in plan.citations
+                        if item.index == index
+                    ),
+                    None,
+                ),
+                heading_path=plan.prepared.built.items[index - 1].citation.heading_path,
+                page_no=plan.prepared.built.items[index - 1].citation.page_no,
+                snippet=plan.prepared.built.items[index - 1].citation.snippet,
+                score=plan.prepared.built.items[index - 1].citation.rerank_score,
+            )
+            for index in indices
+        )
+    else:
+        cache_citations = ()
+    _put_answer_cache(
+        plan,
+        answer=final_text,
+        kind="rag",
+        refused=refused,
+        refusal_reason=refusal_reason,
+        suggestions=suggestions,
+        citations=cache_citations,
+        model=responses[-1].model if responses else None,
+    )
 
     yield QaStreamEvent(
         event="done",
