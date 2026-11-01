@@ -34,6 +34,12 @@ const router = createRouter({
           meta: { title: '新建笔记', nav: 'notes', roles: ['student'] },
         },
         {
+          path: 'notes/:id(\\d+)',
+          name: 'note-read',
+          component: () => import('@/views/notes/NoteReadView.vue'),
+          meta: { title: '笔记详情', nav: 'notes' },
+        },
+        {
           path: 'notes/:id(\\d+)/edit',
           name: 'note-edit',
           component: () => import('@/views/notes/NoteEditView.vue'),
