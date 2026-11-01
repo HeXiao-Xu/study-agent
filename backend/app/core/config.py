@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     qa_refuse_threshold: float = 0.45
     qa_citation_max_retries: int = 1
 
+    # --- 缓存（S3-7）---
+    cache_enabled: bool = True
+    qa_cache_enabled: bool = True
+    qa_cache_ttl_seconds: int = 86400
+    embedding_cache_enabled: bool = True
+    embedding_cache_ttl_seconds: int = 604800
+
     # --- 认证（S2-2；密钥只放 .env，禁止提交）---
     auth_secret_key: str = Field(default="", repr=False)
     auth_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"

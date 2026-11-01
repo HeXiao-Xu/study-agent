@@ -470,14 +470,14 @@ erDiagram
 |---|---|---|---|---|---|
 | id | BIGINT | 否 | 自增 | 主键 | PK ⚠ |
 | user_id | BIGINT | 是 | — | 发起用户（系统调用为 NULL ⚠） | idx(user_id, created_at) ⚠ |
-| scene | TEXT | 否 | — | qa / mistake / gen / agent / embed（§10.14） | idx ⚠ |
+| scene | TEXT | 否 | — | qa / query_rewrite / kp_align / embed / mistake / gen / agent（§10.14） | idx ⚠ |
 | model | TEXT | 否 | — | 模型名 | — |
 | prompt_tokens | INTEGER | 是 | — | 输入 token | — |
 | completion_tokens | INTEGER | 是 | — | 输出 token | — |
-| cost | NUMERIC | 是 | — | 费用 | — |
+| cost | NUMERIC(14,8) | 是 | — | 费用（元） | — |
 | latency_ms | INTEGER | 是 | — | 延迟 | — |
 | trace_id | TEXT | 是 | — | 链路追踪（S0-5 日志中间件注入） | idx ⚠ |
-| status | TEXT | 否 | — | 成功/失败（取值 TODO，S3-7 定） | — |
+| status | TEXT | 否 | — | success / failed（§10.16） | — |
 | created_at | TIMESTAMPTZ | 否 | now() | | — |
 
 ### 8.5 eval_runs
@@ -515,8 +515,9 @@ erDiagram
 | 10.11 | review_items.ref_type | note / question / mistake ✅ | 方案 5.2 |
 | 10.12 | messages.role | user / assistant / system ✅ | 方案 5.2 |
 | 10.13 | agent_tasks.status | pending / running / waiting_confirm / succeeded / failed ✅；task_type 首批：weekly_mindmap / mistake_paper（见 API 草案） | 方案 5.2 + 附录 B |
-| 10.14 | llm_call_logs.scene | qa / mistake / gen / agent / embed ✅ | 方案 5.2 |
+| 10.14 | llm_call_logs.scene | qa / query_rewrite / kp_align / embed / mistake / gen / agent（S3-7 扩展） | 本卡 S3-7 |
 | 10.15 | async_tasks.status | pending / running / succeeded / failed（S2-7 定稿；失败重试回 pending） | 本卡 S2-7 |
+| 10.16 | llm_call_logs.status | success / failed（S3-7 定稿；流式被关闭记 failed） | 本卡 S3-7 |
 
 ---
 

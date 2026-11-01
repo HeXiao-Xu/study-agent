@@ -48,6 +48,23 @@ class MessageRole(StrEnum):
     SYSTEM = "system"
 
 
+class LLMCallScene(StrEnum):
+    """llm_call_logs.scene：S3-7 扩展后的实际调用场景。"""
+
+    QA = "qa"
+    QUERY_REWRITE = "query_rewrite"
+    KP_ALIGN = "kp_align"
+    EMBED = "embed"
+    MISTAKE = "mistake"
+    GEN = "gen"
+    AGENT = "agent"
+
+
+class LLMCallStatus(StrEnum):
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
 def in_check(column: str, values: Iterable[str]) -> str:
     """渲染 `<column> IN ('a', 'b')`；StrEnum 成员经 f-string 取到值本身。"""
     joined = ", ".join(f"'{value}'" for value in values)
