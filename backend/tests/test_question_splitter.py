@@ -137,3 +137,33 @@ def test_two_digit_numbers_are_single_questions() -> None:
     result = split_questions(text)
     assert result.detected_count == 11
     assert result.blocks[9].text.startswith("10. 第10题")
+
+
+def test_partial_declared_counts_disable_expected_total() -> None:
+    text = paper(
+        "一、选择题（本题共 8 小题）",
+        *[f"{i}. 选择{i}" for i in range(1, 9)],
+        "二、填空题（本题共 4 小题）",
+        *[f"{i}. 填空{i}" for i in range(9, 13)],
+        "三、解答题",
+        *[f"{i}. 解答{i}" for i in range(13, 21)],
+    )
+    result = split_questions(text)
+    assert result.detected_count == 20
+    assert result.expected_count is None
+    assert result.degraded is False
+
+
+def test_all_sections_declared_sums_to_total() -> None:
+    text = paper(
+        "一、选择题（本题共 8 小题）",
+        *[f"{i}. 选择{i}" for i in range(1, 9)],
+        "二、填空题（本题共 4 小题）",
+        *[f"{i}. 填空{i}" for i in range(9, 13)],
+        "三、解答题（本题共 8 小题）",
+        *[f"{i}. 解答{i}" for i in range(13, 21)],
+    )
+    result = split_questions(text)
+    assert result.detected_count == 20
+    assert result.expected_count == 20
+    assert result.degraded is False

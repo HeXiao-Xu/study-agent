@@ -61,8 +61,12 @@ def split_questions(text: str) -> SplitResult:
         return SplitResult(degraded=True, warnings=["文本为空，无法切题"])
 
     sections = _sections(lines)
-    declared_values = [section.declared for section in sections if section.declared]
-    expected_count = sum(declared_values) if declared_values else None
+    # 只有一个大题少写题数时，部分求和的 expected_count 会偏小并把整卷误判成 degraded，
+    # 所以只有全部大题都声明了题数，总数才可比。
+    declared_all = [section.declared for section in sections]
+    expected_count = (
+        sum(declared_all) if all(value is not None for value in declared_all) else None
+    )
 
     blocks: list[QuestionBlock] = []
     warnings: list[str] = []
