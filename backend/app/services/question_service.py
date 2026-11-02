@@ -8,9 +8,10 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import Select, exists, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,7 +25,16 @@ from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.models.subject import Subject
 from app.models.user import User
-from app.schemas.question import QuestionCreateIn, QuestionUpdateIn
+from app.schemas.common import PageData
+from app.schemas.question import (
+    KpRefOut,
+    QuestionCreateIn,
+    QuestionDetailOut,
+    QuestionSummaryOut,
+    QuestionUpdateIn,
+)
+from app.services.note_service import escape_like
+from app.utils.pagination import PageParams, SortParams, apply_sort, paginate_query
 
 TASK_QUESTION_EXTRACT = "question.extract"
 
@@ -501,3 +511,110 @@ def delete_question(session: Session, *, question_id: int, viewer: User) -> None
         session.delete(row)
     session.delete(question)
     _commit(session)
+
+
+@dataclass(frozen=True)
+class QuestionFilters:
+    subject_id: int | None = None
+    qtype: str | None = None
+    kp_id: int | None = None
+    origin: str | None = None
+    created_by: int | None = None
+    verified: bool | None = None
+    keyword: str | None = None
+    source_file_id: int | None = None
+
+
+SORTABLE = {
+    "created_at": Question.created_at,
+    "id": Question.id,
+    "difficulty": Question.difficulty,
+}
+
+
+def ensure_subject_exists(session: Session, subject_id: int) -> None:
+    _ensure_subject(session, subject_id)
+
+
+def build_questions_query(*, filters: QuestionFilters) -> Select:
+    """题库是公共语料，不按 user_id 过滤（SCHEMA §5.1 的口径）。
+
+    kp_id 用 EXISTS 而不是 join：join 会让一题多知识点时出现重复行，
+    count 也跟着翻倍。
+    """
+    stmt = select(Question)
+    if filters.subject_id is not None:
+        stmt = stmt.where(Question.subject_id == filters.subject_id)
+    if filters.qtype:
+        stmt = stmt.where(Question.qtype == filters.qtype)
+    if filters.origin:
+        stmt = stmt.where(Question.origin == filters.origin)
+    if filters.created_by is not None:
+        stmt = stmt.where(Question.created_by == filters.created_by)
+    if filters.source_file_id is not None:
+        stmt = stmt.where(Question.source_file_id == filters.source_file_id)
+    if filters.verified is not None:
+        stmt = stmt.where(Question.verified.is_(filters.verified))
+    if filters.keyword:
+        pattern = f"%{escape_like(filters.keyword)}%"
+        stmt = stmt.where(Question.stem_md.ilike(pattern, escape="\\"))
+    if filters.kp_id is not None:
+        stmt = stmt.where(
+            exists().where(
+                QuestionKp.question_id == Question.id, QuestionKp.kp_id == filters.kp_id
+            )
+        )
+    return stmt
+
+
+def _attach_kp_names(session: Session, items: list[QuestionSummaryOut]) -> None:
+    """一页一次 IN 批查，避免逐题查库（AGENTS §4 禁止循环查库）。"""
+    ids = [item.id for item in items]
+    if not ids:
+        return
+    rows = session.execute(
+        select(QuestionKp.question_id, KnowledgePoint.name)
+        .join(KnowledgePoint, KnowledgePoint.id == QuestionKp.kp_id)
+        .where(QuestionKp.question_id.in_(ids))
+        .order_by(QuestionKp.weight.desc())
+    ).all()
+    grouped: dict[int, list[str]] = {}
+    for question_id, name in rows:
+        grouped.setdefault(question_id, []).append(name)
+    for item in items:
+        item.kp_names = grouped.get(item.id, [])
+
+
+def list_questions(
+    session: Session, *, filters: QuestionFilters, page: PageParams, sort: SortParams
+) -> PageData[QuestionSummaryOut]:
+    stmt = apply_sort(
+        build_questions_query(filters=filters),
+        sort_by=sort.sort_by,
+        order=sort.order,
+        allowed=SORTABLE,
+        default_sort="created_at",
+    )
+    data = paginate_query(session, stmt, page, item_model=QuestionSummaryOut)
+    _attach_kp_names(session, data.items)
+    return data
+
+
+def get_question_detail(session: Session, *, question_id: int) -> QuestionDetailOut:
+    question = _load_question(session, question_id)
+    rows = session.execute(
+        select(
+            KnowledgePoint.id,
+            KnowledgePoint.name,
+            KnowledgePoint.code,
+            QuestionKp.weight,
+        )
+        .join(QuestionKp, QuestionKp.kp_id == KnowledgePoint.id)
+        .where(QuestionKp.question_id == question_id)
+        .order_by(QuestionKp.weight.desc())
+    ).all()
+    detail = QuestionDetailOut.model_validate(question)
+    detail.kps = [
+        KpRefOut(kp_id=row[0], kp_name=row[1], kp_code=row[2], weight=row[3]) for row in rows
+    ]
+    return detail
