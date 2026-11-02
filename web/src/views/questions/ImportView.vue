@@ -81,6 +81,8 @@ async function submit(): Promise<void> {
       elapsed.value = Math.round((Date.now() - startedAt) / 1000)
       if (taskId.value !== null) void poll(taskId.value)
     }, 1500)
+  } catch {
+    // http.ts 已统一提示，这里只保证 submitting 复位、页面可重试
   } finally {
     submitting.value = false
   }

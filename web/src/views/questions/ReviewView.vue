@@ -16,7 +16,13 @@ import {
 } from '@/api/questions'
 import { getKpTree, listSubjects } from '@/api/kp'
 import { useAuthStore } from '@/stores/auth'
-import type { QuestionDetail, QuestionOption, QuestionSummary, QuestionType } from '@/types/questions'
+import type {
+  QuestionDetail,
+  QuestionOption,
+  QuestionSummary,
+  QuestionType,
+  QuestionUpdatePayload,
+} from '@/types/questions'
 import type { KpNode } from '@/types/kp'
 
 import 'md-editor-v3/lib/preview.css'
@@ -139,18 +145,28 @@ async function openQuestion(id: number): Promise<void> {
   })
 }
 
+/** 后端收到 kp_ids 会整体重建链接并把 weight 写成 MANUAL_WEIGHT=1.0，未改选时必须省略该字段。 */
+function kpIdsChanged(current: number[], next: number[]): boolean {
+  const left = [...current].sort((a, b) => a - b)
+  const right = [...next].sort((a, b) => a - b)
+  return left.length !== right.length || left.some((id, index) => id !== right[index])
+}
+
 async function save(): Promise<void> {
   if (!detail.value || !canEdit.value) return
+  const payload: QuestionUpdatePayload = {
+    stem_md: form.stem_md,
+    qtype: form.qtype,
+    difficulty: form.difficulty,
+    answer_md: form.answer_md.trim() ? form.answer_md : null,
+    analysis_md: form.analysis_md.trim() ? form.analysis_md : null,
+    options: form.options.length ? form.options : null,
+  }
+  if (kpIdsChanged(detail.value.kps.map((item) => item.kp_id), form.kp_ids)) {
+    payload.kp_ids = [...form.kp_ids]
+  }
   try {
-    const updated = await updateQuestion(detail.value.id, {
-      stem_md: form.stem_md,
-      qtype: form.qtype,
-      difficulty: form.difficulty,
-      answer_md: form.answer_md.trim() ? form.answer_md : null,
-      analysis_md: form.analysis_md.trim() ? form.analysis_md : null,
-      options: form.options.length ? form.options : null,
-      kp_ids: form.kp_ids,
-    })
+    const updated = await updateQuestion(detail.value.id, payload)
     applyDetail(updated)
     ElMessage.success('已保存')
     await loadList()

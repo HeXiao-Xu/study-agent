@@ -1,13 +1,15 @@
 /** S4-1 审题页：列表、详情、保存、拆分、公式渲染、越权只读。 */
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ReviewView from '@/views/questions/ReviewView.vue'
 import {
+  deleteQuestion,
   getQuestion,
   listQuestions,
+  mergeQuestions,
   splitQuestion,
   updateQuestion,
 } from '@/api/questions'
@@ -88,6 +90,7 @@ function makeWrapper(role: 'student' | 'teacher' = 'student') {
 
 describe('ReviewView', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.mocked(listQuestions).mockResolvedValue({
       items: [{ ...SUMMARY, created_by: 1 }],
       total: 1,
@@ -101,6 +104,8 @@ describe('ReviewView', () => {
     vi.mocked(getKpTree).mockResolvedValue(TREE)
     vi.mocked(updateQuestion).mockResolvedValue(DETAIL)
     vi.mocked(splitQuestion).mockResolvedValue([DETAIL, DETAIL])
+    vi.mocked(mergeQuestions).mockResolvedValue({ ...DETAIL, id: 9 })
+    vi.mocked(deleteQuestion).mockResolvedValue(undefined)
   })
 
   it('renders question list', async () => {
@@ -170,5 +175,57 @@ describe('ReviewView', () => {
     expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-test="delete"]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-test="split"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('merges the selected questions', async () => {
+    vi.mocked(listQuestions).mockResolvedValue({
+      items: [
+        { ...SUMMARY, id: 1, created_by: 1 },
+        { ...SUMMARY, id: 2, stem_md: '第二题 $g(x)=x+1$。', created_by: 1 },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+    })
+    const wrapper = makeWrapper()
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    table.vm.$emit('selection-change', [
+      { ...SUMMARY, id: 1 },
+      { ...SUMMARY, id: 2 },
+    ])
+    await flushPromises()
+    const mergeButton = wrapper.find('[data-test="merge"]')
+    expect(mergeButton.attributes('disabled')).toBeUndefined()
+    await mergeButton.trigger('click')
+    await flushPromises()
+    expect(mergeQuestions).toHaveBeenCalledWith([1, 2])
+  })
+
+  it('confirms before deleting a question', async () => {
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    const wrapper = makeWrapper()
+    await flushPromises()
+    await wrapper.find('[data-test="row-1"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-test="delete"]').trigger('click')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalled()
+    expect(deleteQuestion).toHaveBeenCalledWith(1)
+    confirm.mockRestore()
+  })
+
+  it('omits kp_ids when only the difficulty changes', async () => {
+    const wrapper = makeWrapper()
+    await flushPromises()
+    await wrapper.find('[data-test="row-1"]').trigger('click')
+    await flushPromises()
+    wrapper.findComponent({ name: 'ElRate' }).vm.$emit('update:modelValue', 4)
+    await flushPromises()
+    await wrapper.find('[data-test="save"]').trigger('click')
+    await flushPromises()
+    const payload = vi.mocked(updateQuestion).mock.calls.at(-1)?.[1]
+    expect(payload).not.toHaveProperty('kp_ids')
+    expect(payload?.difficulty).toBe(4)
   })
 })
