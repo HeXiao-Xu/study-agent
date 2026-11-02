@@ -590,6 +590,7 @@
   | sort_by | string | 否 | 白名单 `created_at` / `last_review_at` / `status` / `correct_streak`，默认 `created_at` |
   | order | string | 否 | `asc` / `desc`，默认 `desc` |
 
+- 时区口径：`created_from` / `created_to` 接受带时区偏移的 ISO-8601；只给日期时按 UTC 解释，前端按用户本地时区换算成当天 00:00:00 ~ 23:59:59.999 后发送（UTC+8 的「11-03」= `2026-11-02T16:00:00.000Z` ~ `2026-11-03T15:59:59.999Z`）。
 - 出参：`Envelope[PageData[MistakeSummary]]`
 - 排序：主排序后**追加 `id DESC` 兜底**（同一秒录入的多条错题不重复/漏行）；`last_review_at` 为 NULL 的行按 PostgreSQL 默认排序，NULL 排序口径待定（见 PROGRESS 遗留）。
 - `MistakeSummary`：`id` / `question_id` / `status` / `correct_streak` / `stem_excerpt`（题干前 120 字）/ `subject_id` / `qtype` / `difficulty` / `kp_names`（一页一次 `IN` 批查，按 `question_kps.weight` 降序、同权重按 `kp_id`）/ `cause_type`（S4-3 前恒 `null`）/ `has_image` / `created_at` / `last_review_at`

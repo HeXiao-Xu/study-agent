@@ -1,4 +1,4 @@
-"""S4-2 错题出入参（API.md §5.6）。"""
+"""S4-2 错题出入参（API.md §6 错题本）。"""
 from __future__ import annotations
 
 from datetime import datetime

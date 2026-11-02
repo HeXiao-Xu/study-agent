@@ -55,7 +55,7 @@
 | D-1 | `mistakes` 增加 `UNIQUE(user_id, question_id)`；重复录入**不报 409**，而是复用既有行并重置（`status=待订正`、`correct_streak=0`；`last_review_at` **不动**——录入不是复习，deviation d-1） | 错题本语义是「一本」：同一道题再错一次，应当刷新为待订正而不是并存两条；沿用 S4-1 `mine` 式幂等口径，也让前端「再记一次」按钮可以无脑点 |
 | D-2 | `question_id` 外键 `ON DELETE RESTRICT`；与 S4-1 已在 `delete_question` 里做的 `_ensure_not_referenced` 形成双保险 | 题目被硬删会让错题失去题干。S4-1 的守卫在 `mistakes` 表建好后才生效（`has_table` 守卫），本卡建表后这条保护自动上线，需要真机验证 |
 | D-3 | 本卡建 `mistake_analyses`（只建表不写数据），列表的 `cause_type` 用 `EXISTS` 过滤（一题至多一条诊断，EXISTS 与 kp_id 同口径、不会放大行数） | 卡要求「按错因筛选与统计」，而错因存在 S4-3 才写入的表；提前建表让筛选 SQL 一次写对，S4-3 补数据后自然生效，避免回头改列表代码 |
-| D-4 | 扩 `LLMMessage` 增 `images: list[str] \| None`（base64 data URL）；**有图时** `content` 组装成 `[{type:text},{type:image_url}]`，**无图时仍发字符串** | 现有所有 LLM 调用（QA/改写/对齐/切题）都发字符串 content，改动必须向后兼容；视觉能力单独成模块，不让业务层直接拼多模态结构 |
+| D-4 | 扩 `LLMMessage` 增 `images: tuple[str, ...] \| None`（base64 data URL）；**有图时** `content` 组装成 `[{type:text},{type:image_url}]`，**无图时仍发字符串** | 现有所有 LLM 调用（QA/改写/对齐/切题）都发字符串 content，改动必须向后兼容；视觉能力单独成模块，不让业务层直接拼多模态结构。用 `tuple` 而不是 `list`：`LLMMessage` 是 frozen dataclass，只有不可变序列才可哈希（缓存/去重可能用到），实现据此定稿 |
 | D-5 | 拍照录入走**异步任务** `mistake.recognize`（202 + 轮询 `GET /tasks/{id}`），与 `question.extract` 同构 | 视觉调用 5–15s 且可能失败；runner 统一的重试与状态机比同步长请求可靠，前端也已具备轮询代码（S4-1 导入页） |
 | D-6 | 识别出的题干走**既有** `question_service.create_question`（两道闸判重 + 知识点对齐）；命中判重则复用既有题，不新建 | 避免为拍照单独写一套建题逻辑；同一道题第二次被拍时应当挂到已有题目上，公共题库才不会被照片重复污染 |
 | D-7 | `correct_streak` 只由 `POST /mistakes/{id}/review` 驱动；`PATCH status` 手改状态**不**加 streak | 卡的验收要求「能改状态」，但「连续答对」是行为事实，不能靠改标签伪造；两者分开才能保证 `streak` 在答辩时可解释 |
@@ -133,7 +133,7 @@ class CauseType(StrEnum):
 class LLMMessage:
     role: str                 # system | user | assistant
     content: str
-    images: list[str] | None = None   # base64 data URL，仅 user 角色使用
+    images: tuple[str, ...] | None = None   # base64 data URL，仅 user 角色使用；tuple 保持 frozen dataclass 可哈希
 ```
 
 `ai/llm/openai_compat.py` 组装规则：
@@ -161,7 +161,7 @@ def extract_mistake(image_bytes, mime, *, subject_name, llm_client=None, max_ret
 - 题型/选项一致性直接复用 `ExtractedQuestion` 的校验思路（选择题 ≥2 项且 key 唯一，填空/解答不带选项）；视觉层内自建 `VisionExtract` 而非直接复用 `ExtractedQuestion`，因为字段不同（无 `kp_names`，多 `my_answer_md`/`confidence`）；
 - Prompt 固化在 `ai/prompts/mistake_ocr_v1.md`（Jinja2 `StrictUndefined`，变量只有 `subject_name`）；
 - 严格 JSON + Pydantic 校验 + 最多 2 次重试（复用 S4-1 的 `_loads_json` 思路）；仍失败抛 `VisionError(带累计尝试次数)`；
-- `scene="mistake_ocr"`，落 `llm_call_logs`；
+- `scene="mistake"`（复用 `LLMCallScene.MISTAKE`：`llm_call_logs` 的 CHECK 白名单在迁移 0008 已固定，OCR 与后续 S4-3 诊断同属错题场景，用 scene+model 即可区分），落 `llm_call_logs`；
 - **不做** OCR 结果缓存：同一张图重试应重新识别（图片可能有裁剪差异）。
 
 ### 5.3 与题库的衔接（D-6）

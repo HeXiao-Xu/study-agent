@@ -38,6 +38,22 @@ function isCauseType(value: unknown): value is MistakeCauseType {
   return typeof value === 'string' && (MISTAKE_CAUSE_TYPES as readonly string[]).includes(value)
 }
 
+/**
+ * 日期筛选必须按用户本地时区取当天首尾，再转成 UTC ISO 发给后端。
+ *
+ * 后端 `created_from`/`created_to` 是裸 datetime，PG 会话时区是 UTC；直接发
+ * `YYYY-MM-DD` 会被当成 UTC 零点，UTC+8 用户选「11-03」实际查的是本地
+ * 11-03 08:00 ~ 11-04 07:59:59.999（当天 0–8 点漏、次日 0–8 点混入）。
+ * 这里用不带偏移的 date-time，JS 按**本地**时区解释，再由 toISOString 转 UTC。
+ */
+export function startOfLocalDay(date: string): string {
+  return new Date(`${date}T00:00:00`).toISOString()
+}
+
+export function endOfLocalDay(date: string): string {
+  return new Date(`${date}T23:59:59.999`).toISOString()
+}
+
 export function useMistakeList() {
   const filters = reactive<MistakeFilters>({
     status: '',
@@ -152,12 +168,15 @@ export function useMistakeList() {
     await reload({ kpId: typeof value === 'number' ? value : null })
   }
 
-  /** created_to 后端是 datetime；日期区间按「含当天」补到 23:59:59。 */
+  /** 日期区间按用户本地时区换算成 UTC ISO；清空时发空串，交给 compactQuery 丢弃。 */
   async function setCreatedRange(value: unknown): Promise<void> {
     const range = Array.isArray(value) && value.length === 2 ? value : null
     const from = typeof range?.[0] === 'string' ? range[0] : ''
     const to = typeof range?.[1] === 'string' ? range[1] : ''
-    await reload({ createdFrom: from, createdTo: to ? `${to}T23:59:59` : '' })
+    await reload({
+      createdFrom: from ? startOfLocalDay(from) : '',
+      createdTo: to ? endOfLocalDay(to) : '',
+    })
   }
 
   async function resetFilters(): Promise<void> {

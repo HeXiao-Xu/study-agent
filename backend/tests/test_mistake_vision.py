@@ -4,6 +4,7 @@ import pytest
 
 from app.ai.llm.base import LLMResponse
 from app.ai.vision import VisionError, extract_mistake
+from app.models.enums import LLMCallScene
 
 
 class FakeLLM:
@@ -39,7 +40,7 @@ def test_extract_mistake_returns_parsed_fields():
     assert result.stem_md.startswith("已知函数")
     assert result.my_answer_md == "对称轴 x=2"
     assert result.confidence == 0.86
-    assert client.calls[0]["scene"] == "mistake_ocr"
+    assert client.calls[0]["scene"] == LLMCallScene.MISTAKE.value
     # 图片以 data URL 挂在 user 消息上
     assert client.calls[0]["messages"][-1].images[0].startswith("data:image/png;base64,")
 
@@ -126,3 +127,15 @@ def test_render_prompt_missing_variable_raises_vision_error(monkeypatch):
     )
     with pytest.raises(VisionError):
         mistake_ocr.render_prompt(subject_name="高中数学")
+
+
+def test_vision_scene_must_hit_llm_call_logs_whitelist():
+    """视觉场景必须命中 llm_call_logs 白名单（ck_llm_call_logs_scene，0008 已固定）。
+
+    `record_llm_call` 是 best-effort 旁路：CHECK 拒绝只落一条 warning，不报错，
+    日志会静默丢失。以后再写一个不在白名单里的 scene，这条用例直接红。
+    """
+    from app.ai.vision.mistake_ocr import SCENE
+
+    allowed = {scene.value for scene in LLMCallScene}
+    assert SCENE in allowed, f"scene={SCENE!r} 不在 llm_call_logs 白名单 {sorted(allowed)} 内"

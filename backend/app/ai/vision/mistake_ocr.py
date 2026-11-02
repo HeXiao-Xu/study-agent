@@ -15,8 +15,13 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from app.ai.extract.question_extractor import ExtractedOption
 from app.ai.json_utils import loads_json_object
 from app.ai.llm import LLMClient, LLMMessage, get_vision_client
+from app.models.enums import LLMCallScene
 
-SCENE = "mistake_ocr"
+# 复用 `mistake` 场景：llm_call_logs 的 CHECK 白名单在 0008 已固定
+# （qa/query_rewrite/kp_align/embed/mistake/gen/agent），OCR 与后续 S4-3 诊断
+# 同属错题场景，用 scene+model 即可区分；自造 "mistake_ocr" 会被 CHECK 静默拒绝，
+# 视觉调用一条日志都落不了库。
+SCENE = LLMCallScene.MISTAKE.value
 PROMPT_FILE = "mistake_ocr_v1.md"
 MAX_RETRIES = 2
 MAX_IMAGE_BYTES = 8 * 1024 * 1024

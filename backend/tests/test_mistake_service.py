@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.exceptions import InvalidParamError, NotFoundError
 from app.models.enums import MistakeStatus
 from app.models.mistake import Mistake
+from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.schemas.mistake import MistakeCreateIn, MistakeUpdateIn
 from app.services import mistake_service
@@ -274,9 +275,27 @@ def test_record_review_other_user_raises_404():
 
 def test_delete_mistake_removes_analysis_too():
     mistake = _mistake()
-    session = FakeSession(objects={(Mistake, 12): mistake}, scalar_results=[None])
+    analysis = MistakeAnalysis(
+        mistake_id=12, cause_type="概念不清", model="deepseek-chat", prompt_version="v1"
+    )
+    analysis.id = 900
+    session = FakeSession(objects={(Mistake, 12): mistake}, scalar_results=[analysis])
+
     mistake_service.delete_mistake(session, user_id=1, mistake_id=12)
-    assert mistake in session.deleted
+
+    # 诊断查询按 mistake_id 定位；先删诊断再删错题，且同一事务只提交一次（spec D-12）
+    assert "mistake_analyses" in _compiled(session.scalar_statements[0])
+    assert session.deleted == [analysis, mistake]
+    assert session.commits == 1
+
+
+def test_delete_mistake_without_analysis_deletes_only_mistake():
+    mistake = _mistake()
+    session = FakeSession(objects={(Mistake, 12): mistake}, scalar_results=[None])
+
+    mistake_service.delete_mistake(session, user_id=1, mistake_id=12)
+
+    assert session.deleted == [mistake]
     assert session.commits == 1
 
 

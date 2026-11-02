@@ -7,7 +7,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useMistakeList } from '@/views/mistakes/useMistakeList'
+import {
+  endOfLocalDay,
+  startOfLocalDay,
+  useMistakeList,
+} from '@/views/mistakes/useMistakeList'
 import { getKpTree, listSubjects } from '@/api/kp'
 import { getMistakeStats, listMistakes } from '@/api/mistakes'
 import type { KpTree } from '@/types/kp'
@@ -128,16 +132,33 @@ describe('useMistakeList', () => {
     expect(lastListParams()).toMatchObject({ kpId: 137, page: 1 })
   })
 
-  it('日期区间补到当天 23:59:59，清空后发空串', async () => {
+  it('日期区间按本地时区换算成 UTC ISO，清空后发空串', async () => {
     const state = useMistakeList()
     await state.reload()
 
     await state.setCreatedRange(['2026-11-01', '2026-11-03'])
+    // 期望值由被测的同一个函数算（不硬编码偏移量：CI 换个时区也不会假红）
     expect(lastListParams()).toMatchObject({
-      createdFrom: '2026-11-01',
-      createdTo: '2026-11-03T23:59:59',
+      createdFrom: startOfLocalDay('2026-11-01'),
+      createdTo: endOfLocalDay('2026-11-03'),
       page: 1,
     })
+
+    // 再钉住语义：不带偏移的 date-time 按本地时区解释，发出的是带 Z 的 UTC ISO
+    expect(lastListParams().createdFrom).toBe(new Date('2026-11-01T00:00:00').toISOString())
+    expect(lastListParams().createdTo).toBe(
+      new Date('2026-11-03T23:59:59.999').toISOString(),
+    )
+    expect(lastListParams().createdFrom).toMatch(/Z$/)
+    expect(lastListParams().createdTo).toMatch(/Z$/)
+
+    // 同一天的窗口必须是本地 00:00:00.000 → 23:59:59.999（时长与时区无关，0 点/次日 0 点都不会漏）
+    await state.setCreatedRange(['2026-11-03', '2026-11-03'])
+    const params = lastListParams()
+    expect(
+      new Date(params.createdTo as string).getTime() -
+        new Date(params.createdFrom as string).getTime(),
+    ).toBe(86_399_999)
 
     await state.setCreatedRange(null)
     expect(lastListParams()).toMatchObject({ createdFrom: '', createdTo: '', page: 1 })

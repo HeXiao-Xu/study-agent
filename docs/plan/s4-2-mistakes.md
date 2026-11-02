@@ -47,7 +47,7 @@
 | `backend/app/core/config.py` + `.env.example`（改） | `VISION_MODEL` |
 | `web/src/types/mistakes.ts`、`web/src/api/mistakes.ts`（新） | 前端契约与调用 |
 | `web/src/views/mistakes/{MistakeListView,MistakeNewView,MistakeDetailView}.vue`（新） | 三页 |
-| `web/src/router/index.ts`、`web/src/components/layout/nav.ts`（改） | 路由与侧栏 06 |
+| `web/src/router/index.ts`、`web/src/layouts/nav.ts`（改） | 路由与侧栏 06 |
 | `测试数据/_make_s4_2_mistake_photos.py`（新） | 合成验收图（Pillow） |
 
 ---
@@ -2566,7 +2566,7 @@ git commit -m "feat(s4-2): 错题 8 个接口（拍照/列表/统计/详情/更�
 - Create: `web/src/types/mistakes.ts`
 - Create: `web/src/api/mistakes.ts`
 - Modify: `web/src/router/index.ts`
-- Modify: `web/src/components/layout/nav.ts`
+- Modify: `web/src/layouts/nav.ts`
 - Test: `web/src/views/layout/__tests__/MainLayout.spec.ts`（导航条数断言 7 → 10）
 
 **Interfaces:**
@@ -2719,7 +2719,7 @@ export function deleteMistake(id: number) {
   },
 ```
 
-`web/src/components/layout/nav.ts` 在题库后插入：
+`web/src/layouts/nav.ts` 在题库后插入：
 
 ```ts
   { index: '/mistakes', label: '06 错题本', icon: Notebook },
@@ -2738,7 +2738,7 @@ Expected: 若 `MainLayout.spec.ts` 断言条数，需要更新为新的条数后
 
 ```bash
 git add web/src/types/mistakes.ts web/src/api/mistakes.ts web/src/router/index.ts \
-        web/src/components/layout/nav.ts web/src/views/layout/__tests__/MainLayout.spec.ts
+        web/src/layouts/nav.ts web/src/views/layout/__tests__/MainLayout.spec.ts
 git commit -m "feat(s4-2): 前端错题契约/API/路由与侧栏入口"
 ```
 

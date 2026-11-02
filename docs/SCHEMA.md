@@ -312,7 +312,7 @@ erDiagram
 - 唯一约束：`uq_mistake_analyses_mistake_id` = `UNIQUE(mistake_id)`（一道错题至多一条诊断）。
 - 检查约束：`ck_mistake_analyses_cause_type`：`cause_type IN ('概念不清', '计算失误', '审题偏差', '方法不当', '知识遗忘', '时间不足', 'unknown')`。
 - 索引：`ix_mistake_analyses_kp_ids` = **GIN** `(kp_ids)`，支撑列表 `kp_ids @>` 的 `EXISTS` 筛选。
-- 外键：`fk_mistake_analyses_mistake_id` → `mistakes.id`，**ON DELETE CASCADE**；删除错题时诊断行自动清理（service 仍显式先删，便于测试断言）。
+- 外键：`fk_mistake_analyses_mistake_id` → `mistakes.id`，**ON DELETE CASCADE**；删除错题时诊断行由数据库自动清理，`mistake_service.delete_mistake` 仍在同一事务内**显式先删诊断再删错题**（不依赖级联的实现细节）；`test_delete_mistake_removes_analysis_too` 断言诊断删除语句确实执行、删除顺序为「诊断 → 错题」、`commits == 1`。
 
 ## 6. 练习与掌握度
 
