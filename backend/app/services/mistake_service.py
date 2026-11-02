@@ -8,7 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, func, select
+from fastapi_pagination import Params
+from fastapi_pagination.ext.sqlalchemy import paginate as paginate_sa
+from sqlalchemy import Select, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,7 @@ from app.models.mistake import Mistake
 from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
+from app.schemas.common import PageData
 from app.schemas.mistake import (
     CauseCountOut,
     KpCountOut,
@@ -31,6 +34,7 @@ from app.schemas.mistake import (
     OptionOut,
     StatusCountOut,
 )
+from app.utils.pagination import PageParams, SortParams, apply_sort
 
 # --------------------------------------------------------------------------
 # 常量区（Task 6/7 的 TASK_* / 阈值常量继续加在这里）
@@ -39,6 +43,12 @@ TASK_MISTAKE_RECOGNIZE = "mistake.recognize"
 MASTERY_STREAK = 2
 LOW_CONFIDENCE = 0.5
 EXCERPT_LEN = 120
+SORTABLE: dict[str, object] = {
+    "created_at": Mistake.created_at,
+    "last_review_at": Mistake.last_review_at,
+    "status": Mistake.status,
+    "correct_streak": Mistake.correct_streak,
+}
 
 
 @dataclass(frozen=True)
@@ -295,3 +305,108 @@ def stats(
         by_cause=by_cause,
         top_kps=top_kps,
     )
+
+
+def build_mistakes_query(*, user_id: int, filters: MistakeFilters) -> Select:
+    """错题列表查询。
+
+    cause_type / kp_id 都用 EXISTS：JOIN 会在一条错题命中多个知识点时
+    产生重复行，分页与 count 一起失真（与 S4-1 build_questions_query 同因）。
+    kp_id 命中「题目挂载的知识点」或「诊断结论里的知识点」任一即可。
+    """
+    stmt = (
+        select(Mistake, Question)
+        .join(Question, Question.id == Mistake.question_id)
+        .where(Mistake.user_id == user_id)
+    )
+    if filters.status:
+        stmt = stmt.where(Mistake.status == filters.status)
+    if filters.cause_type:
+        stmt = stmt.where(
+            exists().where(
+                MistakeAnalysis.mistake_id == Mistake.id,
+                MistakeAnalysis.cause_type == filters.cause_type,
+            )
+        )
+    if filters.kp_id is not None:
+        stmt = stmt.where(
+            exists().where(
+                QuestionKp.question_id == Mistake.question_id,
+                QuestionKp.kp_id == filters.kp_id,
+            )
+            | exists().where(
+                MistakeAnalysis.mistake_id == Mistake.id,
+                MistakeAnalysis.kp_ids.contains([filters.kp_id]),
+            )
+        )
+    if filters.created_from is not None:
+        stmt = stmt.where(Mistake.created_at >= filters.created_from)
+    if filters.created_to is not None:
+        stmt = stmt.where(Mistake.created_at <= filters.created_to)
+    return stmt
+
+
+def list_mistakes(
+    session: Session,
+    *,
+    user_id: int,
+    filters: MistakeFilters,
+    page: PageParams,
+    sort: SortParams,
+) -> PageData[MistakeSummaryOut]:
+    stmt = apply_sort(
+        build_mistakes_query(user_id=user_id, filters=filters),
+        sort_by=sort.sort_by,
+        order=sort.order,
+        allowed=SORTABLE,
+        default_sort="created_at",
+    )
+    # 同一秒录入的错题没有唯一 tiebreaker 时翻页会重复/漏行（S4-1 踩过）。
+    stmt = stmt.order_by(Mistake.id.desc())
+    result = paginate_sa(session, stmt, params=Params(page=page.page, size=page.page_size))
+    rows = list(result.items)
+    if not rows:
+        # 空页没有 id 可批查，直接返回，省掉两条 IN 查询。
+        return PageData(items=[], total=result.total, page=result.page, page_size=result.size)
+
+    mistake_ids = [mistake.id for mistake, _ in rows]
+    question_ids = [question.id for _, question in rows]
+    # 一页各一次 IN 批查，替代逐行 _kp_names/_analysis_of 的 2N 条 SQL（d-8）。
+    kp_rows = session.execute(
+        select(QuestionKp.question_id, KnowledgePoint.name)
+        .join(KnowledgePoint, KnowledgePoint.id == QuestionKp.kp_id)
+        .where(QuestionKp.question_id.in_(question_ids))
+        .order_by(QuestionKp.question_id, QuestionKp.weight.desc())
+    ).all()
+    kp_names: dict[int, list[str]] = {}
+    for question_id, name in kp_rows:
+        kp_names.setdefault(question_id, []).append(name)
+
+    analyses = {
+        analysis.mistake_id: analysis
+        for analysis in session.scalars(
+            select(MistakeAnalysis).where(MistakeAnalysis.mistake_id.in_(mistake_ids))
+        )
+    }
+
+    items: list[MistakeSummaryOut] = []
+    for mistake, question in rows:
+        analysis = analyses.get(mistake.id)
+        items.append(
+            MistakeSummaryOut(
+                id=mistake.id,
+                question_id=mistake.question_id,
+                status=mistake.status,
+                correct_streak=mistake.correct_streak,
+                stem_excerpt=question.stem_md[:EXCERPT_LEN],
+                subject_id=question.subject_id,
+                qtype=question.qtype,
+                difficulty=question.difficulty,
+                kp_names=kp_names.get(question.id, []),
+                cause_type=analysis.cause_type if analysis else None,
+                has_image=mistake.image_file_id is not None,
+                created_at=mistake.created_at,
+                last_review_at=mistake.last_review_at,
+            )
+        )
+    return PageData(items=items, total=result.total, page=result.page, page_size=result.size)

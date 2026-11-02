@@ -12,6 +12,7 @@ from app.models.mistake import Mistake
 from app.models.question import Question
 from app.schemas.mistake import MistakeCreateIn, MistakeUpdateIn
 from app.services import mistake_service
+from app.utils.pagination import PageParams, SortParams
 
 
 class _Rows:
@@ -326,3 +327,106 @@ def test_stats_applies_date_range_to_all_queries():
     for statement in plain.execute_statements:
         sql = str(statement.compile(compile_kwargs={"literal_binds": False}))
         assert "created_at" not in sql
+
+
+def _compiled(statement) -> str:
+    return str(statement.compile(compile_kwargs={"literal_binds": False}))
+
+
+def test_build_query_always_filters_owner():
+    stmt = mistake_service.build_mistakes_query(
+        user_id=7, filters=mistake_service.MistakeFilters()
+    )
+    assert "mistakes.user_id" in _compiled(stmt)
+
+
+def test_build_query_cause_filter_uses_exists_not_join():
+    stmt = mistake_service.build_mistakes_query(
+        user_id=1, filters=mistake_service.MistakeFilters(cause_type="计算失误")
+    )
+    sql = _compiled(stmt)
+    assert "EXISTS" in sql.upper()
+    # 只允许 JOIN questions；JOIN mistake_analyses 会因一题多条诊断放大行数。
+    assert "JOIN mistake_analyses" not in sql
+
+
+def test_build_query_kp_filter_uses_exists():
+    stmt = mistake_service.build_mistakes_query(
+        user_id=1, filters=mistake_service.MistakeFilters(kp_id=137)
+    )
+    sql = _compiled(stmt)
+    assert "EXISTS" in sql.upper()
+    assert "question_kps" in sql
+    assert "mistake_analyses.kp_ids @>" in sql
+
+
+def test_build_query_date_range_bounds():
+    session_from = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    session_to = datetime(2026, 11, 30, tzinfo=timezone.utc)
+    stmt = mistake_service.build_mistakes_query(
+        user_id=1,
+        filters=mistake_service.MistakeFilters(created_from=session_from, created_to=session_to),
+    )
+    # select(Mistake, Question) 的列清单里也有 mistakes.created_at，
+    # 只看 WHERE 才能数清上下界各一次。
+    where_sql = _compiled(stmt.whereclause)
+    assert where_sql.count("mistakes.created_at") == 2
+
+
+def test_list_mistakes_rejects_unknown_sort_field():
+    session = FakeSession()
+    with pytest.raises(InvalidParamError):
+        mistake_service.list_mistakes(
+            session,
+            user_id=1,
+            filters=mistake_service.MistakeFilters(),
+            page=PageParams(page=1, page_size=20),
+            sort=SortParams(sort_by="hack", order="desc"),
+        )
+
+
+def test_list_mistakes_returns_rows_with_kp_names(monkeypatch):
+    mistake = _mistake()
+    question = _question()
+    monkeypatch.setattr(
+        mistake_service,
+        "paginate_sa",
+        lambda session, stmt, params: type(
+            "Page", (), {"items": [(mistake, question)], "total": 1, "page": 1, "size": 20}
+        )(),
+    )
+    # d-8：一页两条批量查询——先 kp 行（execute），再 analyses（scalars）。
+    session = FakeSession(rows_results=[[(65, "函数的单调性")]], scalars_results=[[]])
+    data = mistake_service.list_mistakes(
+        session,
+        user_id=1,
+        filters=mistake_service.MistakeFilters(),
+        page=PageParams(page=1, page_size=20),
+        sort=SortParams(),
+    )
+    assert data.total == 1
+    assert data.items[0].kp_names == ["函数的单调性"]
+    assert data.items[0].stem_excerpt.startswith("已知函数")
+
+
+def test_list_mistakes_empty_page_skips_batch_queries(monkeypatch):
+    monkeypatch.setattr(
+        mistake_service,
+        "paginate_sa",
+        lambda session, stmt, params: type(
+            "Page", (), {"items": [], "total": 0, "page": 1, "size": 20}
+        )(),
+    )
+    session = FakeSession(rows_results=[[(65, "不该被查")]], scalars_results=[["不该被消费"]])
+    data = mistake_service.list_mistakes(
+        session,
+        user_id=1,
+        filters=mistake_service.MistakeFilters(),
+        page=PageParams(page=1, page_size=20),
+        sort=SortParams(),
+    )
+    assert data.items == []
+    assert data.total == 0
+    # 空页没有 id 可批查，KP 与诊断两条 IN 查询都不该发出。
+    assert session.execute_statements == []
+    assert session.scalars_results == [["不该被消费"]]
