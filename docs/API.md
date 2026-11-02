@@ -121,8 +121,9 @@
 - 权限：`student`（其他角色 403/40300）
 - 类型：同步上传返回 + 后台异步解析（S2-8 起：上传成功后自动入队 `parse.document`）
 - 请求：`multipart/form-data`，字段名 `file`；可选 query `parse`（默认 `true`）。
-  `parse=false` 仅用于编辑器图片：只接受 `image/*`，新记录直接 `parse_status=done`、
-  `parse_progress=100`、`parse_finished_at=now`，不入队解析；非图片返回 `422/42200`。
+  `parse=false` 表示只存原件：允许图片（编辑器插图）与 PDF/DOCX（试卷原件，切题由 `question.extract` 负责，不建笔记）。
+  新记录直接 `parse_status=done`、`parse_progress=100`、`parse_finished_at=now`，不入队解析；
+  其他类型返回 `422/42200`（S4-1 起由“仅图片”放宽）。
   去重命中返回已有记录且不改其解析状态。
 - 成功：`Envelope[FileUploadOut]`
   - 首次：**201**，`deduped=false`
@@ -384,6 +385,114 @@
 - 出参：`204` 无响应体
 - 备注：依赖 `messages` / `message_citations` 的数据库级联
 - 错误：404/40400；401/40100；403/40300
+
+## 5.5 题库与试卷切题（S4-1 定稿）
+
+> 题库为**公共语料**（`questions` 无 `user_id`）：任何登录用户可读全部题目；写限创建者本人或 teacher/admin。
+> 枚举：`qtype` = `单选` / `多选` / `填空` / `解答`；`origin` = `textbook` / `exam` / `mock` / `upload` / `ai`（TEXT + CHECK）。
+> 判重两道闸（命中任一即视为同一题）：规范化题干 `stem_hash` 命中 `UNIQUE(subject_id, stem_hash)`，或题干向量余弦 ≥ 0.92。
+
+### POST /api/v1/questions/import
+- 权限：登录用户；`student` 的 `origin` 只能是 `upload`（其他值 `403/40300`）
+- 类型：异步任务（`question.extract`，用 §3.5 的 `GET /api/v1/tasks/{task_id}` 轮询，不新增任务查询接口）
+- 请求：`multipart/form-data`，字段名 `file`（`.pdf` / `.docx`）；query `subject_id`（必填，正整数）、`origin`（默认 `upload`）
+- 成功：**202** `Envelope[TaskOut]`：`id` / `name`（`question.extract`）/ `status`（`pending`）/ `created_at`
+- 原件：落 `files` 表（`parse=false`，`parse_status=done`、`parse_progress=100`），不入 `parse.document`；试卷不写笔记、不切片、不进检索池
+- 任务结果 `result`（`status=succeeded` 后）：
+
+```json
+{"file_id": 96, "subject_id": 7, "detected_count": 20, "expected_count": 20,
+ "created": 20, "duplicated": 0,
+ "failed_items": [{"index": 13, "reason": "题目抽取失败（已重试 2 次）：选择题至少需要 2 个选项"}],
+ "degraded": false, "warnings": [], "elapsed_ms": 131948}
+```
+
+- 备注：`failed_items` 只装**单题**失败（`index` 为卷面题号，1-based；`reason` 截断到 200 字），任务仍 `succeeded`；`degraded=true` 表示规则切分不可信、改用 `mode=block` 逐块抽取；整卷无文本 / 扫描版 / 全部题目抽取失败（含一个题号都没切出）时任务 `failed`，`error` 写明原因
+- 错误：`400/40000` 缺 `file` / 非 PDF 或 DOCX / 非法 `origin`；`403/40300` 学生用了非 `upload` 的 `origin`；`404/40400` 学科不存在；`422/42200` 缺 `subject_id`；`500/50000`「任务队列不可用」（沿用 S2-7，spec 原写 `503/50300`，以本契约为准）
+
+### GET /api/v1/questions
+- 权限：登录用户（公共题库，不按 `user_id` 过滤）
+- 类型：同步（分页）
+- 入参：
+
+  | 参数 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | page / page_size | int | 否 | 同 §0（默认 1 / 20，1–100） |
+  | subject_id | int | 否 | 学科 id |
+  | qtype | string | 否 | `单选` / `多选` / `填空` / `解答` |
+  | kp_id | int | 否 | 只出挂了该知识点的题（`EXISTS` 子查询，一题多知识点不产生重复行） |
+  | origin | string | 否 | 题目来源 |
+  | mine | bool | 否 | `true` 只看自己创建的题（实现为布尔 `mine`，前端传 `mine=true`；spec 原写 `created_by=me`） |
+  | verified | bool | 否 | 答案是否来自卷面 |
+  | keyword | string | 否 | 题干子串（`ILIKE`，`%`/`_` 已转义） |
+  | source_file_id | int | 否 | 只出某份导入试卷的题 |
+  | sort_by | string | 否 | 白名单 `created_at` / `id` / `difficulty`，默认 `created_at` |
+  | order | string | 否 | `asc` / `desc`，默认 `desc` |
+
+- 出参：`Envelope[PageData[QuestionSummary]]`
+- `QuestionSummary`：`id` / `subject_id` / `qtype` / `difficulty` / `origin` / `verified` / `stem_md` / `source_file_id` / `created_by` / `created_at` / `kp_names`（`list[str]`，一页一次 `IN` 批查填充，按 `question_kps.weight` 降序）
+- 示例：
+
+```json
+{"code": 0, "message": "ok", "trace_id": "4f1c…",
+ "data": {"items": [{"id": 12, "subject_id": 7, "qtype": "单选", "difficulty": 2,
+                     "origin": "upload", "verified": true,
+                     "stem_md": "1. 已知函数 $f(x)=x^2-2x$，则 $f(x)$ 的最小值为（  ）",
+                     "source_file_id": 96, "created_by": 18,
+                     "created_at": "2026-11-03T02:41:07.218738Z",
+                     "kp_names": ["一元二次函数"]}],
+          "total": 20, "page": 1, "page_size": 20}}
+```
+
+- 错误：`422/42200` 分页越界 / 排序字段非白名单（message 列可选字段）
+
+### GET /api/v1/questions/{question_id}
+- 权限：登录用户
+- 类型：同步
+- 出参：`Envelope[QuestionDetail]`
+- `QuestionDetail` = `QuestionSummary` + `options_json` / `answer_md` / `analysis_md` / `stem_latex` / `tags` / `kps`
+- `kps[]` 元素：`{kp_id, kp_name, kp_code, weight}`，按 `weight` 降序
+- 备注：**没有 `kp_ids` 字段**；前端从 `kps[].kp_id` 取（spec 原提过 `kp_ids`，以本契约为准）
+- 错误：`404/40400`「题目不存在」
+
+### POST /api/v1/questions
+- 权限：登录用户；`student` 的 `origin` 只能 `upload`（否则 `403/40300`）
+- 类型：同步，**201**
+- 入参：`{subject_id, stem_md(≥5), options?(list[{key,text}]), answer_md?, analysis_md?, qtype, difficulty(1–5), kp_ids?, origin?(默认 upload), tags?}`
+- 行为：规范化题干 → 判重（命中 `409/40900`）→ 一次 embedding → 落库；`kp_ids` 为人工指定，直接写 `question_kps(weight=1.0)`，不参与自动对齐；`verified` 固定 `false`（人工录入没有卷面答案来源）
+- 出参：`Envelope[QuestionDetail]`
+- 错误：`409/40900`「题目已存在（题库里已有同一道题）」；`404/40400` 学科不存在；`422/42200` 字段非法 / 知识点不存在或不属于该学科
+
+### PATCH /api/v1/questions/{question_id}
+- 权限：创建者本人 / teacher / admin（否则 `403/40300`）
+- 类型：同步（部分更新）
+- 入参：`stem_md` / `options` / `answer_md` / `analysis_md` / `qtype` / `difficulty` / `kp_ids` / `origin` / `tags` / `verified` 任选，只改传入字段；`options=null` 表示清空选项
+- 行为：题干规范化后变化 → 重算 `stem_hash` + `embedding` + 自动重新对齐知识点（`kp_names=[]`），先做哈希判重（撞其他题 → `409/40900`）；`kp_ids` 传数组则整体替换为人工关联（`weight=1.0`），传空数组清空
+- 出参：`Envelope[QuestionDetail]`
+- 错误：`403/40300`；`404/40400`；`409/40900`；`422/42200`
+
+### POST /api/v1/questions/{question_id}/split
+- 权限：同 PATCH
+- 类型：同步
+- 入参：`{"split_at": "2."}`（1–50 字）；在题干中**首次出现**该标记处切开，标记保留在第二题开头
+- 行为：两半各自重算 hash/embedding 并自动对齐知识点；判重时用 `exclude_ids` 排除原题（原题仍在库，拆出的子串与原题余弦 ≥0.92，不排除会把自己判成重复）；成功后原题硬删（连带 `question_kps`）
+- 出参：`Envelope[list[QuestionDetail]]`（长度 2，顺序与原题干一致）
+- 错误：`422/42200` `split_at` 为空 / 题干中找不到该标记（或标记位于开头）/ 任一半去空白后 < 5 字；`409/40900` 拆出的题已存在于题库 / 原题被错题本引用；`403/40300`；`404/40400`
+
+### POST /api/v1/questions/merge
+- 权限：同 PATCH，且对**全部** id 都有权（任一题无权 → `403/40300`）
+- 类型：同步
+- 入参：`{"ids": [a, b]}`（2–10 个；去重后仍须 ≥2）
+- 行为：按 id 升序拼接题干（空行分隔），答案与解析按同序拼接（跳过空值）；`subject_id` / `qtype` / `origin` / `created_by` / `source_file_id` 取 id 最小的题，`difficulty` 取其中最大值，`verified` 为全部为真才为真，`options_json` / `tags` 置空；新题重算 hash/embedding 并自动对齐；判重 `exclude_ids` 排除全部源题；成功后源题硬删
+- 出参：`Envelope[QuestionDetail]`
+- 错误：`422/42200` 少于 2 个 / 不属于同一学科（spec 原写 `400/40000`，实现按 `InvalidParamError` 统一 422）；`409/40900` 合并后的题目已存在于题库 / 源题被错题本引用；`403/40300`；`404/40400`
+
+### DELETE /api/v1/questions/{question_id}
+- 权限：同 PATCH
+- 类型：同步（硬删）
+- 出参：**204** 无响应体
+- 行为：同一事务删除 `question_kps` 关联；`mistakes` 表存在时先查引用（S4-2 建表后自动生效，S4-1 阶段用 `has_table` 守卫跳过）
+- 错误：`403/40300`；`404/40400`；`409/40900`「题目已被错题本引用，不能删除、合并或拆分」
 
 ## 6. 错题本
 

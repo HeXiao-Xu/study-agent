@@ -660,6 +660,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **可复用**：图片/PDF 试卷的**识别环节复用 S1-1 的解析适配器**，不要另写一套；入口只做"调适配器 → 写 questions 表"
 - **验收**：一份真实试卷切出 20 道题，公式可渲染、答案对得上；重复导入同一份卷子不产生重复题
 - **坑**：**AI 切题会漏题、串题**。前端必须提供"题目可编辑 + 手动新增/合并/拆分"，别指望全自动
+- **实施记录（2026-11-03）**：spec/plan 见 `docs/spec/s4-1-question-bank.md`、`docs/plan/s4-1-question-bank.md`；迁移 `0009_s4_1` 建 `questions/question_kps`，`ai/extract` 规则预切 + 单题结构化，两道闸判重（`stem_hash` 唯一 + 余弦 0.92），知识点改为 LLM 在向量 top-10 候选内选择；8 个新接口 + 复用 `GET /tasks/{task_id}`；前端导入页/审题页与「04 题库」导航。真机（真实 Qwen + 本人自编 20 题卷）：任务 id 98 `succeeded`，`detected/expected/created=20`、`duplicated=0`、`failed_items=[]`，**132.5s**；二次导入 `created=0/duplicated=20`、**80.3s**；知识点 **20/20 题、32 条链接**；拆分 200→2 题、原题 404；合并 200→新题 id 45、挂 3 条 KP；删除 204 且 `question_kps` 无残留；难度非法 422、PNG 400。后端 **853 passed, 1 warning**，前端 **122 passed / 30 files**。真机发现拆分/合并会把源题自身判成重复（409），已加 `exclude_ids` 修复，见 D-044。
 
 #### S4-2 错题录入 + 状态机
 - **产出**：mistakes 表、`api/v1/mistakes.py`
@@ -1021,7 +1022,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [x] S3-9 抽查扩展到线上链路 + 三种配置对照
 
 ## 阶段 4：错题与知识图谱（M3）
-[ ] S4-1 题库表 + 试卷切题
+[x] S4-1 题库表 + 试卷切题
 [ ] S4-2 错题录入 + 状态机
 [ ] S4-3 错因诊断服务 ★关键
 [ ] S4-4 变式题生成 + 复算自检
