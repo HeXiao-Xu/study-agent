@@ -8,6 +8,8 @@ from app.models.knowledge_point import KnowledgePoint
 from app.models.llm_call_log import LLMCallLog
 from app.models.message import Message
 from app.models.message_citation import MessageCitation
+from app.models.mistake import Mistake
+from app.models.mistake_analysis import MistakeAnalysis
 from app.models.note import Note
 from app.models.note_chunk import NoteChunk
 from app.models.note_kp import NoteKp
@@ -28,6 +30,8 @@ __all__ = [
     "LLMCallLog",
     "Message",
     "MessageCitation",
+    "Mistake",
+    "MistakeAnalysis",
     "Note",
     "NoteChunk",
     "NoteKp",

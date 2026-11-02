@@ -16,8 +16,8 @@ FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\simsun.ttc",
     r"C:\Windows\Fonts\NotoSansCJKsc-Regular.otf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]
 STEM = "1．已知函数 $f(x)=x^{2}-4x+3$。\n（1）求函数的对称轴；\n（2）当 $x\\in[0,3]$ 时，求 $f(x)$ 的最大值与最小值。"
 ANSWER = "我的作答：对称轴 x=2；最大值 3，最小值 -1。"

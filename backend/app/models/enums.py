@@ -88,3 +88,27 @@ def in_check(column: str, values: Iterable[str]) -> str:
     """渲染 `<column> IN ('a', 'b')`；StrEnum 成员经 f-string 取到值本身。"""
     joined = ", ".join(f"'{value}'" for value in values)
     return f"{column} IN ({joined})"
+
+
+class MistakeStatus(StrEnum):
+    """错题状态机（SCHEMA §10.7 固定中文值）。"""
+
+    TODO = "待订正"
+    CORRECTED = "已订正"
+    MASTERED = "已掌握"
+
+
+class CauseType(StrEnum):
+    """错因分类（方案 6.3 六类 + 作答缺失时的 unknown）。"""
+
+    CONCEPT = "概念不清"
+    CALC = "计算失误"
+    READING = "审题偏差"
+    METHOD = "方法不当"
+    FORGET = "知识遗忘"
+    TIME = "时间不足"
+    UNKNOWN = "unknown"
+
+
+MISTAKE_STATUSES: tuple[str, ...] = tuple(item.value for item in MistakeStatus)
+CAUSE_TYPES: tuple[str, ...] = tuple(item.value for item in CauseType)
