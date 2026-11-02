@@ -65,6 +65,25 @@ class LLMCallStatus(StrEnum):
     FAILED = "failed"
 
 
+class QuestionOrigin(StrEnum):
+    """questions.origin：题目来源（SCHEMA §5.1）。"""
+
+    TEXTBOOK = "textbook"
+    EXAM = "exam"
+    MOCK = "mock"
+    UPLOAD = "upload"
+    AI = "ai"
+
+
+class QuestionType(StrEnum):
+    """questions.qtype：题型。用中文值，与卷面/前端展示一致（SCHEMA §10.6）。"""
+
+    SINGLE = "单选"
+    MULTIPLE = "多选"
+    BLANK = "填空"
+    SOLUTION = "解答"
+
+
 def in_check(column: str, values: Iterable[str]) -> str:
     """渲染 `<column> IN ('a', 'b')`；StrEnum 成员经 f-string 取到值本身。"""
     joined = ", ".join(f"'{value}'" for value in values)
