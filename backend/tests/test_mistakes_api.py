@@ -128,12 +128,36 @@ def test_photo_and_stats_routes_declared_before_path_param() -> None:
 
 
 # --------------------------------------------------------------------------
-# 权限闸门
+# 权限闸门：8 条路由全部先过认证，未带 Bearer 一律 401（包括 /photo 带文件）
 # --------------------------------------------------------------------------
-def test_list_requires_auth() -> None:
+_AUTH_CASES = [
+    ("get", "/api/v1/mistakes", {}),
+    ("post", "/api/v1/mistakes", {"json": {"question_id": 1}}),
+    ("get", "/api/v1/mistakes/1", {}),
+    ("patch", "/api/v1/mistakes/1", {"json": {"my_answer_md": "待订正"}}),
+    ("post", "/api/v1/mistakes/1/review", {"json": {"correct": True}}),
+    ("delete", "/api/v1/mistakes/1", {}),
+    (
+        "post",
+        "/api/v1/mistakes/photo",
+        {
+            "files": {"file": ("shot.png", b"\x89PNG\r\n\x1a\n" + b"0" * 8, "image/png")},
+            "params": {"subject_id": 7},
+        },
+    ),
+    ("get", "/api/v1/mistakes/stats", {}),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "kwargs"),
+    _AUTH_CASES,
+    ids=["list", "create", "detail", "update", "review", "delete", "photo", "stats"],
+)
+def test_every_route_requires_auth(method, path, kwargs) -> None:
     # 只覆盖 get_db、不覆盖 get_current_user：无 Bearer 时由 get_current_user 拦下。
     app.dependency_overrides[get_db] = lambda: FakeSession()
-    response = TestClient(app).get("/api/v1/mistakes")
+    response = TestClient(app).request(method, path, **kwargs)
     assert response.status_code == 401
     assert response.json()["code"] == 40100
 
@@ -159,6 +183,21 @@ def test_create_from_question_returns_201(monkeypatch) -> None:
     assert body["data"]["created"] is True
     assert body["data"]["id"] == 11
     assert captured == {"user_id": 42, "question_id": 11}
+
+
+def test_create_duplicate_returns_201_with_created_false(monkeypatch) -> None:
+    """同题重复录入是复用语义（spec D-1）：契约允许 201，不能退化成 409。"""
+    results = iter([(_detail(11), True), (_detail(11), False)])
+    monkeypatch.setattr(
+        mistake_service, "create_from_question", lambda *args, **kwargs: next(results)
+    )
+    client = _client()
+    first = client.post("/api/v1/mistakes", json={"question_id": 11})
+    second = client.post("/api/v1/mistakes", json={"question_id": 11})
+    assert first.status_code == 201
+    assert first.json()["data"]["created"] is True
+    assert second.status_code == 201
+    assert second.json()["data"]["created"] is False
 
 
 # --------------------------------------------------------------------------
@@ -227,8 +266,10 @@ def test_list_passes_filters_and_user_to_service(monkeypatch) -> None:
     monkeypatch.setattr(mistake_service, "list_mistakes", fake_list)
     response = _client(user=_user(user_id=42)).get(
         "/api/v1/mistakes",
-        params={"status": "待订正", "kp_id": 3, "page": 2, "page_size": 5,
-                "sort_by": "status", "order": "asc"},
+        params={"status": "待订正", "cause_type": "概念不清", "kp_id": 3,
+                "created_from": "2026-01-01T00:00:00+00:00",
+                "created_to": "2026-06-01T00:00:00+00:00",
+                "page": 2, "page_size": 5, "sort_by": "status", "order": "asc"},
     )
     body = response.json()
     assert response.status_code == 200
@@ -237,8 +278,12 @@ def test_list_passes_filters_and_user_to_service(monkeypatch) -> None:
     assert body["data"]["page_size"] == 5
     assert body["data"]["items"][0]["status"] == "待订正"
     assert captured["user_id"] == 42
-    assert captured["filters"].status == "待订正"
-    assert captured["filters"].kp_id == 3
+    filters = captured["filters"]
+    assert filters.status == "待订正"
+    assert filters.cause_type == "概念不清"
+    assert filters.kp_id == 3
+    assert filters.created_from == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert filters.created_to == datetime(2026, 6, 1, tzinfo=timezone.utc)
     assert captured["sort"].sort_by == "status"
     assert captured["sort"].order == "asc"
 
@@ -289,6 +334,12 @@ def test_patch_rejects_null_status() -> None:
     assert response.json()["code"] == 42200
 
 
+def test_patch_rejects_invalid_status_value() -> None:
+    response = _client().patch("/api/v1/mistakes/1", json={"status": "已通关"})
+    assert response.status_code == 422
+    assert response.json()["code"] == 42200
+
+
 # --------------------------------------------------------------------------
 # POST /mistakes/{id}/review —— 复习记录
 # --------------------------------------------------------------------------
@@ -330,3 +381,18 @@ def test_delete_returns_204_without_body(monkeypatch) -> None:
     assert response.status_code == 204
     assert response.content == b""
     assert captured == {"user_id": 42, "mistake_id": 7}
+
+
+@pytest.mark.parametrize(
+    "mistake_id", [999, 7], ids=["not-found", "other-owner"]
+)
+def test_delete_missing_or_foreign_returns_404(monkeypatch, mistake_id) -> None:
+    """不存在与他人错题在 service 统一成 NotFoundError，路由不能变 500。"""
+
+    def boom(*args, **kwargs):
+        raise NotFoundError("错题不存在")
+
+    monkeypatch.setattr(mistake_service, "delete_mistake", boom)
+    response = _client(user=_user(user_id=42)).delete(f"/api/v1/mistakes/{mistake_id}")
+    assert response.status_code == 404
+    assert response.json()["code"] == 40400
