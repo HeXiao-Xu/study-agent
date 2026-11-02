@@ -78,12 +78,20 @@ const router = createRouter({
         {
           path: 'mistakes',
           name: 'mistakes',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '错题本',
-            task: 'S4-3',
-            description: '按知识点归集错题，定位薄弱环节。',
-          },
+          component: () => import('@/views/mistakes/MistakeListView.vue'),
+          meta: { title: '错题本', nav: 'mistakes' },
+        },
+        {
+          path: 'mistakes/new',
+          name: 'mistake-new',
+          component: () => import('@/views/mistakes/MistakeNewView.vue'),
+          meta: { title: '录入错题', nav: 'mistakes' },
+        },
+        {
+          path: 'mistakes/:id(\\d+)',
+          name: 'mistake-detail',
+          component: () => import('@/views/mistakes/MistakeDetailView.vue'),
+          meta: { title: '错题详情', nav: 'mistakes' },
         },
         {
           path: 'plan',
