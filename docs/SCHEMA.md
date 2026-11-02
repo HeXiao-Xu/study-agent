@@ -232,26 +232,27 @@ erDiagram
 | origin | TEXT | 否 | — | 来源，§10.5 | idx(origin) ⚠ |
 | source_file_id | BIGINT | 是 | — | 试卷切题来源文件 | — |
 | stem_md | TEXT | 否 | — | 题干 Markdown | — |
-| stem_latex | TEXT | 是 | — | 题干 LaTeX | — |
+| stem_latex | TEXT | 是 | — | 题干 LaTeX（整题可由单个公式表达时才填，否则 NULL） | — |
+| stem_hash | TEXT | 否 | — | 规范化题干的 sha256：去题号/空白/全角标点后计算（S4-1 定稿，判重第一道闸） | UNIQUE(subject_id, stem_hash) ✅ |
 | options_json | JSONB | 是 | — | 选项（选择题） | — |
 | answer_md | TEXT | 是 | — | 答案 | — |
 | analysis_md | TEXT | 是 | — | 解析 | — |
 | qtype | TEXT | 否 | — | 题型，§10.6 | idx ⚠ |
 | difficulty | SMALLINT | 否 | — | 难度 1–5 ✅ | — |
 | tags | TEXT[] ⚠ | 是 | — | 标签 | GIN ⚠建议 |
-| verified | BOOLEAN | 否 | false | AI 生成题是否通过复算自检（方案 6.5） | — |
+| verified | BOOLEAN | 否 | false | 答案是否可信（方案 6.5 + S4-1）：AI 生成题须通过复算自检；切题导入时卷面自带答案记 true，答案由 LLM 补写记 false | — |
 | embedding | VECTOR(1024) | 是 | — | 语义向量（判重/检索） | HNSW ⚠建议 |
 | created_by | BIGINT | 是 | — | 创建人（AI 生成为 NULL ⚠） | — |
 
-> 判重规则（方案 5.3）：规范化题干哈希 + 向量相似度 > 0.92。
+> 判重规则（方案 5.3，S4-1 定稿）：两道闸，命中任一即跳过、不重复入库——① `stem_hash` 命中 `UNIQUE(subject_id, stem_hash)`；② `embedding` 余弦相似度 ≥ 0.92。新人库题目必须同时写入 `stem_hash` 与 `embedding`。
 
 ### 5.2 question_kps
 
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
 |---|---|---|---|---|---|
-| question_id | BIGINT | 否 | — | 题目 | 复合 PK(question_id, kp_id) ⚠ |
-| kp_id | BIGINT | 否 | — | 知识点 | idx ⚠ |
-| weight | NUMERIC | 是 | — | 关联权重（组卷配额用） | — |
+| question_id | BIGINT | 否 | — | 题目 | 复合 PK(question_id, kp_id) ✅ |
+| kp_id | BIGINT | 否 | — | 知识点 | idx(kp_id) ✅（S4-1 定稿，组卷按知识点选题） |
+| weight | NUMERIC | 是 | — | 关联权重：S4-1 存对齐打分的原始分（0–1），组卷配额用 | — |
 
 ### 5.3 mistakes
 
