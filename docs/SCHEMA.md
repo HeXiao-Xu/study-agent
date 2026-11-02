@@ -243,6 +243,7 @@ erDiagram
 | verified | BOOLEAN | 否 | false | 答案是否可信（方案 6.5 + S4-1）：AI 生成题须通过复算自检；切题导入时卷面自带答案记 true，答案由 LLM 补写记 false | — |
 | embedding | VECTOR(1024) | 是 | — | 语义向量（判重/检索） | HNSW ⚠建议 |
 | created_by | BIGINT | 是 | — | 创建人（AI 生成为 NULL ⚠） | — |
+| created_at | TIMESTAMPTZ | 否 | now() | 入库时间（S4-1 定稿：题库列表默认按它倒序，需与迁移 0009 一致） | — |
 
 > 判重规则（方案 5.3，S4-1 定稿）：两道闸，命中任一即跳过、不重复入库——① `stem_hash` 命中 `UNIQUE(subject_id, stem_hash)`；② `embedding` 余弦相似度 ≥ 0.92。新人库题目必须同时写入 `stem_hash` 与 `embedding`。
 
