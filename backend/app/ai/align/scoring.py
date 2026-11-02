@@ -1,6 +1,8 @@
 """S2-10 对齐打分（方案 6.2）：0.6 向量 + 0.3 关键词 + 0.1 树位置先验。"""
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -72,3 +74,31 @@ def tree_prior(
     if level <= 2:
         return 0.3
     return 0.0
+
+
+def cosine(left: Sequence[float], right: Sequence[float]) -> float:
+    """余弦相似度，clamp 到 [0, 1]；维度不符 / 空 / 零向量一律 0。
+
+    clamp 的原因：向量库返回的 cos 偶尔 >1（浮点误差），
+    而下游 0.6*cos+0.3*keyword+0.1*prior 的权重和就超过 1 了。
+    """
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    dot = sum(a * b for a, b in zip(left, right))
+    norm = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))
+    if norm == 0:
+        return 0.0
+    return max(0.0, min(1.0, dot / norm))
+
+
+def ancestor_names(node: object, by_id: Mapping[int, object]) -> list[str]:
+    """沿 parent_id 上溯，返回由近到远的祖先名；guard 10 层防脏数据成环。"""
+    names: list[str] = []
+    parent_id = getattr(node, "parent_id", None)
+    guard = 0
+    while parent_id is not None and parent_id in by_id and guard < 10:
+        parent = by_id[parent_id]
+        names.append(parent.name)
+        parent_id = getattr(parent, "parent_id", None)
+        guard += 1
+    return names

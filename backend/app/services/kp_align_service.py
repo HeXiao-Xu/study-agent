@@ -1,7 +1,6 @@
 """S2-10 对齐服务：向量补全、候选召回、打分落库、待确认队列。"""
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
@@ -16,8 +15,10 @@ from app.ai.align.scoring import (
     PENDING_THRESHOLD,
     TOP_K,
     Candidate,
+    ancestor_names,
     classify,
     combine,
+    cosine,
     keyword_score,
     tree_prior,
 )
@@ -83,14 +84,14 @@ def retrieve_candidates(
     text = _note_text(note)
     scored: list[Candidate] = []
     for row in rows:
-        ancestors = _ancestor_names(row, by_id)
+        ancestors = ancestor_names(row, by_id)
         scored.append(
             Candidate(
                 kp_id=row.id,
                 code=row.code,
                 name=row.name,
                 path=" / ".join([*reversed(ancestors), row.name]),
-                cos=_cosine(note_vec, list(row.embedding or [])),
+                cos=cosine(note_vec, list(row.embedding or [])),
                 keyword=keyword_score(row.name, text),
                 prior=tree_prior(row.level, ancestors, list(note.tags or []), note.title),
             )
@@ -265,27 +266,5 @@ def _note_text(note: Note) -> str:
 
 
 def _embedding_text(kp: KnowledgePoint, by_id: dict[int, KnowledgePoint]) -> str:
-    path = " / ".join([*reversed(_ancestor_names(kp, by_id)), kp.name])
+    path = " / ".join([*reversed(ancestor_names(kp, by_id)), kp.name])
     return f"{path} {kp.description or ''}".strip()
-
-
-def _ancestor_names(kp: KnowledgePoint, by_id: dict[int, KnowledgePoint]) -> list[str]:
-    names: list[str] = []
-    parent_id = kp.parent_id
-    guard = 0
-    while parent_id is not None and parent_id in by_id and guard < 10:
-        parent = by_id[parent_id]
-        names.append(parent.name)
-        parent_id = parent.parent_id
-        guard += 1
-    return names
-
-
-def _cosine(left: list[float], right: list[float]) -> float:
-    if not left or not right or len(left) != len(right):
-        return 0.0
-    dot = sum(a * b for a, b in zip(left, right))
-    norm = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))
-    if norm == 0:
-        return 0.0
-    return max(0.0, min(1.0, dot / norm))
