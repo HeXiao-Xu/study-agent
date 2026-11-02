@@ -30,6 +30,14 @@ vi.mock('vue-router', () => ({
 const createObjectURL = vi.fn(() => 'blob:mock-image')
 const revokeObjectURL = vi.fn()
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 function detail(overrides: Partial<MistakeDetail> = {}): MistakeDetail {
   return {
     id: 12,
@@ -89,6 +97,7 @@ beforeEach(() => {
     { id: 7, name: '高中数学', code: 'math', stage: '高中' },
   ])
   vi.mocked(getMistake).mockResolvedValue(detail())
+  vi.mocked(getImageBlob).mockReset()
   vi.mocked(updateMistake).mockResolvedValue(detail())
   vi.mocked(reviewMistake).mockResolvedValue(detail({ status: '已订正', correct_streak: 1 }))
   vi.mocked(deleteMistake).mockResolvedValue(undefined)
@@ -143,6 +152,38 @@ describe('MistakeDetailView', () => {
     expect(getImageBlob).toHaveBeenCalledWith(88)
     const image = wrapper.get('[data-testid="image-preview"]')
     expect(image.attributes('src')).toBe('blob:mock-image')
+  })
+
+  it('图片请求挂起时不阻塞题干与复习按钮', async () => {
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({ image_url: '/api/v1/files/88/image', has_image: true }),
+    )
+    vi.mocked(getImageBlob).mockReturnValue(new Promise<Blob>(() => {}))
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="detail-loading"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="stem"]').text()).toContain('$f(x)=x^2-4x+3$')
+    expect(wrapper.find('[data-testid="review-correct"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="image-loading"]').exists()).toBe(true)
+  })
+
+  it('卸载后迟到的图片响应会立即回收 blob URL', async () => {
+    const pending = deferred<Blob>()
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({ image_url: '/api/v1/files/88/image', has_image: true }),
+    )
+    vi.mocked(getImageBlob).mockReturnValue(pending.promise)
+    const wrapper = makeWrapper()
+    await flushPromises()
+    expect(createObjectURL).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+    pending.resolve(new Blob(['png'], { type: 'image/png' }))
+    await flushPromises()
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-image')
   })
 
   it('保存作答传 myAnswerMd，清空时传 null', async () => {

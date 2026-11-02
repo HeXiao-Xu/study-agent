@@ -7,7 +7,7 @@
  * 因此改为经 http.ts 拦截器带 token 的 `getImageBlob` 取图，再转 objectURL 渲染，
  * 离开页面时 revoke，避免 blob 泄漏。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MdPreview } from 'md-editor-v3'
@@ -47,6 +47,10 @@ const saving = ref(false)
 const reviewing = ref(false)
 const deleting = ref(false)
 const imageObjectUrl = ref('')
+const imageLoading = ref(false)
+/** 卸载标记与取图序号：迟到的图片响应既不能渲染，也不能留下未回收的 blob URL。 */
+let disposed = false
+let imageSeq = 0
 
 const analysis = computed<MistakeAnalysisView | null>(() =>
   detail.value?.analysis ? (detail.value.analysis as MistakeAnalysisView) : null,
@@ -88,15 +92,26 @@ function releaseImage(): void {
 }
 
 async function loadImage(url: string | null): Promise<void> {
+  const seq = ++imageSeq
   releaseImage()
+  imageLoading.value = false
   if (!url) return
   const match = IMAGE_PATH_RE.exec(url)
   if (!match) return
+  imageLoading.value = true
   try {
     const blob = await getImageBlob(Number(match[1]))
-    imageObjectUrl.value = URL.createObjectURL(blob)
+    const objectUrl = URL.createObjectURL(blob)
+    // 卸载或已切到别的错题：这张图不会再有 DOM 使用，立即 revoke，避免 blob 泄漏。
+    if (disposed || seq !== imageSeq) {
+      URL.revokeObjectURL(objectUrl)
+      return
+    }
+    imageObjectUrl.value = objectUrl
   } catch {
     // http.ts 已统一提示；图片失败不影响题干与复习操作。
+  } finally {
+    if (!disposed && seq === imageSeq) imageLoading.value = false
   }
 }
 
@@ -110,12 +125,15 @@ async function load(): Promise<void> {
   loadError.value = false
   try {
     const data = await getMistake(Number(route.params.id))
+    if (disposed) return
     applyDetail(data)
-    await loadImage(data.image_url)
+    // 图片单独异步加载：慢图不能把题干/作答/复习按钮一起挡在「加载中」后面。
+    loading.value = false
+    void loadImage(data.image_url)
   } catch {
+    if (disposed) return
     // http.ts 已统一提示；404 与越权在这里统一成同一条文案，不泄露存在性。
     loadError.value = true
-  } finally {
     loading.value = false
   }
 }
@@ -187,7 +205,20 @@ onMounted(() => {
   void loadSubjects()
 })
 
-onBeforeUnmount(releaseImage)
+// 列表 → 详情 → 详情（同组件复用）时 params 变化，需要按新 id 重取。
+watch(
+  () => route.params.id,
+  () => {
+    if (disposed) return
+    void load()
+  },
+)
+
+onBeforeUnmount(() => {
+  disposed = true
+  imageSeq += 1
+  releaseImage()
+})
 </script>
 
 <template>
@@ -237,8 +268,17 @@ onBeforeUnmount(releaseImage)
             <strong>{{ option.key }}.</strong> <span>{{ option.text }}</span>
           </li>
         </ul>
-        <div v-if="imageObjectUrl" class="image-wrap">
-          <img :src="imageObjectUrl" class="image" data-testid="image-preview" alt="错题原图">
+        <div v-if="imageLoading || imageObjectUrl" class="image-wrap">
+          <div v-if="imageLoading" class="image-loading" data-testid="image-loading">
+            图片加载中…
+          </div>
+          <img
+            v-else
+            :src="imageObjectUrl"
+            class="image"
+            data-testid="image-preview"
+            alt="错题原图"
+          >
         </div>
       </el-card>
 
@@ -400,6 +440,15 @@ onBeforeUnmount(releaseImage)
 
 .image-wrap {
   margin-top: 16px;
+}
+
+.image-loading {
+  padding: 24px;
+  color: var(--app-text-tertiary);
+  font-size: 13px;
+  text-align: center;
+  border: 1px dashed var(--app-border);
+  border-radius: var(--app-radius-md);
 }
 
 .image {

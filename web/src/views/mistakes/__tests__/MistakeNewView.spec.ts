@@ -1,7 +1,7 @@
 /** S4-2 拍照录入页：提交参数、轮询成功跳转、低置信提示、失败重试与兜底。 */
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MistakeNewView from '@/views/mistakes/MistakeNewView.vue'
 import { listSubjects } from '@/api/kp'
@@ -20,13 +20,21 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }))
 const createObjectURL = vi.fn(() => 'blob:mock-preview')
 const revokeObjectURL = vi.fn()
 
-function taskOut(): TaskOut {
+function taskOut(id = 33): TaskOut {
   return {
-    id: 33,
+    id,
     name: 'mistake.recognize',
     status: 'pending',
     created_at: '2026-11-03T00:00:00Z',
   }
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
 }
 
 function recognize(overrides: Partial<MistakeRecognizeResult> = {}): MistakeRecognizeResult {
@@ -100,6 +108,10 @@ beforeEach(() => {
   ])
   vi.mocked(createMistakeFromPhoto).mockResolvedValue(taskOut())
   vi.mocked(getTask).mockResolvedValue(taskDetail())
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('MistakeNewView', () => {
@@ -177,5 +189,110 @@ describe('MistakeNewView', () => {
 
     expect(createMistakeFromPhoto).toHaveBeenCalledTimes(2)
     expect(vi.mocked(createMistakeFromPhoto).mock.calls[1]?.[0]).toBe(file)
+  })
+
+  it('卸载后迟到的识别结果不再导航或弹提示', async () => {
+    const pending = deferred<TaskDetail>()
+    vi.mocked(getTask).mockReturnValue(pending.promise)
+    const warning = vi.spyOn(ElMessage, 'warning').mockReturnValue({} as never)
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    await fillAndSubmit(wrapper, new File(['fake-image'], 'shot.png', { type: 'image/png' }))
+    wrapper.unmount()
+    pending.resolve(taskDetail({ result: recognize({ low_confidence: true }) }))
+    await flushPromises()
+
+    expect(pushMock).not.toHaveBeenCalled()
+    expect(warning).not.toHaveBeenCalled()
+    warning.mockRestore()
+  })
+
+  it('轮询 404 立即失败，不空转到 60 秒超时', async () => {
+    vi.mocked(getTask).mockRejectedValue({ response: { status: 404 } })
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    await fillAndSubmit(wrapper, new File(['fake-image'], 'shot.png', { type: 'image/png' }))
+
+    expect(wrapper.get('[data-testid="submit-error"]').text()).toContain('任务不存在或已过期')
+    expect(wrapper.find('[data-testid="retry"]').exists()).toBe(true)
+  })
+
+  it('轮询每 4 秒查询一次，且轮询中不可换图', async () => {
+    vi.mocked(getTask).mockResolvedValue(taskDetail({ status: 'running', result: null }))
+    const wrapper = makeWrapper()
+    await flushPromises()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      await fillAndSubmit(wrapper, new File(['fake-image'], 'shot.png', { type: 'image/png' }))
+      expect(getTask).toHaveBeenCalledTimes(1)
+      expect(wrapper.get('input[type="file"]').attributes('disabled')).toBeDefined()
+
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(getTask).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(getTask).toHaveBeenCalledTimes(3)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('约 60 秒仍无终态时转「识别超时」并停止轮询', async () => {
+    vi.mocked(getTask).mockResolvedValue(taskDetail({ status: 'running', result: null }))
+    const wrapper = makeWrapper()
+    await flushPromises()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      await fillAndSubmit(wrapper, new File(['fake-image'], 'shot.png', { type: 'image/png' }))
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(wrapper.get('[data-testid="submit-error"]').text()).toContain('识别超时')
+      expect(wrapper.find('[data-testid="retry"]').exists()).toBe(true)
+
+      const calls = vi.mocked(getTask).mock.calls.length
+      await vi.advanceTimersByTimeAsync(8000)
+      expect(vi.mocked(getTask).mock.calls.length).toBe(calls)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('重试后旧任务迟到的成功响应不会导航', async () => {
+    const stale = deferred<TaskDetail>()
+    let staleCalls = 0
+    vi.mocked(createMistakeFromPhoto)
+      .mockResolvedValueOnce(taskOut(33))
+      .mockResolvedValueOnce(taskOut(44))
+    vi.mocked(getTask).mockImplementation((id) => {
+      if (id === 44) return new Promise<TaskDetail>(() => {})
+      staleCalls += 1
+      return staleCalls === 1
+        ? stale.promise
+        : Promise.resolve(
+            taskDetail({ status: 'failed', result: null, error: '第一次识别失败' }),
+          )
+    })
+    const wrapper = makeWrapper()
+    await flushPromises()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      await fillAndSubmit(wrapper, new File(['fake-image'], 'shot.png', { type: 'image/png' }))
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(wrapper.get('[data-testid="submit-error"]').text()).toContain('第一次识别失败')
+
+      await wrapper.get('[data-testid="retry"]').trigger('click')
+      await flushPromises()
+      expect(createMistakeFromPhoto).toHaveBeenCalledTimes(2)
+
+      stale.resolve(taskDetail())
+      await flushPromises()
+      expect(pushMock).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
   })
 })

@@ -37,6 +37,8 @@ const errorText = ref('')
 
 let pollTimer: number | undefined
 let elapsedTimer: number | undefined
+/** 卸载后迟到的请求不许再导航/弹提示（用户可能已点「改用题库选题」离开）。 */
+let disposed = false
 
 const busy = computed(() => phase.value === 'submitting' || phase.value === 'polling')
 const canSubmit = computed(() => file.value !== null && subjectId.value !== null && !busy.value)
@@ -98,14 +100,29 @@ function onSucceeded(detail: TaskDetail): void {
   void router.push('/mistakes/' + result.mistake_id)
 }
 
+/** 从 axios 错误上取 HTTP 状态；业务错误（HTTP 200 + code）没有 response，返回 null。 */
+function httpStatus(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null || !('response' in error)) return null
+  const response = (error as { response?: { status?: number } }).response
+  return typeof response?.status === 'number' ? response.status : null
+}
+
 async function poll(id: number): Promise<void> {
   let detail: TaskDetail
   try {
     detail = await getTask(id)
-  } catch {
-    // 单次查询失败（网络抖动）不终止轮询，下一轮再试；http.ts 已统一提示。
+  } catch (error) {
+    if (disposed) return
+    if (httpStatus(error) === 404) {
+      // 任务被清理/过期后继续轮询只会空转到超时，直接给可重试的失败态。
+      stopTimers()
+      phase.value = 'failed'
+      errorText.value = '任务不存在或已过期，请重试'
+    }
+    // 其他错误按网络抖动处理，下一轮再试；http.ts 已统一提示。
     return
   }
+  if (disposed) return
   // 重试会换新任务：旧任务迟到的响应不能改写新任务的状态。
   if (taskId.value !== id || phase.value !== 'polling') return
   if (detail.status === 'succeeded') {
@@ -150,8 +167,11 @@ async function submit(): Promise<void> {
   try {
     // 空作答不 append（api/mistakes.ts 已按空串跳过），避免把空串当学生作答落库。
     const task = await createMistakeFromPhoto(picked, subject, myAnswerMd.value.trim() || undefined)
+    // 请求期间页面已卸载：不要再起轮询（否则定时器与导航都泄漏到已离开的页面）。
+    if (disposed) return
     startPolling(task.id)
   } catch {
+    if (disposed) return
     // http.ts 已统一弹错；停在可重试态并保留文件与参数。
     phase.value = 'failed'
     errorText.value = '提交失败，请重试或改用题库选题。'
@@ -176,6 +196,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   stopTimers()
   releasePreview()
 })
@@ -214,6 +235,7 @@ onBeforeUnmount(() => {
               type="file"
               accept="image/png,image/jpeg"
               capture="environment"
+              :disabled="busy"
               @change="onFileChange"
             />
             <span class="tip">支持 JPG / PNG；手机端会直接调起相机。</span>
