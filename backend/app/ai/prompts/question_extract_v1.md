@@ -1,4 +1,4 @@
-你是高中数学试卷切题与结构化专家。请把下面的卷面原文转成 JSON。
+你是{{ subject_name }}试卷切题与结构化专家。请把下面的卷面原文转成 JSON。
 
 【学科】{{ subject_name }}
 {% if section_qtype %}【本大题卷面题型】{{ section_qtype }}{% endif %}
@@ -14,7 +14,7 @@
    - analysis_md：解析。卷面自带【解析】段落就照抄该段内容（去掉【解析】标记），也可简要写步骤；没有就 null。
    - qtype：单选 | 多选 | 填空 | 解答（以题目实际为准，可以纠正卷面大题的题型提示）。
    - difficulty：1–5 的整数，1 最易、5 最难。
-   - kp_names：本题考查的知识点名称数组，用高中数学通用叫法（如"函数的单调性"、"等差数列的通项"）。
+   - kp_names：本题考查的知识点名称数组，用{{ subject_name }}通用叫法（如"函数的单调性"、"等差数列的通项"）。
    - answer_source：paper | ai | none。
 4. 禁止臆造题号、分值、页码、考试时间。
 5. 禁止合并或拆分题目：一道题一条记录。
@@ -22,7 +22,7 @@
 {% if mode == "single" %}
 7. 输入是单道题，questions 长度必须为 1。
 {% else %}
-7. 输入是整卷文本，请按题号切分成多道题，总数应接近 {{ expected_count }} 条。
+7. 输入是整卷文本，请按题号切分成多道题{% if expected_count %}，总数应接近 {{ expected_count }} 条{% endif %}。
 {% endif %}
 
 【卷面原文】

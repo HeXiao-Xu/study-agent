@@ -20,6 +20,7 @@ from app.ai.parse import parse_document
 from app.core.exceptions import ForbiddenError, InvalidParamError
 from app.core.storage import get_storage
 from app.models.file import File
+from app.models.subject import Subject
 from app.services import question_service
 from app.tasks.registry import register
 
@@ -53,6 +54,7 @@ def question_extract_task(session: Session, payload: dict[str, Any]) -> dict[str
         raise InvalidParamError("未识别到任何题目：" + "；".join(split.warnings))
 
     llm = get_llm_client()
+    subject_name = _subject_name(session, subject_id)
     mode = "block" if split.degraded else "single"
     warnings = list(split.warnings)
     items: list[ExtractedQuestion] = []
@@ -62,6 +64,7 @@ def question_extract_task(session: Session, payload: dict[str, Any]) -> dict[str
             result: ExtractResult = extract_questions(
                 question_text=block.text,
                 mode=mode,
+                subject_name=subject_name,
                 section_qtype=block.section_qtype,
                 expected_count=split.expected_count if split.degraded else 1,
                 llm_client=llm,
@@ -117,6 +120,15 @@ def question_extract_task(session: Session, payload: dict[str, Any]) -> dict[str
         extra={"file_id": file.id, "created_count": created},
     )
     return result_payload
+
+
+def _subject_name(session: Session, subject_id: int) -> str:
+    """题面提示必须跟学科走；查不到学科不阻断切题，回退默认并留 WARNING。"""
+    subject = session.get(Subject, subject_id)
+    if subject is None:
+        logger.warning("question_extract_subject_missing", extra={"subject_id": subject_id})
+        return "高中数学"
+    return subject.name
 
 
 def _load_text(file: File) -> str:

@@ -114,6 +114,12 @@ def extract_questions(
     llm_client: LLMClient | None = None,
     max_retries: int = MAX_RETRIES,
 ) -> ExtractResult:
+    """单题 / 整卷兜底共用入口。
+
+    整卷兜底（mode="block"）一次要吐 20 道题的 JSON，2048 token 必然截断成
+    非法 JSON，重试也只是重复超限；所以预算按题数伸缩（每题约 400 token），
+    并封顶 8192。单题模式维持 1500，不为一道题付整卷预算。
+    """
     if not (question_text or "").strip():
         raise QuestionExtractError("题目文本为空")
     if mode not in {"single", "block"}:
@@ -127,7 +133,9 @@ def extract_questions(
         question_text=question_text,
     )
     messages = [LLMMessage(role="user", content=prompt)]
-    max_tokens = 2048 if mode == "block" else 1500
+    max_tokens = (
+        1500 if mode == "single" else min(8192, max(2048, 400 * (expected_count or 1)))
+    )
     last_error: Exception | None = None
     for _ in range(max_retries + 1):
         response = client.chat(messages, temperature=0.0, max_tokens=max_tokens, scene=SCENE)
