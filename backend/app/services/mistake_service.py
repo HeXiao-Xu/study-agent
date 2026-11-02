@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
+from fastapi import UploadFile
 from fastapi_pagination import Params
 from fastapi_pagination.ext.sqlalchemy import paginate as paginate_sa
 from sqlalchemy import Select, exists, func, select
@@ -15,12 +17,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, InvalidParamError, NotFoundError
+from app.core.storage import ObjectStorage
+from app.models.async_task import AsyncTask
 from app.models.enums import MISTAKE_STATUSES, MistakeStatus
 from app.models.knowledge_point import KnowledgePoint
 from app.models.mistake import Mistake
 from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
+from app.models.user import User
 from app.schemas.common import PageData
 from app.schemas.mistake import (
     CauseCountOut,
@@ -34,7 +39,11 @@ from app.schemas.mistake import (
     OptionOut,
     StatusCountOut,
 )
+from app.services import file_service, question_service
 from app.utils.pagination import PageParams, SortParams, apply_sort
+
+if TYPE_CHECKING:
+    from app.tasks.queue import TaskQueue
 
 # --------------------------------------------------------------------------
 # 常量区（Task 6/7 的 TASK_* / 阈值常量继续加在这里）
@@ -43,6 +52,7 @@ TASK_MISTAKE_RECOGNIZE = "mistake.recognize"
 MASTERY_STREAK = 2
 LOW_CONFIDENCE = 0.5
 EXCERPT_LEN = 120
+IMAGE_MIMES = frozenset({"image/png", "image/jpeg", "image/webp"})
 SORTABLE: dict[str, object] = {
     "created_at": Mistake.created_at,
     "last_review_at": Mistake.last_review_at,
@@ -104,15 +114,16 @@ def _analysis_of(session: Session, mistake_id: int) -> MistakeAnalysisOut | None
     )
 
 
-def _reset_reentry(mistake: Mistake, *, payload: MistakeCreateIn, answer: str | None) -> None:
+def _reset_reentry(mistake: Mistake, *, my_answer_md: str | None, answer: str | None) -> None:
     """复用并重置（spec D-1）：录入不是复习，last_review_at 只由复习用例推进。
 
-    新建分支因并发撞唯一约束后也复用它，保证「复用」只有这一处定义。
+    新建分支因并发撞唯一约束后也复用它，保证「复用」只有这一处定义；
+    拍照任务（task_create_mistake）复用同一语义，只是不 commit。
     """
     mistake.status = MistakeStatus.TODO.value
     mistake.correct_streak = 0
-    if payload.my_answer_md is not None:
-        mistake.my_answer_md = payload.my_answer_md
+    if my_answer_md is not None:
+        mistake.my_answer_md = my_answer_md
     if answer is not None:
         mistake.correct_answer_md = answer
 
@@ -167,7 +178,7 @@ def create_from_question(
     )
     answer = payload.correct_answer_md if payload.correct_answer_md is not None else question.answer_md
     if existing is not None:
-        _reset_reentry(existing, payload=payload, answer=answer)
+        _reset_reentry(existing, my_answer_md=payload.my_answer_md, answer=answer)
         mistake, created = existing, False
         _commit(session)
     else:
@@ -192,12 +203,77 @@ def create_from_question(
             )
             if winner is None:
                 raise ConflictError("错题录入冲突，请重试") from None
-            _reset_reentry(winner, payload=payload, answer=answer)
+            _reset_reentry(winner, my_answer_md=payload.my_answer_md, answer=answer)
             mistake, created = winner, False
             _commit(session)
         else:
             created = True
     return _detail(session, mistake=mistake), created
+
+
+def start_photo_recognize(
+    session: Session,
+    *,
+    owner: User,
+    subject_id: int,
+    upload: UploadFile,
+    storage: ObjectStorage,
+    queue: "TaskQueue",
+    my_answer_md: str | None = None,
+) -> AsyncTask:
+    """拍照录入入口：存图（不解析）→ 入队识别（spec D-5）。
+
+    学科校验留在路由（与 `/questions/import` 同口径）：这里只负责存图与入队，
+    真正的学科名在 handler 里查，查不到时按 S4-1 口径回退默认值。
+    """
+    record, _ = file_service.upload_file(
+        session, owner=owner, upload=upload, storage=storage, parse=False
+    )
+    if record.mime not in IMAGE_MIMES:
+        raise InvalidParamError("只能上传 PNG/JPEG/WebP 图片")
+    return task_service.create_task(
+        session,
+        owner=owner,
+        name=TASK_MISTAKE_RECOGNIZE,
+        payload={
+            "file_id": record.id,
+            "subject_id": subject_id,
+            "user_id": owner.id,
+            "my_answer_md": my_answer_md,
+        },
+        queue=queue,
+    )
+
+
+def task_create_mistake(
+    session: Session,
+    *,
+    user_id: int,
+    question_id: int,
+    my_answer_md: str | None,
+    correct_answer_md: str | None,
+    image_file_id: int | None,
+) -> tuple[Mistake, bool]:
+    """任务内建错题：不 commit（runner 统一提交），复用语义同 create_from_question。"""
+    existing = session.scalar(
+        select(Mistake).where(Mistake.user_id == user_id, Mistake.question_id == question_id)
+    )
+    if existing is not None:
+        _reset_reentry(existing, my_answer_md=my_answer_md, answer=correct_answer_md)
+        if image_file_id is not None:
+            existing.image_file_id = image_file_id
+        return existing, False
+    mistake = Mistake(
+        user_id=user_id,
+        question_id=question_id,
+        my_answer_md=my_answer_md,
+        correct_answer_md=correct_answer_md,
+        image_file_id=image_file_id,
+        status=MistakeStatus.TODO.value,
+        correct_streak=0,
+    )
+    session.add(mistake)
+    return mistake, True
 
 
 def get_detail(session: Session, *, user_id: int, mistake_id: int) -> MistakeDetailOut:
@@ -412,3 +488,12 @@ def list_mistakes(
             )
         )
     return PageData(items=items, total=result.total, page=result.page, page_size=result.size)
+
+
+# --------------------------------------------------------------------------
+# 循环导入收尾
+# --------------------------------------------------------------------------
+# tasks 包 import 时会反向加载 handler，而 mistake_recognize 在模块级读取
+# 本模块的 TASK_MISTAKE_RECOGNIZE。若在文件顶部导入 task_service，
+# 循环回到本模块时常量还没定义（部分初始化的模块），因此放到文件末尾。
+from app.services import task_service  # noqa: E402
