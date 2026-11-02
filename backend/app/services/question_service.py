@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -15,9 +17,20 @@ from sqlalchemy import Select, exists, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.ai.align.scoring import AUTO_THRESHOLD, ancestor_names, combine, cosine, keyword_score, tree_prior
+from app.ai.align.extractor import AlignError, LlmMatch, extract_matches
+from app.ai.align.scoring import (
+    AUTO_THRESHOLD,
+    LLM_MIN_CONFIDENCE,
+    Candidate,
+    ancestor_names,
+    combine,
+    cosine,
+    keyword_score,
+    tree_prior,
+)
 from app.ai.embedding import EmbeddingClient, get_embedding_client
 from app.ai.extract.question_extractor import ExtractedQuestion
+from app.ai.llm import LLMError
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidParamError, NotFoundError
 from app.models.enums import QuestionOrigin, UserRole
 from app.models.knowledge_point import KnowledgePoint
@@ -41,8 +54,11 @@ TASK_QUESTION_EXTRACT = "question.extract"
 DUPLICATE_COS_THRESHOLD = 0.92
 ALIGN_TOP_K = 10
 ALIGN_MAX_LINKS = 3
+ALIGN_NOTE_TITLE = "试题"
 MANUAL_WEIGHT = Decimal("1.000000")
 MAX_STEM_CHARS = 2000
+
+logger = logging.getLogger(__name__)
 
 _QUESTION_NO_PREFIX = re.compile(r"^\s*\d{1,2}\s*[.．、]\s*")
 _EDGE_PUNCT = "，。；：、,.！？!?；:"
@@ -101,8 +117,15 @@ def align_knowledge_points(
     vec: list[float],
     top_k: int = ALIGN_TOP_K,
     limit: int = ALIGN_MAX_LINKS,
+    matcher: Callable[..., list[LlmMatch]] | None = None,
 ) -> list[tuple[int, Decimal]]:
-    """复用 S2-10 公式；LLM 的 kp_names 只当关键词信号，绝不直接落库。"""
+    """向量召回 top-k 后由 LLM 在候选内选择：题目没有独立 prompt，借用 kp_align 的。
+
+    为什么不沿用 0.75 门禁：题目↔知识点名的余弦上限只有 ~0.55，0.6*cos 最多 0.33，
+    AUTO_THRESHOLD=0.75 对题目语料不可达（实测 20 题最高 0.688）。0.75 在 S2-10 是
+    笔记对齐的「自动确认」线，不是「挂不挂」的线；挂载由 LLM 在候选内判断，
+    combine 分只决定权重与排序。
+    """
     rows = [
         row
         for row in session.scalars(
@@ -115,15 +138,52 @@ def align_knowledge_points(
     by_id = {row.id: row for row in rows}
     anchors = " ".join(kp_names)
     ranked = sorted(rows, key=lambda row: cosine(vec, list(row.embedding or [])), reverse=True)[:top_k]
-    picked: list[tuple[int, Decimal]] = []
-    for row in ranked:
-        score = combine(
-            cosine(vec, list(row.embedding or [])),
-            max(keyword_score(row.name, text), keyword_score(row.name, anchors)),
-            tree_prior(row.level, ancestor_names(row, by_id), list(kp_names), text[:200]),
+    candidates = [
+        Candidate(
+            kp_id=row.id,
+            code=row.code,
+            name=row.name,
+            path=" / ".join([*reversed(ancestor_names(row, by_id)), row.name]),
+            cos=cosine(vec, list(row.embedding or [])),
+            keyword=max(keyword_score(row.name, text), keyword_score(row.name, anchors)),
+            prior=tree_prior(row.level, ancestor_names(row, by_id), list(kp_names), text[:200]),
         )
+        for row in ranked
+    ]
+    choose = matcher or extract_matches
+    try:
+        matches = choose(note_title=ALIGN_NOTE_TITLE, note_excerpt=text, candidates=candidates)
+    except (AlignError, LLMError) as exc:
+        # LLM 不可用不能连累建题：退回确定性打分，题目照样落库，只是链接可能偏少。
+        logger.warning(
+            "question_align_llm_failed",
+            extra={"subject_id": subject_id, "error": str(exc)},
+        )
+        return _align_by_score(candidates, limit=limit)
+    by_kp = {candidate.kp_id: candidate for candidate in candidates}
+    picked: list[tuple[int, Decimal]] = []
+    seen: set[int] = set()
+    for match in matches:
+        candidate = by_kp.get(match.kp_id)
+        if candidate is None or match.kp_id in seen:
+            continue
+        if match.confidence < LLM_MIN_CONFIDENCE:
+            continue
+        seen.add(match.kp_id)
+        picked.append(
+            (candidate.kp_id, Decimal(str(round(combine(candidate.cos, candidate.keyword, candidate.prior), 6))))
+        )
+    picked.sort(key=lambda item: item[1], reverse=True)
+    return picked[:limit]
+
+
+def _align_by_score(candidates: list[Candidate], *, limit: int) -> list[tuple[int, Decimal]]:
+    """LLM 失败时的兜底：仍按 S2-10 自动确认线，宁可少挂也不乱挂。"""
+    picked: list[tuple[int, Decimal]] = []
+    for candidate in candidates:
+        score = combine(candidate.cos, candidate.keyword, candidate.prior)
         if score >= AUTO_THRESHOLD:
-            picked.append((row.id, Decimal(str(round(score, 6)))))
+            picked.append((candidate.kp_id, Decimal(str(round(score, 6)))))
     picked.sort(key=lambda item: item[1], reverse=True)
     return picked[:limit]
 

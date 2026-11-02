@@ -1,11 +1,13 @@
 """S4-1 题库服务：判重两道闸、对齐阈值、权限、事务边界。"""
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.ai.align.extractor import AlignError, LlmMatch
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidParamError
 from app.models.knowledge_point import KnowledgePoint
 from app.models.question import Question
@@ -125,12 +127,26 @@ def test_check_duplicate_returns_none_when_far() -> None:
     assert question_service.check_duplicate(session, subject_id=1, stem_hash="new", vec=[1.0, 0.0]) is None
 
 
+def _matcher(*matches: LlmMatch):
+    """假 LLM：返回给定匹配，忽略 prompt 参数。"""
+
+    def _choose(**_: object) -> list[LlmMatch]:
+        return list(matches)
+
+    return _choose
+
+
 def test_align_keeps_only_high_score() -> None:
     related = _kp(1, "函数的单调性")
     unrelated = _kp(2, "立体几何", embedding=[0.0, 1.0])
     session = FakeSession(scalars_results=[[related, unrelated]])
     links = question_service.align_knowledge_points(
-        session, subject_id=1, text="已知函数的单调性，求最值", kp_names=["函数的单调性"], vec=[1.0, 0.0]
+        session,
+        subject_id=1,
+        text="已知函数的单调性，求最值",
+        kp_names=["函数的单调性"],
+        vec=[1.0, 0.0],
+        matcher=_matcher(LlmMatch(kp_id=1, confidence=0.9, evidence="单调性")),
     )
     assert [kp_id for kp_id, _ in links] == [1]
     assert links[0][1] >= Decimal("0.75")
@@ -140,7 +156,12 @@ def test_align_limits_to_three_links() -> None:
     kps = [_kp(index, "函数的单调性") for index in range(1, 6)]
     session = FakeSession(scalars_results=[kps])
     links = question_service.align_knowledge_points(
-        session, subject_id=1, text="函数的单调性", kp_names=["函数的单调性"], vec=[1.0, 0.0]
+        session,
+        subject_id=1,
+        text="函数的单调性",
+        kp_names=["函数的单调性"],
+        vec=[1.0, 0.0],
+        matcher=_matcher(*[LlmMatch(kp_id=index, confidence=0.9, evidence="x") for index in range(1, 6)]),
     )
     assert len(links) == 3
 
@@ -312,3 +333,66 @@ def test_create_question_rolls_back_when_commit_fails() -> None:
     with pytest.raises(RuntimeError):
         question_service.create_question(session, payload=payload, creator=_user(), embedder=FakeEmbedder())
     assert session.rollbacks == 1
+
+
+def test_align_uses_llm_selection_and_combine_weight() -> None:
+    related = _kp(1, "函数的单调性")
+    unrelated = _kp(2, "立体几何", embedding=[0.0, 1.0])
+    session = FakeSession(scalars_results=[[related, unrelated]])
+    links = question_service.align_knowledge_points(
+        session,
+        subject_id=1,
+        text="已知函数的单调性，求最值",
+        kp_names=["函数的单调性"],
+        vec=[1.0, 0.0],
+        matcher=_matcher(LlmMatch(kp_id=1, confidence=0.9, evidence="单调性")),
+    )
+    assert links == [(1, Decimal("0.93"))]
+
+
+def test_align_ignores_llm_kp_id_outside_candidates() -> None:
+    related = _kp(1, "函数的单调性")
+    session = FakeSession(scalars_results=[[related]])
+    links = question_service.align_knowledge_points(
+        session,
+        subject_id=1,
+        text="已知函数的单调性，求最值",
+        kp_names=["函数的单调性"],
+        vec=[1.0, 0.0],
+        matcher=_matcher(LlmMatch(kp_id=99, confidence=0.9, evidence="幻觉节点")),
+    )
+    assert links == []
+
+
+def test_align_ignores_llm_low_confidence() -> None:
+    related = _kp(1, "函数的单调性")
+    session = FakeSession(scalars_results=[[related]])
+    links = question_service.align_knowledge_points(
+        session,
+        subject_id=1,
+        text="已知函数的单调性，求最值",
+        kp_names=["函数的单调性"],
+        vec=[1.0, 0.0],
+        matcher=_matcher(LlmMatch(kp_id=1, confidence=0.3, evidence="不太确定")),
+    )
+    assert links == []
+
+
+def test_align_falls_back_to_score_when_llm_unavailable(caplog: pytest.LogCaptureFixture) -> None:
+    related = _kp(1, "函数的单调性")
+    session = FakeSession(scalars_results=[[related]])
+
+    def _boom(**_: object) -> list[LlmMatch]:
+        raise AlignError("LLM 不可用")
+
+    with caplog.at_level(logging.WARNING):
+        links = question_service.align_knowledge_points(
+            session,
+            subject_id=1,
+            text="已知函数的单调性，求最值",
+            kp_names=["函数的单调性"],
+            vec=[1.0, 0.0],
+            matcher=_boom,
+        )
+    assert links == [(1, Decimal("0.93"))]
+    assert any(record.getMessage() == "question_align_llm_failed" for record in caplog.records)
