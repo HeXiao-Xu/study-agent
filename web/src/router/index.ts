@@ -58,6 +58,18 @@ const router = createRouter({
           meta: { title: '知识库', nav: 'knowledge' },
         },
         {
+          path: 'questions',
+          name: 'questions',
+          component: () => import('@/views/questions/ReviewView.vue'),
+          meta: { title: '题库', nav: 'questions' },
+        },
+        {
+          path: 'questions/import',
+          name: 'question-import',
+          component: () => import('@/views/questions/ImportView.vue'),
+          meta: { title: '导入试卷', nav: 'questions' },
+        },
+        {
           path: 'qa',
           name: 'qa',
           component: () => import('@/views/qa/Chat.vue'),

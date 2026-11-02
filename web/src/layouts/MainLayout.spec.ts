@@ -32,6 +32,7 @@ async function mountLayout(path = '/notes') {
           { path: 'notes', name: 'notes', component: Dummy },
           { path: 'files', name: 'files', component: Dummy },
           { path: 'knowledge', name: 'knowledge', component: Dummy },
+          { path: 'questions', name: 'questions', component: Dummy },
           { path: 'qa', name: 'qa', component: Dummy },
           { path: 'mistakes', name: 'mistakes', component: Dummy },
           { path: 'plan', name: 'plan', component: Dummy },
@@ -55,9 +56,9 @@ describe('MainLayout', () => {
     localStorage.clear()
   })
 
-  it('renders six nav items', async () => {
+  it('renders seven nav items', async () => {
     const { wrapper } = await mountLayout()
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(6)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(7)
   })
 
   it('marks current route as aria-current', async () => {
