@@ -2,7 +2,7 @@
 
 三张图：
   clean     纯净白底题目图
-  rotated   旋转 7° + 高斯噪声（模拟手持拍摄）
+  rotated   旋转 7° + 轻度高斯模糊（模拟手持拍摄）
   answered  带「我的作答」手写体风格文本（用系统字体模拟，不冒充真实笔迹）
 """
 from __future__ import annotations

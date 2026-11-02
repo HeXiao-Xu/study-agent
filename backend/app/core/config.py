@@ -72,8 +72,11 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = 1200
     # --- 视觉（S4-2；拍照错题识别，走同一 DASHSCOPE_API_KEY）---
     vision_model: str = Field(
-        default="qwen-vl-max-latest",
-        description="多模态模型（S4-2 拍照错题识别），需支持 OpenAI 兼容的 image_url",
+        default="qwen3-vl-plus",
+        description=(
+            "多模态模型（S4-2 拍照错题识别），需支持 OpenAI 兼容的 image_url；"
+            "默认用本账号实测可用的 qwen3-vl-plus；若已开通 qwen-vl-max 系列可用 VISION_MODEL 覆盖"
+        ),
     )
     # 元/百万 token；北京区 qwen-plus 列表价，只用于估算展示
     llm_price_input_per_million: float = 0.8
