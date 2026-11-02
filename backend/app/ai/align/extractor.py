@@ -1,7 +1,6 @@
 """S2-10 LLM 候选内抽取：严格 JSON + Pydantic 校验 + 最多 2 次重试。"""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from pydantic import BaseModel, Field, ValidationError
 
 from app.ai.align.scoring import Candidate
+from app.ai.json_utils import loads_json_object
 from app.ai.llm import LLMClient, LLMMessage, get_llm_client
 
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "kp_align_v1.md"
@@ -74,7 +74,7 @@ def extract_matches(
             messages, temperature=0.0, max_tokens=800, scene="kp_align"
         )
         try:
-            output = AlignOutput.model_validate(_loads_json(response.text))
+            output = AlignOutput.model_validate(loads_json_object(response.text))
         except (ValueError, ValidationError) as exc:
             last_error = exc
             continue
@@ -87,15 +87,3 @@ def extract_matches(
             matches.append(LlmMatch(item.kp_id, item.confidence, item.evidence))
         return matches
     raise AlignError(f"知识点抽取失败（已重试 {max_retries} 次）：{last_error}")
-
-
-def _loads_json(text: str) -> dict:
-    clean = text.strip()
-    if clean.startswith("```"):
-        clean = clean.strip("`")
-        if clean.startswith("json"):
-            clean = clean[4:]
-    start, end = clean.find("{"), clean.rfind("}")
-    if start < 0 or end <= start:
-        raise ValueError("响应中没有 JSON 对象")
-    return json.loads(clean[start : end + 1])

@@ -1,0 +1,186 @@
+"""S4-1 题库服务：判重两道闸、对齐阈值、权限、事务边界。"""
+from __future__ import annotations
+
+from decimal import Decimal
+
+import pytest
+
+from app.core.exceptions import ConflictError, ForbiddenError
+from app.models.knowledge_point import KnowledgePoint
+from app.models.question import Question
+from app.models.question_kp import QuestionKp
+from app.models.subject import Subject
+from app.models.user import User
+from app.schemas.question import QuestionCreateIn
+from app.services import question_service
+
+
+class FakeSession:
+    """按调用顺序喂 scalar/scalars 结果：服务里的查询是确定的，顺序断言最直观。"""
+
+    def __init__(self, *, objects=None, scalar_results=None, scalars_results=None) -> None:
+        self.objects = objects or {}
+        self.scalar_results = list(scalar_results or [])
+        self.scalars_results = list(scalars_results or [])
+        self.added: list[object] = []
+        self.deleted: list[object] = []
+        self.commits = 0
+        self._next_id = 100
+
+    def get(self, entity, pk):
+        return self.objects.get((entity, pk))
+
+    def scalar(self, statement):
+        return self.scalar_results.pop(0) if self.scalar_results else None
+
+    def scalars(self, statement):
+        return self.scalars_results.pop(0) if self.scalars_results else []
+
+    def add(self, instance) -> None:
+        if getattr(instance, "id", None) is None:
+            self._next_id += 1
+            instance.id = self._next_id
+        self.added.append(instance)
+
+    def flush(self) -> None:
+        return None
+
+    def delete(self, instance) -> None:
+        self.deleted.append(instance)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
+class FakeEmbedder:
+    dim = 2
+    model = "fake-embed"
+
+    def __init__(self, vector: list[float] | None = None) -> None:
+        self.vector = vector or [1.0, 0.0]
+        self.calls: list[list[str]] = []
+
+    def encode(self, texts, *, on_batch=None):
+        self.calls.append(list(texts))
+        return [self.vector for _ in texts]
+
+
+def _user(role: str = "student", user_id: int = 1) -> User:
+    user = User(username=f"{role}_q", password_hash="hash", nickname="测试用户_1", grade="高一", role=role)
+    user.id = user_id
+    return user
+
+
+def _kp(kp_id: int, name: str, *, level: int = 2, parent_id: int | None = None,
+        embedding: list[float] | None = None) -> KnowledgePoint:
+    kp = KnowledgePoint(
+        subject_id=1, name=name, code=f"kp.{kp_id}", level=level,
+        parent_id=parent_id, embedding=embedding or [1.0, 0.0],
+    )
+    kp.id = kp_id
+    return kp
+
+
+def test_normalize_stem_strips_number_and_spaces() -> None:
+    assert question_service.normalize_stem("  12． 已知  函数 f(x)  ") == "已知函数f(x)"
+
+
+def test_normalize_stem_fullwidth_equals_halfwidth() -> None:
+    left = question_service.compute_stem_hash("1. 已知（a，b），求 a+b。")
+    right = question_service.compute_stem_hash("已知(a,b),求a+b")
+    assert left == right
+
+
+def test_stem_hash_changes_when_number_changes() -> None:
+    assert question_service.compute_stem_hash("1. 求 2+3") != question_service.compute_stem_hash("1. 求 2+4")
+
+
+def test_check_duplicate_hits_by_hash_first() -> None:
+    existing = Question(subject_id=1, stem_md="已知函数", stem_hash="h", qtype="填空", difficulty=3)
+    existing.id = 7
+    session = FakeSession(scalar_results=[existing])
+    hit = question_service.check_duplicate(session, subject_id=1, stem_hash="h", vec=[1.0, 0.0])
+    assert hit is existing
+
+
+def test_check_duplicate_falls_back_to_vector() -> None:
+    near = Question(subject_id=1, stem_md="已知函数 f(x)", stem_hash="other", qtype="填空", difficulty=3)
+    near.id = 8
+    near.embedding = [1.0, 0.0]
+    session = FakeSession(scalar_results=[None, near])
+    hit = question_service.check_duplicate(session, subject_id=1, stem_hash="new", vec=[1.0, 0.0])
+    assert hit is near
+
+
+def test_check_duplicate_returns_none_when_far() -> None:
+    far = Question(subject_id=1, stem_md="无关", stem_hash="other", qtype="填空", difficulty=3)
+    far.id = 9
+    far.embedding = [0.0, 1.0]
+    session = FakeSession(scalar_results=[None, far])
+    assert question_service.check_duplicate(session, subject_id=1, stem_hash="new", vec=[1.0, 0.0]) is None
+
+
+def test_align_keeps_only_high_score() -> None:
+    related = _kp(1, "函数的单调性")
+    unrelated = _kp(2, "立体几何", embedding=[0.0, 1.0])
+    session = FakeSession(scalars_results=[[related, unrelated]])
+    links = question_service.align_knowledge_points(
+        session, subject_id=1, text="已知函数的单调性，求最值", kp_names=["函数的单调性"], vec=[1.0, 0.0]
+    )
+    assert [kp_id for kp_id, _ in links] == [1]
+    assert links[0][1] >= Decimal("0.75")
+
+
+def test_align_limits_to_three_links() -> None:
+    kps = [_kp(index, "函数的单调性") for index in range(1, 6)]
+    session = FakeSession(scalars_results=[kps])
+    links = question_service.align_knowledge_points(
+        session, subject_id=1, text="函数的单调性", kp_names=["函数的单调性"], vec=[1.0, 0.0]
+    )
+    assert len(links) == 3
+
+
+def test_create_question_raises_conflict_on_duplicate() -> None:
+    existing = Question(subject_id=1, stem_md="已知", stem_hash="dup", qtype="填空", difficulty=3)
+    existing.id = 11
+    session = FakeSession(
+        objects={(Subject, 1): Subject(name="数学"), (Question, 11): existing},
+        scalar_results=[existing],
+    )
+    payload = QuestionCreateIn(subject_id=1, stem_md="1. 已知", qtype="填空", difficulty=3)
+    with pytest.raises(ConflictError):
+        question_service.create_question(session, payload=payload, creator=_user(), embedder=FakeEmbedder())
+    assert session.commits == 0
+
+
+def test_create_question_persists_and_links_manual_kps() -> None:
+    subject = Subject(name="数学")
+    session = FakeSession(
+        objects={(Subject, 1): subject},
+        scalar_results=[None, None],
+        scalars_results=[[7]],
+    )
+    payload = QuestionCreateIn(subject_id=1, stem_md="1. 已知函数 f(x)=x²，求 f(1)。",
+                               qtype="解答", difficulty=2, kp_ids=[7])
+    question = question_service.create_question(
+        session, payload=payload, creator=_user(), embedder=FakeEmbedder()
+    )
+    assert question.stem_hash == question_service.compute_stem_hash(payload.stem_md)
+    assert question.embedding == [1.0, 0.0]
+    links = [row for row in session.added if isinstance(row, QuestionKp)]
+    assert [(row.kp_id, row.weight) for row in links] == [(7, Decimal("1.000000"))]
+    assert session.commits == 1
+
+
+def test_ensure_can_edit_rejects_other_students_question() -> None:
+    question = Question(subject_id=1, stem_md="已知", stem_hash="h", qtype="填空", difficulty=3)
+    question.id = 5
+    question.created_by = 99
+    with pytest.raises(ForbiddenError):
+        question_service.ensure_can_edit(question, _user(role="student", user_id=1))
+
+
+def test_ensure_can_edit_allows_teacher() -> None:
+    question = Question(subject_id=1, stem_md="已知", stem_hash="h", qtype="填空", difficulty=3)
+    question.created_by = 99
+    question_service.ensure_can_edit(question, _user(role="teacher", user_id=1))
