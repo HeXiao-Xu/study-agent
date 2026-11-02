@@ -1,4 +1,4 @@
-/** S4-2 错题列表页：统计卡、筛选、复习/删除、空态与「从题库选题」弹窗。 */
+/** S4-2 错题列表页：渲染、行操作、空态、错因占位与「从题库选题」弹窗。 */
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,7 +17,6 @@ import type { KpTree } from '@/types/kp'
 import type {
   MistakeCreateResult,
   MistakeDetail,
-  MistakeFilters,
   MistakeStats,
   MistakeSummary,
 } from '@/types/mistakes'
@@ -119,8 +118,6 @@ const TREE: KpTree = {
   ],
 }
 
-type Reload = (next?: Partial<MistakeFilters>) => Promise<void>
-
 function makeWrapper() {
   return mount(MistakeListView, { global: { plugins: [ElementPlus] } })
 }
@@ -129,7 +126,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   pushMock.mockReset()
   vi.mocked(listMistakes).mockResolvedValue({
-    items: [summary(), summary({ id: 2, status: '已掌握', correct_streak: 3 })],
+    items: [
+      summary(),
+      summary({ id: 2, status: '已掌握', correct_streak: 3, cause_type: '概念不清' }),
+    ],
     total: 2,
     page: 1,
     page_size: 20,
@@ -166,48 +166,34 @@ describe('MistakeListView', () => {
     )
   })
 
-  it('状态筛选带正确参数并回到第 1 页', async () => {
-    const wrapper = makeWrapper()
-    await flushPromises()
-    const vm = wrapper.vm as unknown as { reload: Reload }
-
-    vi.mocked(listMistakes).mockClear()
-    await vm.reload({ page: 2 })
-    expect(vi.mocked(listMistakes).mock.calls.at(-1)?.[0]).toMatchObject({ page: 2 })
-
-    // Element Plus 下拉的 DOM 交互成本高，直接驱动暴露的 reload 更稳。
-    await wrapper.get('[data-testid="filter-status"]').trigger('change')
-    await vm.reload({ status: '待订正' })
-    expect(vi.mocked(listMistakes).mock.calls.at(-1)?.[0]).toMatchObject({
-      status: '待订正',
-      page: 1,
-    })
-  })
-
-  it('复习答对调用 reviewMistake(id, true) 并刷新列表', async () => {
+  it('复习答对调用 reviewMistake(id, true) 并同时刷新列表与统计', async () => {
     const wrapper = makeWrapper()
     await flushPromises()
 
     vi.mocked(listMistakes).mockClear()
+    vi.mocked(getMistakeStats).mockClear()
     await wrapper.get('[data-testid="row-1"] [data-testid="review-correct"]').trigger('click')
     await flushPromises()
 
     expect(reviewMistake).toHaveBeenCalledWith(1, true)
     expect(listMistakes).toHaveBeenCalledTimes(1)
+    expect(getMistakeStats).toHaveBeenCalledTimes(1)
   })
 
-  it('删除需二次确认，确认后调用 deleteMistake 并刷新', async () => {
+  it('删除需二次确认，确认后调用 deleteMistake 并同时刷新列表与统计', async () => {
     const confirm = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
     const wrapper = makeWrapper()
     await flushPromises()
 
     vi.mocked(listMistakes).mockClear()
+    vi.mocked(getMistakeStats).mockClear()
     await wrapper.get('[data-testid="row-1"] [data-testid="delete"]').trigger('click')
     await flushPromises()
 
     expect(confirm).toHaveBeenCalledTimes(1)
     expect(deleteMistake).toHaveBeenCalledWith(1)
     expect(listMistakes).toHaveBeenCalledTimes(1)
+    expect(getMistakeStats).toHaveBeenCalledTimes(1)
     confirm.mockRestore()
   })
 
@@ -222,6 +208,14 @@ describe('MistakeListView', () => {
     expect(confirm).toHaveBeenCalledTimes(1)
     expect(deleteMistake).not.toHaveBeenCalled()
     confirm.mockRestore()
+  })
+
+  it('行内「详情」跳转 /mistakes/{id}', async () => {
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="row-1"] [data-testid="detail"]').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/mistakes/1')
   })
 
   it('无错题时展示空态', async () => {
@@ -246,15 +240,15 @@ describe('MistakeListView', () => {
     expect(wrapper.findAll('[data-testid="row-2"] [data-testid="review-wrong"]')).toHaveLength(1)
   })
 
-  it('错因为空时展示 S4-3 诊断占位', async () => {
+  it('错因单元格：null 显示 S4-3 占位，有值显示错因名', async () => {
     const wrapper = makeWrapper()
     await flushPromises()
 
+    expect(wrapper.get('[data-testid="row-1-cause"]').text()).toBe('待 S4-3 诊断')
+    expect(wrapper.get('[data-testid="row-2-cause"]').text()).toBe('概念不清')
+    // 筛选区提示独立存在，不替行内占位作证。
     expect(wrapper.findAll('[data-testid="cause-hint"]')).toHaveLength(1)
-    expect(wrapper.text()).toContain('错因待 S4-3 诊断')
-    // 行内 cause_type === null 时同样给出占位，不渲染错因标签。
-    expect(wrapper.get('[data-testid="row-1"]').text()).not.toContain('概念不清')
-    expect(wrapper.text()).toContain('待 S4-3 诊断')
+    expect(wrapper.get('[data-testid="cause-hint"]').text()).toBe('错因待 S4-3 诊断')
   })
 
   it('学科下拉只驱动知识点树，不进入列表查询参数', async () => {
