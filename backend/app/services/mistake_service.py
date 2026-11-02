@@ -6,26 +6,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, InvalidParamError, NotFoundError
-from app.models.enums import MistakeStatus
+from app.models.enums import MISTAKE_STATUSES, MistakeStatus
 from app.models.knowledge_point import KnowledgePoint
 from app.models.mistake import Mistake
 from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.schemas.mistake import (
+    CauseCountOut,
+    KpCountOut,
     MistakeAnalysisOut,
     MistakeCreateIn,
     MistakeDetailOut,
+    MistakeStatsOut,
     MistakeSummaryOut,
     MistakeUpdateIn,
     OptionOut,
+    StatusCountOut,
 )
 
 # --------------------------------------------------------------------------
@@ -204,3 +208,88 @@ def update_mistake(
         mistake.status = payload.status
     _commit(session)
     return _detail(session, mistake=mistake)
+
+
+def record_review(
+    session: Session, *, user_id: int, mistake_id: int, correct: bool
+) -> MistakeDetailOut:
+    """复习结果驱动状态机（spec §6.1）：连续答对 MASTERY_STREAK 次算掌握。"""
+    mistake = _load_owned(session, user_id=user_id, mistake_id=mistake_id)
+    if correct:
+        mistake.correct_streak += 1
+        mistake.status = (
+            MistakeStatus.MASTERED.value
+            if mistake.correct_streak >= MASTERY_STREAK
+            else MistakeStatus.CORRECTED.value
+        )
+    else:
+        mistake.correct_streak = 0
+        mistake.status = MistakeStatus.TODO.value
+    mistake.last_review_at = datetime.now(timezone.utc)
+    _commit(session)
+    return _detail(session, mistake=mistake)
+
+
+def delete_mistake(session: Session, *, user_id: int, mistake_id: int) -> None:
+    """硬删；诊断行同事务删掉，不留孤儿（spec D-12）。"""
+    mistake = _load_owned(session, user_id=user_id, mistake_id=mistake_id)
+    analysis = session.scalar(
+        select(MistakeAnalysis).where(MistakeAnalysis.mistake_id == mistake_id)
+    )
+    if analysis is not None:
+        session.delete(analysis)
+        session.flush()
+    session.delete(mistake)
+    _commit(session)
+
+
+def stats(
+    session: Session,
+    *,
+    user_id: int,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+) -> MistakeStatsOut:
+    """三个维度的 SQL 聚合（spec D-10）；缺的状态补 0，前端不用自己做占位。"""
+    base_where = [Mistake.user_id == user_id]
+    if created_from is not None:
+        base_where.append(Mistake.created_at >= created_from)
+    if created_to is not None:
+        base_where.append(Mistake.created_at <= created_to)
+
+    status_rows = session.execute(
+        select(Mistake.status, func.count()).where(*base_where).group_by(Mistake.status)
+    ).all()
+    counts = {status: int(count) for status, count in status_rows}
+    by_status = [
+        StatusCountOut(status=status, count=counts.get(status, 0))
+        for status in MISTAKE_STATUSES
+    ]
+
+    cause_rows = session.execute(
+        select(MistakeAnalysis.cause_type, func.count())
+        .join(Mistake, Mistake.id == MistakeAnalysis.mistake_id)
+        .where(*base_where)
+        .group_by(MistakeAnalysis.cause_type)
+    ).all()
+    by_cause = [CauseCountOut(cause_type=cause, count=int(count)) for cause, count in cause_rows]
+
+    kp_rows = session.execute(
+        select(QuestionKp.kp_id, KnowledgePoint.name, func.count())
+        .join(Mistake, Mistake.question_id == QuestionKp.question_id)
+        .join(KnowledgePoint, KnowledgePoint.id == QuestionKp.kp_id)
+        .where(*base_where)
+        .group_by(QuestionKp.kp_id, KnowledgePoint.name)
+        .order_by(func.count().desc(), QuestionKp.kp_id)
+        .limit(10)
+    ).all()
+    top_kps = [
+        KpCountOut(kp_id=kp_id, kp_name=name, count=int(count)) for kp_id, name, count in kp_rows
+    ]
+
+    return MistakeStatsOut(
+        total=sum(item.count for item in by_status),
+        by_status=by_status,
+        by_cause=by_cause,
+        top_kps=top_kps,
+    )

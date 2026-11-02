@@ -230,3 +230,70 @@ def test_update_mistake_keeps_answer_when_field_omitted():
     assert mistake.my_answer_md == "旧作答"
     assert mistake.status == MistakeStatus.CORRECTED.value
     assert session.commits == 1
+
+
+def test_record_review_first_correct_marks_corrected():
+    mistake = _mistake()
+    session = FakeSession(objects={(Question, 65): _question(), (Mistake, 12): mistake},
+                          scalar_results=[None], scalars_results=[[]])
+    detail = mistake_service.record_review(session, user_id=1, mistake_id=12, correct=True)
+    assert mistake.correct_streak == 1
+    assert mistake.status == MistakeStatus.CORRECTED.value
+    assert mistake.last_review_at is not None
+    assert detail.correct_streak == 1
+
+
+def test_record_review_second_correct_marks_mastered():
+    mistake = _mistake(status="已订正", streak=1)
+    session = FakeSession(objects={(Question, 65): _question(), (Mistake, 12): mistake},
+                          scalar_results=[None], scalars_results=[[]])
+    mistake_service.record_review(session, user_id=1, mistake_id=12, correct=True)
+    assert mistake.correct_streak == 2
+    assert mistake.status == MistakeStatus.MASTERED.value
+
+
+def test_record_review_wrong_resets_to_todo():
+    mistake = _mistake(status="已掌握", streak=2)
+    session = FakeSession(objects={(Question, 65): _question(), (Mistake, 12): mistake},
+                          scalar_results=[None], scalars_results=[[]])
+    mistake_service.record_review(session, user_id=1, mistake_id=12, correct=False)
+    assert mistake.correct_streak == 0
+    assert mistake.status == MistakeStatus.TODO.value
+
+
+def test_record_review_other_user_raises_404():
+    session = FakeSession(objects={(Mistake, 12): _mistake(user_id=2)})
+    with pytest.raises(NotFoundError):
+        mistake_service.record_review(session, user_id=1, mistake_id=12, correct=True)
+
+
+def test_delete_mistake_removes_analysis_too():
+    mistake = _mistake()
+    session = FakeSession(objects={(Mistake, 12): mistake}, scalar_results=[None])
+    mistake_service.delete_mistake(session, user_id=1, mistake_id=12)
+    assert mistake in session.deleted
+    assert session.commits == 1
+
+
+def test_stats_fills_zero_for_missing_statuses():
+    session = FakeSession(
+        rows_results=[
+            [("已订正", 2)],                       # by_status
+            [("计算失误", 1)],                     # by_cause
+            [(137, "函数的单调性", 3)],            # top_kps
+        ]
+    )
+    result = mistake_service.stats(session, user_id=1)
+    assert result.total == 2
+    assert {item.status: item.count for item in result.by_status} == {
+        "待订正": 0, "已订正": 2, "已掌握": 0,
+    }
+    assert result.by_cause[0].cause_type == "计算失误"
+    assert result.top_kps[0].kp_name == "函数的单调性"
+
+
+def test_stats_queries_always_filter_owner():
+    session = FakeSession(rows_results=[[], [], []])
+    mistake_service.stats(session, user_id=7)
+    for statement in session.execute_statements:
+        assert "user_id" in str(statement.compile(compile_kwargs={"literal_binds": False}))
