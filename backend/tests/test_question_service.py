@@ -29,12 +29,14 @@ class FakeSession:
         self.deleted: list[object] = []
         self.commits = 0
         self.rollbacks = 0
+        self.scalar_statements: list[object] = []
         self._next_id = 100
 
     def get(self, entity, pk):
         return self.objects.get((entity, pk))
 
     def scalar(self, statement):
+        self.scalar_statements.append(statement)
         return self.scalar_results.pop(0) if self.scalar_results else None
 
     def scalars(self, statement):
@@ -396,3 +398,57 @@ def test_align_falls_back_to_score_when_llm_unavailable(caplog: pytest.LogCaptur
         )
     assert links == [(1, Decimal("0.93"))]
     assert any(record.getMessage() == "question_align_llm_failed" for record in caplog.records)
+
+
+def test_split_excludes_source_from_duplicate_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """原题仍在库里，拆出的两半都是它的子串；判重必须排除源题，否则必然自撞 409。"""
+    question = Question(
+        subject_id=1, stem_md="1. 甲题内容足够长 2. 乙题内容足够长", stem_hash="h", qtype="填空", difficulty=3
+    )
+    question.id = 5
+    question.created_by = 1
+    session = FakeSession(objects={(Question, 5): question})
+    calls: list[list[int] | None] = []
+
+    def fake_check(session_, *, subject_id, stem_hash, vec=None, exclude_ids=None):
+        calls.append(exclude_ids)
+        return None
+
+    monkeypatch.setattr(question_service, "check_duplicate", fake_check)
+    question_service.split_question(
+        session, question_id=5, split_at="2.", viewer=_user(user_id=1), embedder=FakeEmbedder()
+    )
+    assert calls == [[5], [5]]
+
+
+def test_merge_excludes_sources_from_duplicate_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    left = Question(subject_id=1, stem_md="甲题目内容足够长", stem_hash="a", qtype="填空", difficulty=3)
+    left.id = 1
+    left.created_by = 1
+    right = Question(subject_id=1, stem_md="乙题目内容足够长", stem_hash="b", qtype="填空", difficulty=3)
+    right.id = 2
+    right.created_by = 1
+    session = FakeSession(objects={(Question, 1): left, (Question, 2): right})
+    calls: list[list[int] | None] = []
+
+    def fake_check(session_, *, subject_id, stem_hash, vec=None, exclude_ids=None):
+        calls.append(exclude_ids)
+        return None
+
+    monkeypatch.setattr(question_service, "check_duplicate", fake_check)
+    question_service.merge_questions(session, ids=[2, 1, 2], viewer=_user(role="teacher"), embedder=FakeEmbedder())
+    assert calls == [[1, 2]]
+
+
+def test_check_duplicate_exclude_ids_adds_sql_filter() -> None:
+    session = FakeSession()
+    question_service.check_duplicate(
+        session, subject_id=1, stem_hash="h", vec=[1.0, 0.0], exclude_ids=[4, 9]
+    )
+    assert len(session.scalar_statements) == 2
+    assert all("NOT IN" in str(statement) for statement in session.scalar_statements)
+
+    baseline = FakeSession()
+    question_service.check_duplicate(baseline, subject_id=1, stem_hash="h", vec=[1.0, 0.0])
+    assert len(baseline.scalar_statements) == 2
+    assert all("NOT IN" not in str(statement) for statement in baseline.scalar_statements)

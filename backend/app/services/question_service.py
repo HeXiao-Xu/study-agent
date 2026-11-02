@@ -9,7 +9,7 @@ import hashlib
 import logging
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -87,21 +87,36 @@ def embedding_text(stem_md: str) -> str:
 
 
 def check_duplicate(
-    session: Session, *, subject_id: int, stem_hash: str, vec: list[float] | None = None
+    session: Session,
+    *,
+    subject_id: int,
+    stem_hash: str,
+    vec: list[float] | None = None,
+    exclude_ids: Sequence[int] | None = None,
 ) -> Question | None:
-    """两道闸：哈希唯一（改标点仍命中）→ 向量余弦 ≥0.92（改数字/换语序仍命中）。"""
-    hit = session.scalar(
-        select(Question).where(Question.subject_id == subject_id, Question.stem_hash == stem_hash)
+    """两道闸：哈希唯一（改标点仍命中）→ 向量余弦 ≥0.92（改数字/换语序仍命中）。
+
+    exclude_ids 只给拆分/合并用：源题在提交前还留在库里，而拆出的两半/合并题干
+    都是源题的子串或超串，向量必近邻；不排除源题会把「自己」判成重复。
+    """
+    excluded = tuple(exclude_ids or ())
+    hash_query = select(Question).where(
+        Question.subject_id == subject_id, Question.stem_hash == stem_hash
     )
+    if excluded:
+        hash_query = hash_query.where(Question.id.not_in(excluded))
+    hit = session.scalar(hash_query)
     if hit is not None:
         return hit
     if not vec:
         return None
+    nearest_query = select(Question).where(
+        Question.subject_id == subject_id, Question.embedding.is_not(None)
+    )
+    if excluded:
+        nearest_query = nearest_query.where(Question.id.not_in(excluded))
     nearest = session.scalar(
-        select(Question)
-        .where(Question.subject_id == subject_id, Question.embedding.is_not(None))
-        .order_by(Question.embedding.cosine_distance(vec))
-        .limit(1)
+        nearest_query.order_by(Question.embedding.cosine_distance(vec)).limit(1)
     )
     if nearest is not None and cosine(vec, list(nearest.embedding or [])) >= DUPLICATE_COS_THRESHOLD:
         return nearest
@@ -479,7 +494,11 @@ def split_question(
     created: list[Question] = []
     for stem, vec in zip((left, right), vectors):
         if check_duplicate(
-            session, subject_id=question.subject_id, stem_hash=compute_stem_hash(stem), vec=vec
+            session,
+            subject_id=question.subject_id,
+            stem_hash=compute_stem_hash(stem),
+            vec=vec,
+            exclude_ids=[question_id],
         ) is not None:
             raise ConflictError("拆分出的题目已存在于题库")
         created.append(
@@ -530,7 +549,11 @@ def merge_questions(
     first = questions[0]
     vec = (embedder or get_embedding_client()).encode([embedding_text(stem)])[0]
     if check_duplicate(
-        session, subject_id=first.subject_id, stem_hash=compute_stem_hash(stem), vec=vec
+        session,
+        subject_id=first.subject_id,
+        stem_hash=compute_stem_hash(stem),
+        vec=vec,
+        exclude_ids=unique_ids,
     ) is not None:
         raise ConflictError("合并后的题目已存在于题库")
 
