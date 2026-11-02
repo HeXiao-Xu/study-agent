@@ -98,7 +98,7 @@ def test_ancestor_names_walks_to_root() -> None:
     assert ancestor_names(nodes[1], nodes) == []
 
 
-def test_ancestor_names_stops_on_cycle() -> None:
-    # 成环数据不无限循环：靠 guard 10 层收敛，故长度上界是 10 而非 2。
+def test_ancestor_names_bounded_on_cycle() -> None:
+    # 成环是脏数据，guard 只保证不死循环，不保证结果有意义；故不引入 visited 集合。
     nodes = {1: _Node(1, "A", 2), 2: _Node(2, "B", 1)}
-    assert len(ancestor_names(nodes[1], nodes)) <= 10
+    assert len(ancestor_names(nodes[1], nodes)) == 10
