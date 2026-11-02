@@ -6,12 +6,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import Select, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import InvalidParamError, NotFoundError
+from app.core.exceptions import ConflictError, InvalidParamError, NotFoundError
 from app.models.enums import MistakeStatus
 from app.models.knowledge_point import KnowledgePoint
 from app.models.mistake import Mistake
@@ -89,6 +90,19 @@ def _analysis_of(session: Session, mistake_id: int) -> MistakeAnalysisOut | None
     )
 
 
+def _reset_reentry(mistake: Mistake, *, payload: MistakeCreateIn, answer: str | None) -> None:
+    """复用并重置（spec D-1）：录入不是复习，last_review_at 只由复习用例推进。
+
+    新建分支因并发撞唯一约束后也复用它，保证「复用」只有这一处定义。
+    """
+    mistake.status = MistakeStatus.TODO.value
+    mistake.correct_streak = 0
+    if payload.my_answer_md is not None:
+        mistake.my_answer_md = payload.my_answer_md
+    if answer is not None:
+        mistake.correct_answer_md = answer
+
+
 def _detail(session: Session, *, mistake: Mistake) -> MistakeDetailOut:
     question = session.get(Question, mistake.question_id)
     if question is None:
@@ -96,6 +110,7 @@ def _detail(session: Session, *, mistake: Mistake) -> MistakeDetailOut:
     options = (
         [OptionOut(**item) for item in question.options_json] if question.options_json else None
     )
+    analysis = _analysis_of(session, mistake.id)
     return MistakeDetailOut(
         id=mistake.id,
         question_id=mistake.question_id,
@@ -106,7 +121,7 @@ def _detail(session: Session, *, mistake: Mistake) -> MistakeDetailOut:
         qtype=question.qtype,
         difficulty=question.difficulty,
         kp_names=_kp_names(session, mistake.question_id),
-        cause_type=(analysis.cause_type if (analysis := _analysis_of(session, mistake.id)) else None),
+        cause_type=analysis.cause_type if analysis else None,
         has_image=mistake.image_file_id is not None,
         created_at=mistake.created_at,
         last_review_at=mistake.last_review_at,
@@ -138,14 +153,9 @@ def create_from_question(
     )
     answer = payload.correct_answer_md if payload.correct_answer_md is not None else question.answer_md
     if existing is not None:
-        existing.status = MistakeStatus.TODO.value
-        existing.correct_streak = 0
-        # 录入不是复习：last_review_at 只由复习用例推进，复用重置不得改写它。
-        if payload.my_answer_md is not None:
-            existing.my_answer_md = payload.my_answer_md
-        if answer is not None:
-            existing.correct_answer_md = answer
+        _reset_reentry(existing, payload=payload, answer=answer)
         mistake, created = existing, False
+        _commit(session)
     else:
         mistake = Mistake(
             user_id=user_id,
@@ -156,8 +166,23 @@ def create_from_question(
             correct_streak=0,
         )
         session.add(mistake)
-        created = True
-    _commit(session)
+        try:
+            _commit(session)
+        except IntegrityError:
+            # 并发录入同一 (user, question)：唯一约束的赢家是另一请求已提交的行，
+            # _commit 已回滚。重查后按 D-1 复用，IntegrityError 不能冒到路由层变 500。
+            winner = session.scalar(
+                select(Mistake).where(
+                    Mistake.user_id == user_id, Mistake.question_id == payload.question_id
+                )
+            )
+            if winner is None:
+                raise ConflictError("错题录入冲突，请重试") from None
+            _reset_reentry(winner, payload=payload, answer=answer)
+            mistake, created = winner, False
+            _commit(session)
+        else:
+            created = True
     return _detail(session, mistake=mistake), created
 
 
@@ -169,11 +194,13 @@ def update_mistake(
     session: Session, *, user_id: int, mistake_id: int, payload: MistakeUpdateIn
 ) -> MistakeDetailOut:
     mistake = _load_owned(session, user_id=user_id, mistake_id=mistake_id)
-    if payload.my_answer_md is not None:
+    # 与 S4-1 PATCH 同口径：显式传 null = 清空可空列，未传 = 保持原值。
+    fields = payload.model_fields_set
+    if "my_answer_md" in fields:
         mistake.my_answer_md = payload.my_answer_md
-    if payload.correct_answer_md is not None:
+    if "correct_answer_md" in fields:
         mistake.correct_answer_md = payload.correct_answer_md
-    if payload.status is not None:
+    if "status" in fields and payload.status is not None:
         mistake.status = payload.status
     _commit(session)
     return _detail(session, mistake=mistake)

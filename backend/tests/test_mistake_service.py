@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import InvalidParamError, NotFoundError
 from app.models.enums import MistakeStatus
@@ -81,10 +82,18 @@ def _question(question_id: int = 65, *, answer: str | None = "B") -> Question:
     return question
 
 
-def _mistake(mistake_id: int = 12, *, user_id: int = 1, status: str = "待订正", streak: int = 0) -> Mistake:
+def _mistake(
+    mistake_id: int = 12,
+    *,
+    user_id: int = 1,
+    status: str = "待订正",
+    streak: int = 0,
+    last_review_at: datetime | None = None,
+) -> Mistake:
     mistake = Mistake(
         user_id=user_id, question_id=65, status=status, correct_streak=streak,
         created_at=datetime(2026, 11, 3, tzinfo=timezone.utc),
+        last_review_at=last_review_at,
     )
     mistake.id = mistake_id
     return mistake
@@ -106,7 +115,8 @@ def test_create_from_question_new_row_uses_question_answer():
 
 
 def test_create_from_question_reuses_existing_and_resets():
-    existing = _mistake(status="已掌握", streak=2)
+    reviewed_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    existing = _mistake(status="已掌握", streak=2, last_review_at=reviewed_at)
     session = FakeSession(
         objects={(Question, 65): _question(), (Mistake, 12): existing}, scalar_results=[existing]
     )
@@ -116,10 +126,41 @@ def test_create_from_question_reuses_existing_and_resets():
     assert created is False
     assert existing.status == MistakeStatus.TODO.value
     assert existing.correct_streak == 0
-    # d-1：录入不是复习，复用重置不得污染「复习时间」语义。
-    assert existing.last_review_at is None
+    # d-1：录入不是复习，复用重置既不清零也不覆盖「复习时间」。
+    assert existing.last_review_at == reviewed_at
+    assert detail.last_review_at == reviewed_at
     assert existing.my_answer_md == "我又错了"
     assert session.commits == 1
+
+
+def test_create_from_question_concurrent_insert_reuses_winner(monkeypatch):
+    reviewed_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    winner = _mistake(status="已掌握", streak=2, last_review_at=reviewed_at)
+    session = FakeSession(
+        objects={(Question, 65): _question()},
+        scalar_results=[None, winner],  # 首次复查询为空 → 并发赢家
+    )
+    real_commit = session.commit
+    attempts = {"n": 0}
+
+    def flaky_commit() -> None:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise IntegrityError("INSERT INTO mistakes", {}, Exception("duplicate key"))
+        real_commit()
+
+    monkeypatch.setattr(session, "commit", flaky_commit)
+    detail, created = mistake_service.create_from_question(
+        session, user_id=1, payload=MistakeCreateIn(question_id=65, my_answer_md="并发作答")
+    )
+    assert created is False
+    assert session.commits == 1
+    assert session.rollbacks == 1
+    assert winner.status == MistakeStatus.TODO.value
+    assert winner.correct_streak == 0
+    assert winner.last_review_at == reviewed_at
+    assert winner.my_answer_md == "并发作答"
+    assert detail.id == winner.id
 
 
 def test_create_from_question_missing_question_raises_404():
@@ -159,4 +200,33 @@ def test_update_mistake_changes_answer_only():
     )
     assert mistake.my_answer_md == "x=2"
     assert mistake.status == MistakeStatus.TODO.value
+    assert session.commits == 1
+
+
+def test_update_mistake_clears_answer_with_explicit_null():
+    mistake = _mistake()
+    mistake.my_answer_md = "旧作答"
+    session = FakeSession(
+        objects={(Mistake, 12): mistake, (Question, 65): _question()},
+        scalars_results=[[], []],
+    )
+    mistake_service.update_mistake(
+        session, user_id=1, mistake_id=12, payload=MistakeUpdateIn(my_answer_md=None)
+    )
+    assert mistake.my_answer_md is None
+    assert session.commits == 1
+
+
+def test_update_mistake_keeps_answer_when_field_omitted():
+    mistake = _mistake()
+    mistake.my_answer_md = "旧作答"
+    session = FakeSession(
+        objects={(Mistake, 12): mistake, (Question, 65): _question()},
+        scalars_results=[[], []],
+    )
+    mistake_service.update_mistake(
+        session, user_id=1, mistake_id=12, payload=MistakeUpdateIn(status="已订正")
+    )
+    assert mistake.my_answer_md == "旧作答"
+    assert mistake.status == MistakeStatus.CORRECTED.value
     assert session.commits == 1

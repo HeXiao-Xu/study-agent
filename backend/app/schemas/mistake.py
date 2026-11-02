@@ -2,13 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.models.enums import MISTAKE_STATUSES, CauseType, MistakeStatus
-
-StatusLiteral = Literal["待订正", "已订正", "已掌握"]
+from app.models.enums import MISTAKE_STATUSES
 
 
 class MistakeCreateIn(BaseModel):
