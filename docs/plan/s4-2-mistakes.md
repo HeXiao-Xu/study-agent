@@ -46,7 +46,7 @@
 | `backend/app/api/router.py`（改） | 挂载 `mistakes` |
 | `backend/app/core/config.py` + `.env.example`（改） | `VISION_MODEL` |
 | `web/src/types/mistakes.ts`、`web/src/api/mistakes.ts`（新） | 前端契约与调用 |
-| `web/src/views/mistakes/{MistakeListView,MistakeCaptureView,MistakeDetailView}.vue`（新） | 三页 |
+| `web/src/views/mistakes/{MistakeListView,MistakeNewView,MistakeDetailView}.vue`（新） | 三页 |
 | `web/src/router/index.ts`、`web/src/components/layout/nav.ts`（改） | 路由与侧栏 06 |
 | `测试数据/_make_s4_2_mistake_photos.py`（新） | 合成验收图（Pillow） |
 
@@ -2574,7 +2574,7 @@ git commit -m "feat(s4-2): 错题 8 个接口（拍照/列表/统计/详情/更�
 - Produces:
   - `types/mistakes.ts`：`MistakeSummary`、`MistakeDetail`、`MistakeStats`、`MistakeStatus`（`'待订正' | '已订正' | '已掌握'`）、`MistakeFilters`
   - `api/mistakes.ts`：`listMistakes(params)`、`getMistakeStats(params?)`、`createMistake(body)`、`createMistakeFromPhoto(file, subjectId)`、`getMistake(id)`、`updateMistake(id, body)`、`reviewMistake(id, correct)`、`deleteMistake(id)`
-  - 路由：`/mistakes`、`/mistakes/capture`、`/mistakes/:id`；导航「06 错题本」
+  - 路由：`/mistakes`、`/mistakes/new`、`/mistakes/:id`；导航「06 错题本」
 
 - [x] **Step 1: 写类型**
 
@@ -2695,7 +2695,7 @@ export function deleteMistake(id: number) {
 }
 ```
 
-- [x] **Step 3: 加路由与导航**（实际：拍照页路由为 `/mistakes/new`，组件 `MistakeNewView.vue`；未使用 `/mistakes/capture` + `MistakeCaptureView.vue`）
+- [x] **Step 3: 加路由与导航**（实际：拍照页路由为 `/mistakes/new`、组件 `MistakeNewView.vue`，与下方片段一致）
 
 `web/src/router/index.ts`（照 `/questions` 的写法，含角色守卫）：
 
@@ -2706,9 +2706,9 @@ export function deleteMistake(id: number) {
     children: [
       { path: '', name: 'mistakes', component: () => import('@/views/mistakes/MistakeListView.vue') },
       {
-        path: 'capture',
-        name: 'mistake-capture',
-        component: () => import('@/views/mistakes/MistakeCaptureView.vue'),
+        path: 'new',
+        name: 'mistake-new',
+        component: () => import('@/views/mistakes/MistakeNewView.vue'),
       },
       {
         path: ':id',
@@ -2870,7 +2870,7 @@ Expected: FAIL —— 组件不存在
 - 表格列：题干摘录（`el-tooltip`）、题型、知识点标签、状态徽标、连续答对、录入时间、操作
 - 行动作：`data-testid="row-{id}"`；「复习答对」`data-testid="review-correct"`（已掌握行不渲染）、「复习答错」`review-wrong`、「删除」`delete`（`ElMessageBox.confirm` 后调 `deleteMistake`）
 - 空态与 `cause_type === null` 时显示「待 S4-3 诊断」
-- 顶部按钮：「从题库选题」（`$router.push('/mistakes?pick=1')` 或直接嵌 `el-dialog` 列表选择）、「拍照录入」→ `/mistakes/capture`
+- 顶部按钮：「从题库选题」（`$router.push('/mistakes?pick=1')` 或直接嵌 `el-dialog` 列表选择）、「拍照录入」→ `/mistakes/new`
 
 - [x] **Step 4: 跑测试确认通过**
 
@@ -2889,9 +2889,9 @@ git commit -m "feat(s4-2): 错题列表页（统计卡 + 四维筛选 + 复习/�
 ### Task 12: 拍照录入页 + 详情页
 
 **Files:**
-- Create: `web/src/views/mistakes/MistakeCaptureView.vue`
+- Create: `web/src/views/mistakes/MistakeNewView.vue`
 - Create: `web/src/views/mistakes/MistakeDetailView.vue`
-- Test: `web/src/views/mistakes/__tests__/MistakeCaptureView.spec.ts`、`MistakeDetailView.spec.ts`
+- Test: `web/src/views/mistakes/__tests__/MistakeNewView.spec.ts`、`MistakeDetailView.spec.ts`
 
 **Interfaces:**
 - Consumes: `createMistakeFromPhoto`、`getMistake`、`updateMistake`、`reviewMistake`；任务轮询复用 `web/src/api/tasks.ts::getTask`
@@ -2899,7 +2899,7 @@ git commit -m "feat(s4-2): 错题列表页（统计卡 + 四维筛选 + 复习/�
 
 - [x] **Step 1: 写失败测试（两页各 2–3 条）**（实际：拍照页测试文件为 `MistakeNewView.spec.ts`）
 
-`MistakeCaptureView.spec.ts` 关键断言：
+`MistakeNewView.spec.ts` 关键断言：
 
 ```ts
 it('uploads the chosen image and polls the task', async () => {
@@ -2933,7 +2933,7 @@ Expected: FAIL —— 组件不存在
 
 - [x] **Step 3: 写两个组件**（实际：拍照页落地为 `MistakeNewView.vue`，含 4s 轮询/60s 超时/卸载守卫/blob 预览回收；详情页原图经 `getImageBlob` 取回）
 
-`MistakeCaptureView.vue` 要点：
+`MistakeNewView.vue` 要点：
 - `<input type="file" accept="image/*" capture="environment">`（手机直接调起相机）
 - 选学科（`el-select`，来自 `GET /subjects` 或现有 store）
 - 可选手填「我的作答」（提示：手填优先于识别结果）
@@ -2961,8 +2961,8 @@ Expected: `0 error`
 - [x] **Step 6: Commit**
 
 ```bash
-git add web/src/views/mistakes/MistakeCaptureView.vue web/src/views/mistakes/MistakeDetailView.vue \
-        web/src/views/mistakes/__tests__/MistakeCaptureView.spec.ts \
+git add web/src/views/mistakes/MistakeNewView.vue web/src/views/mistakes/MistakeDetailView.vue \
+        web/src/views/mistakes/__tests__/MistakeNewView.spec.ts \
         web/src/views/mistakes/__tests__/MistakeDetailView.spec.ts
 git commit -m "feat(s4-2): 拍照录入页（轮询/重试/兜底）与错题详情页（复习操作 + 诊断占位）"
 ```
@@ -2984,7 +2984,7 @@ git commit -m "feat(s4-2): 拍照录入页（轮询/重试/兜底）与错题详
 - Consumes: 前面所有 task 的产物 + 真实 PG/Redis/MinIO/Qwen-VL
 - Produces: 文档与验收证据（数字必须来自实跑）
 
-- [ ] **Step 1: 起服务（隔离 Redis 库，避免旧 worker 抢任务）**（实际：真机验收不在 Task 13 文档同步范围，由控制器另行执行）
+- [x] **Step 1: 起服务（隔离 Redis 库，避免旧 worker 抢任务）**（实际：`REDIS_URL=redis://127.0.0.1:6379/6`、uvicorn `:8031`、ARQ worker 同库，与旧 worker 隔离）
 
 ```powershell
 cd E:\BiShe-AIStudy\study-agent\backend
@@ -2995,27 +2995,27 @@ $env:REDIS_URL="redis://127.0.0.1:6379/6"
 ..\.venv\Scripts\python.exe -m app.tasks.worker
 ```
 
-- [ ] **Step 2: 题库选录入 10 道 + 重复 1 道**（实际：待控制器真机验收）
+- [x] **Step 2: 题库选录入 10 道 + 重复 1 道**（实际：10 次 `POST /mistakes` 全 201，其中 `created=8`、已存在的 2 道 `created=false`；同题重复 → `201 + created=false + status=待订正 + streak=0`）
 
 脚本内：登录 → `GET /questions?subject_id=7&page_size=10` → 逐题 `POST /mistakes` → 断言 10 个 201；再对第 1 题重复 POST → 断言 `created=false` 且 `status='待订正'`。
 Expected 输出：`created=10 duplicated=0` 与 `reuse: created=false status=待订正 streak=0`
 
-- [ ] **Step 3: 拍照录入 3 张（真调 Qwen-VL）**（实际：待控制器真机验收）
+- [x] **Step 3: 拍照录入 3 张（真调 Qwen-VL）**（实际：三张均任务 succeeded —— `clean.png` 12.1s/0.98/`reused_question=false`、`rotated.png` 6.0s/0.95/题干与干净图逐字一致、`answered.png` 0.98 且作答进 `my_answer_md`、题干不含作答行；逐字比对结果：三张识别出的 `stem_md` 与合成图原文完全一致，差异 0 字）
 
 对 `测试数据/mistake_photo/{clean,rotated,answered}.png` 各 `POST /mistakes/photo`（`parse=false` 上传）→ 轮询 `GET /tasks/{id}` 至 `succeeded`。
 Expected：3 个任务 `succeeded`，记录每个的 `elapsed_ms`、`confidence`、`reused_question`；
 人工逐字比对识别出的 `stem_md` 与原题文字（记录差异字符数/总字符数），把数字写进 PROGRESS。
 
-- [ ] **Step 4: 状态机 + 筛选 + 统计 + 引用保护**（实际：待控制器真机验收）
+- [x] **Step 4: 状态机 + 筛选 + 统计 + 引用保护**（实际：状态机 已订正/1 → 已掌握/2 → 待订正/0，已掌握后再答对 streak=3；`?status=`=10、`?kp_id=199`=1、`?cause_type=概念不清`=0、日期区间命中 10/空区间 0；`stats.total=10` 且三状态之和相等；`DELETE /questions/85` → **409/40900**）
 
 - 取 1 道错题：`review(true)` → 断言 `已订正/streak=1`；再 `review(true)` → `已掌握/streak=2`；`review(false)` → `待订正/streak=0`；
 - `GET /mistakes?status=待订正`、`?kp_id=<某知识点>`、`?created_from=...`、`?cause_type=概念不清`（应为 0 条）各查一次，`total` 与人工统计一致；
 - `GET /mistakes/stats` → `by_status` 三项之和 = `total`；`top_kps` 与人工统计一致；
 - `DELETE /questions/{被错题引用的题号}` → 断言 **409/40900**（S4-2 建表后 S4-1 的守卫首次生效）。
 
-- [ ] **Step 5: 浏览器走一遍**（实际：待控制器真机验收）
+- [ ] **Step 5: 浏览器走一遍**（**未执行**：本机无 Playwright —— `web/` 与 backend venv 均未安装、`ms-playwright` 缓存为空，按 AGENTS §2.1 不擅自引入新依赖。替代证据：后端 8 接口真机实测 + 图片接口带/不带 token 的 200/401 行为 + 前端 180 条单测（含图片 blob、轮询、卸载守卫）+ `npm run build` 通过。待用户手动走一遍界面）
 
-`/mistakes` 筛选 + 复习 + 删除二次确认；`/mistakes/capture` 上传一张图 → 轮询 → 跳详情；详情页「答对了」→ 徽标变化；诊断区显示 S4-3 占位文案。贴路径与现象。
+`/mistakes` 筛选 + 复习 + 删除二次确认；`/mistakes/new` 上传一张图 → 轮询 → 跳详情；详情页「答对了」→ 徽标变化；诊断区显示 S4-3 占位文案。贴路径与现象。
 
 - [x] **Step 6: 写文档**（实际：错题接口写在 `API.md` 既有 §6「错题本」，不是新增 §5.6；`SCHEMA.md` §5.3/§5.4 与 §10 枚举、`DECISIONS.md` D-045、`PROGRESS.md`、`AGENTS.md`、spec 勘误与 plan 勾选同步完成）
 
@@ -3026,7 +3026,7 @@ Expected：3 个任务 `succeeded`，记录每个的 `elapsed_ms`、`confidence`
 - `AGENTS.md` §9.2 新增 S4-2 条目、§9.6 新增错题锚点；
 - 实施计划 S4-2 勾选 + 实施记录。
 
-- [ ] **Step 7: 全量回归（最终提交前）**（实际：后端 `952 passed`；前端 `npm run test:run` 受本会话沙箱限制无法执行，待控制器复跑确认）
+- [x] **Step 7: 全量回归（最终提交前）**（实际：后端 `952 passed, 1 warning`；前端 `35 files / 180 passed`；`alembic current` = `0010_s4_2 (head)`）
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
