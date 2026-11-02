@@ -108,6 +108,14 @@ describe('mistakes api', () => {
     })
   })
 
+  it('drops empty-string list filters instead of sending them', async () => {
+    http.get.mockResolvedValue(envelope({ items: [], total: 0, page: 1, page_size: 10 }))
+
+    await listMistakes({ status: '', causeType: '', kpId: undefined })
+
+    expect(http.get).toHaveBeenCalledWith('/api/v1/mistakes', { params: {} })
+  })
+
   it('maps stats time bounds to snake_case query params', async () => {
     http.get.mockResolvedValue(envelope(stats))
 
@@ -129,6 +137,14 @@ describe('mistakes api', () => {
     http.get.mockResolvedValue(envelope(stats))
 
     await getMistakeStats()
+
+    expect(http.get).toHaveBeenCalledWith('/api/v1/mistakes/stats', { params: {} })
+  })
+
+  it('drops an empty-string stats bound instead of sending it', async () => {
+    http.get.mockResolvedValue(envelope(stats))
+
+    await getMistakeStats({ createdFrom: '' })
 
     expect(http.get).toHaveBeenCalledWith('/api/v1/mistakes/stats', { params: {} })
   })

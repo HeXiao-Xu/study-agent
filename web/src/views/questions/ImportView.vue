@@ -28,7 +28,11 @@ let timer: number | undefined
 
 // 后端只允许学生按 upload 记来源，教师/管理员才能选考试卷、模拟卷、教材。
 const canChooseOrigin = computed(() => auth.user?.role === 'teacher' || auth.user?.role === 'admin')
-const result = computed<ExtractTaskResult | null>(() => task.value?.result ?? null)
+// TaskDetail.result 现在是联合类型（含 S4-2 错题识别结果），按任务结果字段收窄。
+const result = computed<ExtractTaskResult | null>(() => {
+  const value = task.value?.result
+  return value !== null && value !== undefined && 'detected_count' in value ? value : null
+})
 const failedItems = computed(() => result.value?.failed_items ?? [])
 const finished = computed(
   () => task.value?.status === 'succeeded' || task.value?.status === 'failed',

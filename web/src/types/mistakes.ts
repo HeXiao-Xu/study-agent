@@ -32,9 +32,10 @@ export const MISTAKE_CAUSE_LABELS: Record<MistakeCauseType, string> = {
 export type MistakeSort = 'created_at' | 'last_review_at' | 'status' | 'correct_streak'
 
 export interface MistakeListParams {
-  status?: MistakeStatus
-  causeType?: MistakeCauseType
-  kpId?: number
+  /** 筛选控件清空时会给空串，`api/mistakes.ts` 发请求前剔除。 */
+  status?: MistakeStatus | ''
+  causeType?: MistakeCauseType | ''
+  kpId?: number | null
   createdFrom?: string
   createdTo?: string
   page?: number
@@ -42,6 +43,9 @@ export interface MistakeListParams {
   sortBy?: MistakeSort
   order?: 'asc' | 'desc'
 }
+
+/** Task 11 brief 使用的名字，语义与 `MistakeListParams` 相同。 */
+export type MistakeFilters = MistakeListParams
 
 export interface MistakeStatsParams {
   createdFrom?: string
@@ -101,6 +105,19 @@ export interface MistakeStats {
   by_status: { status: MistakeStatus; count: number }[]
   by_cause: { cause_type: MistakeCauseType; count: number }[]
   top_kps: { kp_id: number; kp_name: string; count: number }[]
+}
+
+/** `mistake.recognize` 任务结果（backend/app/tasks/mistake_recognize.py 的 return）。 */
+export interface MistakeRecognizeResult {
+  mistake_id: number
+  question_id: number
+  created: boolean
+  reused_question: boolean
+  confidence: number
+  low_confidence: boolean
+  used_answer_source: 'student' | 'vision' | 'none'
+  warnings: string[]
+  elapsed_ms: number
 }
 
 /** MistakeCreateIn */

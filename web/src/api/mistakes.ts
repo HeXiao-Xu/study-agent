@@ -16,16 +16,28 @@ import type {
 } from '@/types/mistakes'
 import type { TaskOut } from '@/types/tasks'
 
-/** 只剔除 undefined：PATCH 里显式 null 表示清空，必须保留（axios 本身会跳过 null 参数）。 */
-function compact(params: Record<string, unknown>): Record<string, unknown> {
+/** 请求体只剔除 undefined：PATCH 里显式 null 表示清空列，必须保留。 */
+function compactBody(params: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined))
+}
+
+/**
+ * 查询参数额外剔除 null 与空串：后端 `datetime | None` / `int | None` 收到 `''`
+ * 会直接 ValidationError（422），而筛选控件清空时给的就是空串。
+ */
+function compactQuery(params: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(params).filter(
+      ([, value]) => value !== undefined && value !== null && value !== '',
+    ),
+  )
 }
 
 export async function listMistakes(
   params: MistakeListParams,
 ): Promise<PageData<MistakeSummary>> {
   const resp = await http.get<ApiEnvelope<PageData<MistakeSummary>>>(`${API_PREFIX}/mistakes`, {
-    params: compact({
+    params: compactQuery({
       status: params.status,
       cause_type: params.causeType,
       kp_id: params.kpId,
@@ -44,7 +56,7 @@ export async function getMistakeStats(
   params: MistakeStatsParams = {},
 ): Promise<MistakeStats> {
   const resp = await http.get<ApiEnvelope<MistakeStats>>(`${API_PREFIX}/mistakes/stats`, {
-    params: compact({
+    params: compactQuery({
       created_from: params.createdFrom,
       created_to: params.createdTo,
     }),
@@ -57,7 +69,7 @@ export async function createMistake(
 ): Promise<MistakeCreateResult> {
   const resp = await http.post<ApiEnvelope<MistakeCreateResult>>(
     `${API_PREFIX}/mistakes`,
-    compact({
+    compactBody({
       question_id: payload.questionId,
       my_answer_md: payload.myAnswerMd,
       correct_answer_md: payload.correctAnswerMd,
@@ -98,7 +110,7 @@ export async function updateMistake(
 ): Promise<MistakeDetail> {
   const resp = await http.patch<ApiEnvelope<MistakeDetail>>(
     `${API_PREFIX}/mistakes/${id}`,
-    compact({
+    compactBody({
       my_answer_md: payload.myAnswerMd,
       correct_answer_md: payload.correctAnswerMd,
       status: payload.status,
