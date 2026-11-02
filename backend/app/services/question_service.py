@@ -10,19 +10,20 @@ import re
 import unicodedata
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.align.scoring import AUTO_THRESHOLD, ancestor_names, combine, cosine, keyword_score, tree_prior
 from app.ai.embedding import EmbeddingClient, get_embedding_client
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, InvalidParamError, NotFoundError
 from app.models.enums import UserRole
 from app.models.knowledge_point import KnowledgePoint
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.models.subject import Subject
 from app.models.user import User
-from app.schemas.question import QuestionCreateIn
+from app.schemas.question import QuestionCreateIn, QuestionUpdateIn
 
 TASK_QUESTION_EXTRACT = "question.extract"
 
@@ -130,13 +131,21 @@ def _ensure_subject(session: Session, subject_id: int) -> None:
         raise NotFoundError("学科不存在")
 
 
-def _ensure_kps_exist(session: Session, kp_ids: list[int]) -> None:
+def _ensure_kps_exist(session: Session, *, subject_id: int, kp_ids: list[int]) -> None:
+    """跨学科知识点与不存在同样处理：不泄露 id 是否真实存在，也避免挂错学科。"""
     if not kp_ids:
         return
-    found = {row for row in session.scalars(select(KnowledgePoint.id).where(KnowledgePoint.id.in_(kp_ids)))}
+    found = {
+        row
+        for row in session.scalars(
+            select(KnowledgePoint.id).where(
+                KnowledgePoint.id.in_(kp_ids), KnowledgePoint.subject_id == subject_id
+            )
+        )
+    }
     missing = sorted(set(kp_ids) - found)
     if missing:
-        raise NotFoundError(f"知识点不存在：{missing}")
+        raise InvalidParamError("知识点不存在或不属于该学科")
 
 
 def _persist_question(
@@ -175,11 +184,28 @@ def _persist_question(
         created_by=created_by,
     )
     session.add(question)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        # 判重是先查后写，两个并发请求可能同时通过；唯一约束才是最终裁决，
+        # 这里把 DB 冲突翻译成 409，而不是让路由层看到 500。
+        session.rollback()
+        if "uq_questions_subject_stem_hash" in str(exc.orig):
+            raise ConflictError("题目已存在（题库里已有同一道题）") from exc
+        raise
     for kp_id, weight in links:
         session.add(QuestionKp(question_id=question.id, kp_id=kp_id, weight=weight))
     session.flush()
     return question
+
+
+def _commit(session: Session) -> None:
+    """提交失败先回滚再抛：会话带着半完成事务继续被复用会污染后续用例。"""
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
 
 
 def _options_json_of(payload: QuestionCreateIn) -> list[dict] | None:
@@ -197,7 +223,9 @@ def create_question(
         session, subject_id=payload.subject_id, stem_hash=compute_stem_hash(payload.stem_md), vec=vec
     ) is not None:
         raise ConflictError("题目已存在（题库里已有同一道题）")
-    _ensure_kps_exist(session, payload.kp_ids)
+    # 重复 kp_id 会生成主键相同的 QuestionKp，flush 时直接炸唯一约束，入口先收敛
+    kp_ids = list(dict.fromkeys(payload.kp_ids))
+    _ensure_kps_exist(session, subject_id=payload.subject_id, kp_ids=kp_ids)
     question = _persist_question(
         session,
         subject_id=payload.subject_id,
@@ -213,7 +241,213 @@ def create_question(
         verified=False,
         embedding=vec,
         created_by=creator.id,
-        links=[(kp_id, MANUAL_WEIGHT) for kp_id in payload.kp_ids],
+        links=[(kp_id, MANUAL_WEIGHT) for kp_id in kp_ids],
     )
-    session.commit()
+    _commit(session)
     return question
+
+
+def _load_question(session: Session, question_id: int) -> Question:
+    question = session.get(Question, question_id)
+    if question is None:
+        raise NotFoundError("题目不存在")
+    return question
+
+
+def _replace_links(session: Session, question_id: int, links: list[tuple[int, Decimal]]) -> None:
+    for row in list(session.scalars(select(QuestionKp).where(QuestionKp.question_id == question_id))):
+        session.delete(row)
+    for kp_id, weight in links:
+        session.add(QuestionKp(question_id=question_id, kp_id=kp_id, weight=weight))
+    session.flush()
+
+
+def _mistakes_table_exists(session: Session) -> bool:
+    """S4-2 建 mistakes 表后自动生效；S4-1 阶段表不存在则无条件放行（spec D-15）。"""
+    try:
+        return inspect(session.get_bind()).has_table("mistakes")
+    except Exception:  # noqa: BLE001 —— 拿不到连接时按“表不存在”处理，不阻塞题库操作
+        return False
+
+
+def _ensure_not_referenced(session: Session, question_ids: list[int]) -> None:
+    if not _mistakes_table_exists(session):
+        return
+    row = session.execute(
+        text("SELECT 1 FROM mistakes WHERE question_id = ANY(:ids) LIMIT 1"),
+        {"ids": question_ids},
+    ).first()
+    if row is not None:
+        raise ConflictError("题目已被错题本引用，不能删除、合并或拆分")
+
+
+def _replace_stem(
+    session: Session, question: Question, stem_md: str, *, embedder: EmbeddingClient | None = None
+) -> None:
+    new_hash = compute_stem_hash(stem_md)
+    duplicate = check_duplicate(session, subject_id=question.subject_id, stem_hash=new_hash, vec=None)
+    if duplicate is not None and duplicate.id != question.id:
+        raise ConflictError("题目已存在（题库里已有同一道题）")
+    vec = (embedder or get_embedding_client()).encode([embedding_text(stem_md)])[0]
+    question.stem_md = stem_md
+    question.stem_hash = new_hash
+    question.embedding = vec
+    _replace_links(
+        session,
+        question.id,
+        align_knowledge_points(
+            session, subject_id=question.subject_id, text=stem_md, kp_names=[], vec=vec
+        ),
+    )
+
+
+def update_question(
+    session: Session,
+    *,
+    question_id: int,
+    payload: QuestionUpdateIn,
+    viewer: User,
+    embedder: EmbeddingClient | None = None,
+) -> Question:
+    question = _load_question(session, question_id)
+    ensure_can_edit(question, viewer)
+    fields = payload.model_fields_set
+
+    if "stem_md" in fields and payload.stem_md is not None:
+        if normalize_stem(payload.stem_md) != normalize_stem(question.stem_md):
+            _replace_stem(session, question, payload.stem_md, embedder=embedder)
+    if "options" in fields:
+        question.options_json = (
+            [option.model_dump() for option in payload.options] if payload.options else None
+        )
+    for name in ("answer_md", "analysis_md", "qtype", "difficulty", "origin", "tags", "verified"):
+        if name in fields:
+            setattr(question, name, getattr(payload, name))
+    if "kp_ids" in fields and payload.kp_ids is not None:
+        kp_ids = list(dict.fromkeys(payload.kp_ids))
+        _ensure_kps_exist(session, subject_id=question.subject_id, kp_ids=kp_ids)
+        _replace_links(session, question.id, [(kp_id, MANUAL_WEIGHT) for kp_id in kp_ids])
+    _commit(session)
+    return question
+
+
+def split_question(
+    session: Session,
+    *,
+    question_id: int,
+    split_at: str,
+    viewer: User,
+    embedder: EmbeddingClient | None = None,
+) -> list[Question]:
+    """把一道题按标记切成两道：AI 把两题串一起时的人工兜底。"""
+    question = _load_question(session, question_id)
+    ensure_can_edit(question, viewer)
+    marker = (split_at or "").strip()
+    if not marker:
+        raise InvalidParamError("split_at 不能为空")
+    position = question.stem_md.find(marker)
+    if position <= 0:
+        raise InvalidParamError(f"题干中找不到可作为切分点的标记：{marker}")
+    left = question.stem_md[:position].strip()
+    right = question.stem_md[position:].strip()
+    if len(normalize_stem(left)) < 5 or len(normalize_stem(right)) < 5:
+        raise InvalidParamError("切分后任一半少于 5 个字，拒绝拆分")
+    _ensure_not_referenced(session, [question_id])
+
+    client = embedder or get_embedding_client()
+    vectors = client.encode([embedding_text(left), embedding_text(right)])
+    created: list[Question] = []
+    for stem, vec in zip((left, right), vectors):
+        if check_duplicate(
+            session, subject_id=question.subject_id, stem_hash=compute_stem_hash(stem), vec=vec
+        ) is not None:
+            raise ConflictError("拆分出的题目已存在于题库")
+        created.append(
+            _persist_question(
+                session,
+                subject_id=question.subject_id,
+                origin=question.origin,
+                source_file_id=question.source_file_id,
+                stem_md=stem,
+                options_json=question.options_json,
+                answer_md=question.answer_md,
+                analysis_md=question.analysis_md,
+                qtype=question.qtype,
+                difficulty=question.difficulty,
+                tags=list(question.tags) if question.tags else None,
+                verified=bool(question.verified),
+                embedding=vec,
+                created_by=question.created_by,
+                links=align_knowledge_points(
+                    session, subject_id=question.subject_id, text=stem, kp_names=[], vec=vec
+                ),
+            )
+        )
+    for row in list(session.scalars(select(QuestionKp).where(QuestionKp.question_id == question_id))):
+        session.delete(row)
+    session.delete(question)
+    _commit(session)
+    return created
+
+
+def merge_questions(
+    session: Session, *, ids: list[int], viewer: User, embedder: EmbeddingClient | None = None
+) -> Question:
+    """按 id 升序拼接：顺序影响题干可读性，必须确定，不能依赖入参顺序。"""
+    unique_ids = sorted({int(item) for item in ids})
+    if len(unique_ids) < 2:
+        raise InvalidParamError("合并至少需要 2 道题")
+    questions = [_load_question(session, item) for item in unique_ids]
+    for question in questions:
+        ensure_can_edit(question, viewer)
+    if len({question.subject_id for question in questions}) != 1:
+        raise InvalidParamError("只能合并同一学科的题目")
+    _ensure_not_referenced(session, unique_ids)
+
+    stem = "\n\n".join(question.stem_md for question in questions)
+    answer = "\n\n".join(q.answer_md for q in questions if q.answer_md) or None
+    analysis = "\n\n".join(q.analysis_md for q in questions if q.analysis_md) or None
+    first = questions[0]
+    vec = (embedder or get_embedding_client()).encode([embedding_text(stem)])[0]
+    if check_duplicate(
+        session, subject_id=first.subject_id, stem_hash=compute_stem_hash(stem), vec=vec
+    ) is not None:
+        raise ConflictError("合并后的题目已存在于题库")
+
+    merged = _persist_question(
+        session,
+        subject_id=first.subject_id,
+        origin=first.origin,
+        source_file_id=first.source_file_id,
+        stem_md=stem,
+        options_json=None,
+        answer_md=answer,
+        analysis_md=analysis,
+        qtype=first.qtype,
+        difficulty=max(question.difficulty for question in questions),
+        tags=None,
+        verified=all(bool(question.verified) for question in questions),
+        embedding=vec,
+        created_by=first.created_by,
+        links=align_knowledge_points(
+            session, subject_id=first.subject_id, text=stem, kp_names=[], vec=vec
+        ),
+    )
+    for question in questions:
+        for row in list(
+            session.scalars(select(QuestionKp).where(QuestionKp.question_id == question.id))
+        ):
+            session.delete(row)
+        session.delete(question)
+    _commit(session)
+    return merged
+
+
+def delete_question(session: Session, *, question_id: int, viewer: User) -> None:
+    question = _load_question(session, question_id)
+    ensure_can_edit(question, viewer)
+    _ensure_not_referenced(session, [question_id])
+    for row in list(session.scalars(select(QuestionKp).where(QuestionKp.question_id == question_id))):
+        session.delete(row)
+    session.delete(question)
+    _commit(session)

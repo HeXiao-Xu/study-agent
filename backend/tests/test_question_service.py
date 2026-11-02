@@ -4,14 +4,15 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import ConflictError, ForbiddenError
+from app.core.exceptions import ConflictError, ForbiddenError, InvalidParamError
 from app.models.knowledge_point import KnowledgePoint
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.models.subject import Subject
 from app.models.user import User
-from app.schemas.question import QuestionCreateIn
+from app.schemas.question import QuestionCreateIn, QuestionMergeIn, QuestionSplitIn, QuestionUpdateIn
 from app.services import question_service
 
 
@@ -25,6 +26,7 @@ class FakeSession:
         self.added: list[object] = []
         self.deleted: list[object] = []
         self.commits = 0
+        self.rollbacks = 0
         self._next_id = 100
 
     def get(self, entity, pk):
@@ -50,6 +52,9 @@ class FakeSession:
 
     def commit(self) -> None:
         self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
 
 
 class FakeEmbedder:
@@ -184,3 +189,126 @@ def test_ensure_can_edit_allows_teacher() -> None:
     question = Question(subject_id=1, stem_md="已知", stem_hash="h", qtype="填空", difficulty=3)
     question.created_by = 99
     question_service.ensure_can_edit(question, _user(role="teacher", user_id=1))
+
+
+def test_update_question_recomputes_hash_and_embedding() -> None:
+    question = Question(subject_id=1, stem_md="1. 旧题干内容", stem_hash="old", qtype="填空", difficulty=3)
+    question.id = 3
+    question.created_by = 1
+    question.embedding = [0.0, 1.0]
+    session = FakeSession(objects={(Question, 3): question}, scalar_results=[None], scalars_results=[[], []])
+    updated = question_service.update_question(
+        session,
+        question_id=3,
+        payload=QuestionUpdateIn(stem_md="1. 新题干内容"),
+        viewer=_user(user_id=1),
+        embedder=FakeEmbedder(),
+    )
+    assert updated.stem_md == "1. 新题干内容"
+    assert updated.stem_hash == question_service.compute_stem_hash("1. 新题干内容")
+    assert updated.embedding == [1.0, 0.0]
+    assert session.commits == 1
+
+
+def test_delete_question_clears_links() -> None:
+    question = Question(subject_id=1, stem_md="题干", stem_hash="h", qtype="填空", difficulty=3)
+    question.id = 4
+    question.created_by = 1
+    link = QuestionKp(question_id=4, kp_id=9, weight=Decimal("1.0"))
+    session = FakeSession(objects={(Question, 4): question}, scalars_results=[[link]])
+    question_service.delete_question(session, question_id=4, viewer=_user(user_id=1))
+    assert link in session.deleted
+    assert question in session.deleted
+    assert session.commits == 1
+
+
+def test_merge_rejects_cross_subject() -> None:
+    left = Question(subject_id=1, stem_md="甲题目内容", stem_hash="a", qtype="填空", difficulty=3)
+    left.id = 1
+    right = Question(subject_id=2, stem_md="乙题目内容", stem_hash="b", qtype="填空", difficulty=3)
+    right.id = 2
+    session = FakeSession(objects={(Question, 1): left, (Question, 2): right})
+    with pytest.raises(InvalidParamError):
+        question_service.merge_questions(
+            session, ids=[1, 2], viewer=_user(role="teacher"), embedder=FakeEmbedder()
+        )
+
+
+def test_split_rejects_missing_marker() -> None:
+    question = Question(subject_id=1, stem_md="1. 甲题 2. 乙题", stem_hash="h", qtype="填空", difficulty=3)
+    question.id = 5
+    question.created_by = 1
+    session = FakeSession(objects={(Question, 5): question})
+    with pytest.raises(InvalidParamError):
+        question_service.split_question(
+            session, question_id=5, split_at="3.", viewer=_user(user_id=1), embedder=FakeEmbedder()
+        )
+
+
+def test_persist_question_maps_stem_hash_unique_violation_to_conflict() -> None:
+    class UniqueViolationSession(FakeSession):
+        def flush(self) -> None:
+            raise IntegrityError(
+                "INSERT INTO questions ...",
+                {},
+                Exception('duplicate key value violates unique constraint "uq_questions_subject_stem_hash"'),
+            )
+
+    session = UniqueViolationSession()
+    with pytest.raises(ConflictError):
+        question_service._persist_question(
+            session,
+            subject_id=1,
+            origin="upload",
+            source_file_id=None,
+            stem_md="1. 已知函数 f(x)=x²，求 f(1)。",
+            options_json=None,
+            answer_md=None,
+            analysis_md=None,
+            qtype="解答",
+            difficulty=2,
+            tags=None,
+            verified=False,
+            embedding=[1.0, 0.0],
+            created_by=1,
+            links=[],
+        )
+    assert session.rollbacks == 1
+
+
+def test_kp_guard_rejects_cross_subject_and_dedupes_ids() -> None:
+    subject = Subject(name="数学")
+    foreign_session = FakeSession(
+        objects={(Subject, 1): subject}, scalar_results=[None, None], scalars_results=[[]]
+    )
+    foreign_payload = QuestionCreateIn(
+        subject_id=1, stem_md="1. 已知函数 f(x)=x²，求 f(1)。", qtype="解答", difficulty=2, kp_ids=[99]
+    )
+    with pytest.raises(InvalidParamError):
+        question_service.create_question(
+            foreign_session, payload=foreign_payload, creator=_user(), embedder=FakeEmbedder()
+        )
+    assert foreign_session.commits == 0
+
+    session = FakeSession(
+        objects={(Subject, 1): subject}, scalar_results=[None, None], scalars_results=[[7, 9]]
+    )
+    payload = QuestionCreateIn(
+        subject_id=1, stem_md="1. 已知函数 f(x)=x²，求 f(1)。", qtype="解答", difficulty=2, kp_ids=[7, 7, 9]
+    )
+    question_service.create_question(session, payload=payload, creator=_user(), embedder=FakeEmbedder())
+    links = [row for row in session.added if isinstance(row, QuestionKp)]
+    assert [row.kp_id for row in links] == [7, 9]
+
+
+def test_create_question_rolls_back_when_commit_fails() -> None:
+    class CommitFailingSession(FakeSession):
+        def commit(self) -> None:
+            raise RuntimeError("database unavailable")
+
+    subject = Subject(name="数学")
+    session = CommitFailingSession(objects={(Subject, 1): subject}, scalar_results=[None, None])
+    payload = QuestionCreateIn(subject_id=1, stem_md="1. 已知函数 f(x)=x²，求 f(1)。", qtype="解答", difficulty=2)
+    with pytest.raises(RuntimeError):
+        question_service.create_question(session, payload=payload, creator=_user(), embedder=FakeEmbedder())
+    assert session.rollbacks == 1
