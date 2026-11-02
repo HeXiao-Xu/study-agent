@@ -666,6 +666,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **产出**：mistakes 表、`api/v1/mistakes.py`
 - **提示词要点**：支持"从题目库选"和"直接上传图片"两种录入；状态 pending→corrected→mastered；`correct_streak` 连续答对 2 次自动置 mastered；列表按知识点/错因/时间/状态筛选与统计
 - **验收**：录入 10 道错题（含拍照），能改状态，列表筛选正确
+- **实施记录（2026-11-03）**：spec/plan 见 `docs/spec/s4-2-mistakes.md`、`docs/plan/s4-2-mistakes.md`；迁移 `0010_s4_2` 建 `mistakes`/`mistake_analyses`（`UNIQUE(user_id, question_id)`、`question_id` RESTRICT、`kp_ids` GIN），`MistakeStatus`/`CauseType` 走 TEXT+CHECK；题库选题与拍照识别两种录入，拍照走异步任务 `mistake.recognize`（`POST /photo` 的 `subject_id` 在 query，`file`/`my_answer_md` 在 multipart），8 个错题接口复用 `GET /tasks/{task_id}`；重复录入复用重置且仍 201 + `created=false`；状态机只由 `POST /review` 驱动；列表 `cause_type`/`kp_id` 全用 EXISTS，统计三组聚合；前端列表/录入/详情三页与「06 错题本」导航。后端 **952 passed, 1 warning**（S4-1 基线 865），前端 **180 passed**（基线 125）。真机验收由控制器另行执行；see D-045。
 
 #### S4-3 错因诊断服务（结构化输出）
 - **产出**：`services/mistake_service.py`、`prompts/mistake_v1.md`、`tasks/analyze_mistake.py`
@@ -1023,7 +1024,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 
 ## 阶段 4：错题与知识图谱（M3）
 [x] S4-1 题库表 + 试卷切题
-[ ] S4-2 错题录入 + 状态机
+[x] S4-2 错题录入 + 状态机
 [ ] S4-3 错因诊断服务 ★关键
 [ ] S4-4 变式题生成 + 复算自检
 [ ] S4-5 图谱关系构建 + 人工校验

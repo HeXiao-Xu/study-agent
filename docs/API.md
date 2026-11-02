@@ -501,24 +501,162 @@
 - 行为：同一事务删除 `question_kps` 关联；`mistakes` 表存在时先查引用（S4-2 建表后自动生效，S4-1 阶段用 `has_table` 守卫跳过）
 - 错误：`403/40300`；`404/40400`；`409/40900`「题目已被错题本引用，不能删除、合并或拆分」
 
-## 6. 错题本
+## 6. 错题本（S4-2 定稿）
+
+> 错题是**学生私有数据**：所有接口只作用于当前登录用户，他人记录与不存在统一 `404/40400`，不泄露存在性。
+> 枚举：`status` = `待订正` / `已订正` / `已掌握`；`cause_type` = `概念不清` / `计算失误` / `审题偏差` / `方法不当` / `知识遗忘` / `时间不足` / `unknown`（TEXT + CHECK，常量见 `MistakeStatus` / `CauseType`，SCHEMA §10）。
+> 同一 `(user_id, question_id)` 只保留一条错题：重复录入**不返回 409**，而是复用既有行并重置 `status=待订正`、`correct_streak=0`（`last_review_at` 不动），响应仍是 **201**、`created=false`。
+> `mistake_analyses` 本卡只建表不写入：`cause_type` 与 `analysis` 在 S4-3 上线前恒为空。
+> 路由声明顺序：`/photo`、`/stats` 必须先于 `/{mistake_id}`（否则会被路径参数吞掉，与 §5.5 `/questions/import` 同款坑）。
+
+### POST /api/v1/mistakes/photo
+- 权限：登录用户
+- 类型：异步任务（`mistake.recognize`；202 + 用 §3.5 的 `GET /api/v1/tasks/{task_id}` 轮询，不新增任务查询接口）
+- 请求：`multipart/form-data` + query：
+
+  | 位置 | 字段 | 类型 | 必填 | 说明 |
+  |---|---|---|---|---|
+  | query | subject_id | int | 是 | 学科 id；不存在 → `404/40400` |
+  | multipart | file | file | 是 | 题目照片，仅 PNG / JPEG |
+  | multipart | my_answer_md | string | 否 | 学生手填作答；**优先于**视觉识别结果 |
+
+- 行为：校验学科 → 按扩展名预判 PNG/JPEG → `file_service.upload_file(parse=false)` 落 `files`（`parse_status=done`、`parse_progress=100`，不建笔记/不切片）→ 入队 `mistake.recognize`；任务从图片识别题干并建题（进入公共题库，`origin=upload`、`source_file_id=图片 file_id`），再建/复用错题并挂原图。
+- 成功：**202** `Envelope[TaskOut]`：`id` / `name`（`mistake.recognize`）/ `status`（`pending`）/ `created_at`
+- 任务结果 `result`（`status=succeeded` 后）：
+
+```json
+{"mistake_id": 12, "question_id": 65, "created": true, "reused_question": false,
+ "confidence": 0.86, "low_confidence": false, "used_answer_source": "student",
+ "warnings": [], "elapsed_ms": 9123}
+```
+
+  | 字段 | 说明 |
+  |---|---|
+  | mistake_id / question_id | 新建或复用的错题 / 题目 id |
+  | created | 错题是新建（`true`）还是复用重置（`false`） |
+  | reused_question | 识别出的题干命中题库判重、复用了既有题 |
+  | confidence | 视觉模型自评 0–1，未校准，只作提示 |
+  | low_confidence | `confidence < 0.5` 为 `true`（**等于 0.5 不算低**）；题目仍入库 |
+  | used_answer_source | 作答来源 `student` / `vision` / `none`：学生手填 > 视觉识别 > 无，**不猜**（不编造会污染 S4-3 诊断） |
+  | warnings | 识别告警（如手写体不清、作答缺失） |
+  | elapsed_ms | 任务耗时 |
+
+- 错误：`422/42200` 缺 `file` / 非 PNG/JPEG（**缺文件也是 422**，与 §5.5 `/questions/import` 的 `400/40000` 不一致，属现状）；`404/40400` 学科不存在；`401/40100`；`500/50000`「任务队列不可用」（沿用 S2-7）
+- 备注：拍照上传只接受 PNG/JPEG；WebP 未在 `file_service` 上传层开放（`TYPE_TABLE` / `upload_allowed_extensions` 均无），补 WebP 属跨模块改动，本卡不做（d-11）。`ai/vision` 的 `ALLOWED_MIMES` 仍保留 webp 作防御，但本链路不可达。
+
+### GET /api/v1/mistakes/stats
+- 权限：登录用户（仅本人）
+- 类型：同步
+- 入参：
+
+  | 参数 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | created_from | datetime | 否 | `created_at` 下界（含） |
+  | created_to | datetime | 否 | `created_at` 上界（含） |
+
+- 口径：`total` = `by_status` 三个状态计数之和（不是诊断数，也不按错因/知识点去重）；三条聚合都带 `user_id` 与日期边界。
+  - `by_status`：固定按 `待订正` / `已订正` / `已掌握` 顺序返回，缺的状态补 0；
+  - `by_cause`：只统计已有诊断的错题（`mistake_analyses` 内连接），按 `count DESC, cause_type` 稳定排序；S4-3 前为 `[]`；
+  - `top_kps`：取前 10，按 `count DESC, kp_id`；一条错题挂多个知识点时在每个知识点各计 1 次。
+- 出参：`Envelope[MistakeStatsOut]`
+- 示例：
+
+```json
+{"code": 0, "message": "ok", "trace_id": "9b2e…",
+ "data": {"total": 12,
+          "by_status": [{"status": "待订正", "count": 7},
+                        {"status": "已订正", "count": 3},
+                        {"status": "已掌握", "count": 2}],
+          "by_cause": [{"cause_type": "概念不清", "count": 4},
+                       {"cause_type": "计算失误", "count": 2}],
+          "top_kps": [{"kp_id": 3, "kp_name": "函数的单调性", "count": 5}]}}
+```
+
+- 错误：`422/42200` 时间格式非法；`401/40100`
+
+### GET /api/v1/mistakes
+- 权限：登录用户（仅本人）
+- 类型：同步（分页）
+- 入参：
+
+  | 参数 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | page / page_size | int | 否 | 同 §0（默认 1 / 20，1–100） |
+  | status | string | 否 | `待订正` / `已订正` / `已掌握`；非法值 `422/42200` |
+  | cause_type | string | 否 | 错因值（§10）；S4-3 前无数据；当前不做值集校验，按字符串过滤 |
+  | kp_id | int | 否 | 题目挂载的 KP **或** 诊断 `kp_ids` 命中即返回（两段 `EXISTS`，一题多 KP 不产生重复行） |
+  | created_from | datetime | 否 | `created_at` 下界（含） |
+  | created_to | datetime | 否 | `created_at` 上界（含） |
+  | sort_by | string | 否 | 白名单 `created_at` / `last_review_at` / `status` / `correct_streak`，默认 `created_at` |
+  | order | string | 否 | `asc` / `desc`，默认 `desc` |
+
+- 出参：`Envelope[PageData[MistakeSummary]]`
+- 排序：主排序后**追加 `id DESC` 兜底**（同一秒录入的多条错题不重复/漏行）；`last_review_at` 为 NULL 的行按 PostgreSQL 默认排序，NULL 排序口径待定（见 PROGRESS 遗留）。
+- `MistakeSummary`：`id` / `question_id` / `status` / `correct_streak` / `stem_excerpt`（题干前 120 字）/ `subject_id` / `qtype` / `difficulty` / `kp_names`（一页一次 `IN` 批查，按 `question_kps.weight` 降序、同权重按 `kp_id`）/ `cause_type`（S4-3 前恒 `null`）/ `has_image` / `created_at` / `last_review_at`
+- 示例：
+
+```json
+{"code": 0, "message": "ok", "trace_id": "4f1c…",
+ "data": {"items": [{"id": 12, "question_id": 65, "status": "待订正",
+                     "correct_streak": 0, "stem_excerpt": "已知函数 $f(x)=x^2-4x+3$…",
+                     "subject_id": 7, "qtype": "解答", "difficulty": 2,
+                     "kp_names": ["一元二次函数"], "cause_type": null,
+                     "has_image": true, "created_at": "2026-11-03T04:12:09.118Z",
+                     "last_review_at": null}],
+          "total": 12, "page": 1, "page_size": 20}}
+```
+
+- 错误：`422/42200` 非法 `status` / 排序字段非白名单 / 分页越界；`401/40100`
 
 ### POST /api/v1/mistakes
-- 权限：student
-- 类型：同步
-- 入参：题目 + 我的答案（`image_file_id` 可选，拍照录入）
-- 出参：TODO（S4-2）
+- 权限：登录用户
+- 类型：同步，**201**
+- 入参（JSON）：
 
-### POST /api/v1/mistakes/{id}/analyze
-- 权限：student
-- 类型：异步任务
-- 说明：触发 AI 诊断；五维输出见方案 6.3（知识点定位 / 错因分类 6 类+unknown / 第一处错误步骤 / 变式训练 2–3 道 / 复习建议）
-- 出参：任务受理结果（TODO，S4-3）
+  | 字段 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | question_id | int | 是 | 题库题目 id（正数） |
+  | my_answer_md | string | 否 | 学生作答 |
+  | correct_answer_md | string | 否 | 正确答案；缺省时取题目的 `answer_md` |
 
-### GET /api/v1/mistakes/{id}/analysis
-- 权限：student
+- 行为：题目不存在 → `404/40400`；同 `(user, question)` 已存在 → 复用并重置（`status=待订正`、`correct_streak=0`，`last_review_at` 不动，只覆盖本次显式传入的作答/答案），返回 **201 + `created=false`**；并发重复录入撞唯一约束时由服务端重查赢家后按同一语义复用，不把 `IntegrityError` 暴露成 500。
+- 出参：`Envelope[MistakeCreateOut]`（= `MistakeDetail` + `created: bool`）
+- 错误：`404/40400` 题目不存在；`409/40900`「错题录入冲突，请重试」（并发冲突且重查不到赢家，极少数）；`422/42200` `question_id` 非法；`401/40100`
+
+### GET /api/v1/mistakes/{mistake_id}
+- 权限：登录用户（仅本人；他人与不存在统一 404）
 - 类型：同步
-- 出参：诊断结果（mistake_analyses 表）
+- 出参：`Envelope[MistakeDetail]`
+- `MistakeDetail` = `MistakeSummary` + `stem_md` / `options`（`[{key,text}]`，非选择题为 `null`）/ `my_answer_md` / `correct_answer_md` / `image_url`（`/api/v1/files/{file_id}/image`，需 Bearer；前端经 `http.ts` 取 blob 再转 objectURL）/ `analysis`
+- `analysis`：`{cause_type, error_step, explanation_md, review_advice_md, kp_ids, created_at}`；S4-3 前恒为 `null`
+- 错误：`404/40400`「错题不存在」；`401/40100`
+
+### PATCH /api/v1/mistakes/{mistake_id}
+- 权限：登录用户（仅本人）
+- 类型：同步（部分更新）
+- 入参：`{my_answer_md?, correct_answer_md?, status?}`，只改传入字段
+- `null` 语义：`my_answer_md` / `correct_answer_md` 显式传 `null` 表示清空；`status` 是 NOT NULL 列，显式传 `null` → **422/42200**；`status` 非三值 → `422/42200`
+- 行为：**只改状态标签，不驱动 `correct_streak`、也不刷新 `last_review_at`**；连续答对次数只能由 `POST /review` 产生（D-7）
+- 出参：`Envelope[MistakeDetail]`
+- 错误：`404/40400`；`422/42200`；`401/40100`
+
+### POST /api/v1/mistakes/{mistake_id}/review
+- 权限：登录用户（仅本人）
+- 类型：同步
+- 入参：`{"correct": true}`（必填 bool，表示本次复习是否答对）
+- 状态机（`MASTERY_STREAK = 2`）：
+  - `correct=true` → `correct_streak += 1`；`>= 2` → `已掌握`，否则 `已订正`；
+  - `correct=false` → `correct_streak = 0`、`status = 待订正`（已掌握后答错也回退）；
+  - 三种情况都刷新 `last_review_at`；已掌握后继续答对，`correct_streak` 继续递增（不封顶）。
+- 出参：`Envelope[MistakeDetail]`（返回更新后的整行，前端直接刷新徽标）
+- 错误：`404/40400`；`422/42200` 缺 `correct`；`401/40100`
+
+### DELETE /api/v1/mistakes/{mistake_id}
+- 权限：登录用户（仅本人）
+- 类型：同步（硬删）
+- 出参：**204** 无响应体
+- 行为：同一事务先删诊断行（`mistake_analyses`）再删主行，不留孤儿；不可恢复
+- 错误：`404/40400`；`401/40100`
 
 ## 7. 题目生成
 
@@ -665,7 +803,7 @@
 | 文件 | 下载 / 删除、签名 URL 接口 | 后续（S2-13 已交付列表/解析状态/切片预览） |
 | 异步任务 | 任务列表 / 取消 / 重跑、running 心跳回收、SSE 状态推送 | 后续（S2-7 已交付提交/轮询/重试；S3-5 定流式） |
 | 知识点 | 树的导入与管理端接口 | S2-9 |
-| 错题 | 列表 / 统计看板 | S4-2 / S4-8 |
+| 错题 | AI 错因诊断接口（`POST /mistakes/{id}/analyze`）、统计看板 | S4-3 / S4-8（S4-2 已交付列表、统计、拍照录入与 CRUD） |
 | 复习 | 计划手动调整 | S5-5 |
 
 ## 13. 错误码表

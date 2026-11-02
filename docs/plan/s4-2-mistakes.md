@@ -65,7 +65,7 @@
 - Consumes: `app.core.config.get_settings()`（已有 `dashscope_api_key`、`_fallback_dashscope_key`）
 - Produces: `vision_model: str`（默认 `"qwen-vl-max-latest"`）；`测试数据/mistake_photo_{clean,rotated,answered}.png` 三张图；一条结论文档
 
-- [ ] **Step 1: 加配置项**
+- [x] **Step 1: 加配置项**
 
 `backend/app/core/config.py` 在 `llm_model` 附近加：
 
@@ -83,7 +83,7 @@
 VISION_MODEL=qwen-vl-max-latest
 ```
 
-- [ ] **Step 2: 写合成图脚本**
+- [x] **Step 2: 写合成图脚本**
 
 `测试数据/_make_s4_2_mistake_photos.py`（用 Pillow 渲染，输出三张图；图题内容取自 S4-1 的验收卷第一题，保证与题库可比对）：
 
@@ -143,12 +143,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: 生成图片并确认**
+- [x] **Step 3: 生成图片并确认**
 
 Run: `cd E:\BiShe-AIStudy\study-agent && .\.venv\Scripts\python.exe "测试数据\_make_s4_2_mistake_photos.py"`
 Expected: 打印三行 `clean.png (1000, 620)` / `rotated.png (1098, 731)` / `answered.png (1000, 620)`（旋转后尺寸略大属正常）
 
-- [ ] **Step 4: 写并跑视觉探针**
+- [x] **Step 4: 写并跑视觉探针**
 
 `E:\BiShe-AIStudy\.sdd\s4-2-mistakes\probe_vision.py`：
 
@@ -195,11 +195,11 @@ Expected: `HTTP 200`，正文里能读到题干（含 `x^{2}-4x+3` 或等价写�
 
 若 `HTTP 400` 且报 `image_url` 格式不支持 → **停**，按 spec §14 降级方案 1（改用 DashScope 原生 `multimodal-generation` 接口），把结论与改法写进 `docs/DECISIONS.md` 后再继续 Task 4；Task 2/3 不受影响可先做。
 
-- [ ] **Step 5: 记录探针结论**
+- [x] **Step 5: 记录探针结论**
 
 在 `E:\BiShe-AIStudy\.sdd\s4-2-mistakes\progress.md` 追加一段：HTTP 状态、模型名、首轮 token 数与耗时、是否接受 base64、识别文本与原文的差异（人工比对一句）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/core/config.py backend/.env.example "测试数据/_make_s4_2_mistake_photos.py"
@@ -226,7 +226,7 @@ git commit -m "feat(s4-2): 视觉模型配置项与合成验收图生成脚本"
   - `app.models.mistake.Mistake`：`id, user_id, question_id, my_answer_md, correct_answer_md, image_file_id, status, correct_streak, created_at, last_review_at`
   - `app.models.mistake_analysis.MistakeAnalysis`：`id, mistake_id, kp_ids, cause_type, error_step, explanation_md, similar_questions_json, review_advice_md, model, prompt_version, created_at`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_mistake_models.py`：
 
@@ -269,12 +269,12 @@ def test_mistake_analysis_unique_and_cascade():
     assert "uq_mistake_analyses_mistake_id" in names
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_models.py -q`
 Expected: FAIL —— `ImportError: cannot import name 'MistakeStatus'` 或 `No module named 'app.models.mistake'`
 
-- [ ] **Step 3: 加枚举**
+- [x] **Step 3: 加枚举**
 
 `backend/app/models/enums.py` 末尾追加：
 
@@ -303,7 +303,7 @@ MISTAKE_STATUSES: tuple[str, ...] = tuple(item.value for item in MistakeStatus)
 CAUSE_TYPES: tuple[str, ...] = tuple(item.value for item in CauseType)
 ```
 
-- [ ] **Step 4: 写两个模型**
+- [x] **Step 4: 写两个模型**
 
 `backend/app/models/mistake.py`：
 
@@ -430,7 +430,7 @@ class MistakeAnalysis(Base):
 
 > 若 `app/models/base.py` 的基类名不是 `Base`，按实际名字改（`grep -n "class .*Base" app/models/base.py`）。
 
-- [ ] **Step 5: 写迁移**
+- [x] **Step 5: 写迁移**
 
 `backend/alembic/versions/0010_s4_2_mistakes.py`（**手写**，不要 autogenerate 后不回看）：
 
@@ -526,7 +526,7 @@ def downgrade() -> None:
     op.drop_table("mistakes")
 ```
 
-- [ ] **Step 6: 迁移上/下各跑一次**
+- [x] **Step 6: 迁移上/下各跑一次**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m alembic upgrade head && ..\.venv\Scripts\python.exe -m alembic current`
 Expected: `0010_s4_2 (head)`
@@ -534,12 +534,12 @@ Expected: `0010_s4_2 (head)`
 Run: `..\.venv\Scripts\python.exe -m alembic downgrade 0009_s4_1 && ..\.venv\Scripts\python.exe -m alembic upgrade head`
 Expected: 两次都无报错（证明 downgrade 可用）
 
-- [ ] **Step 7: 跑模型测试**
+- [x] **Step 7: 跑模型测试**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_models.py -q`
 Expected: `4 passed`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/models/enums.py backend/app/models/mistake.py \
@@ -563,7 +563,7 @@ git commit -m "feat(s4-2): 错题与错题诊断两表（迁移 0010）与状态
   - `LLMMessage(role: Role, content: str, images: tuple[str, ...] | None = None)`（用 tuple 保持 `frozen=True` 可哈希）
   - `_build_payload` 生成的消息：`images` 为空 → `{"role":..., "content": str}`；非空 → `{"role":..., "content": [{"type":"text","text":...}, {"type":"image_url","image_url":{"url":...}}]}`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_llm_vision_message.py`：
 
@@ -613,12 +613,12 @@ def test_system_message_with_images_is_rejected():
         LLMMessage(role="system", content="规则", images=("data:image/png;base64,AAA",))
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_llm_vision_message.py -q`
 Expected: FAIL —— `TypeError: LLMMessage.__init__() got an unexpected keyword argument 'images'`
 
-- [ ] **Step 3: 改 `LLMMessage`**
+- [x] **Step 3: 改 `LLMMessage`**
 
 `backend/app/ai/llm/base.py` 第 12–16 行替换为：
 
@@ -639,7 +639,7 @@ class LLMMessage:
                 raise ValueError("图片必须是 data URL（data:image/...;base64,...）")
 ```
 
-- [ ] **Step 4: 改 `_build_payload`**
+- [x] **Step 4: 改 `_build_payload`**
 
 `backend/app/ai/llm/openai_compat.py` 的 `_build_payload` 中 `messages` 列表推导替换为：
 
@@ -664,18 +664,18 @@ def _build_message(message: LLMMessage) -> dict[str, Any]:
     return {"role": message.role, "content": parts}
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_llm_vision_message.py -q`
 Expected: `4 passed`
 
-- [ ] **Step 6: 跑相关既有测试确认零回归**
+- [x] **Step 6: 跑相关既有测试确认零回归**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_llm_openai_compat.py tests/test_llm_client.py -q`
 （文件名按实际存在者）；若不存在则跑 `..\.venv\Scripts\python.exe -m pytest -q -k "llm"`
 Expected: 全绿（无图路径未变）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/ai/llm/base.py backend/app/ai/llm/openai_compat.py backend/tests/test_llm_vision_message.py
@@ -696,7 +696,7 @@ git commit -m "feat(s4-2): LLMMessage 支持 data URL 图片，纯文本路径�
 - Consumes: `LLMClient.chat(messages, *, temperature, max_tokens, scene) -> LLMResponse`（Task 3 的 `images`）、`app.ai.json_utils.loads_json_object`、`app.ai.extract.question_extractor.ExtractedOption`
 - Produces: `ai/vision/__init__.py` 导出 `extract_mistake(image_bytes: bytes, mime: str, *, subject_name: str, llm_client: LLMClient | None = None, max_retries: int = 2) -> VisionExtract`、`VisionExtract`、`VisionError`
 
-- [ ] **Step 1: 写 prompt**
+- [x] **Step 1: 写 prompt**
 
 `backend/app/ai/prompts/mistake_ocr_v1.md`（Jinja2，变量只有 `subject_name`）：
 
@@ -727,7 +727,7 @@ git commit -m "feat(s4-2): LLMMessage 支持 data URL 图片，纯文本路径�
 }
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `backend/tests/test_mistake_vision.py`：
 
@@ -825,12 +825,12 @@ def test_warnings_surface_on_result():
     assert result.warnings == ["作答无法辨认"]
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_vision.py -q`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.ai.vision'`
 
-- [ ] **Step 4: 写实现**
+- [x] **Step 4: 写实现**
 
 `backend/app/ai/vision/mistake_ocr.py`：
 
@@ -942,7 +942,7 @@ __all__ = ["VisionError", "VisionExtract", "extract_mistake"]
 > `get_vision_client()` 工厂（`model=get_settings().vision_model`），本任务一并加，并在测试里断言 `extract_mistake`
 > 在未注入 client 时调用的是 `get_vision_client`。
 
-- [ ] **Step 5: 加 `get_vision_client()` 工厂**
+- [x] **Step 5: 加 `get_vision_client()` 工厂**
 
 `backend/app/ai/llm/__init__.py` 追加（与 `get_llm_client` 并列，走同一 key/base_url，仅模型不同）：
 
@@ -966,17 +966,17 @@ def get_vision_client() -> LLMClient:
 
 （与现有 `get_llm_client()` 逐项一致，**只有 `model` 换成 `settings.vision_model`**；类名是 `OpenAICompatibleLLMClient`，不是 `OpenAICompatLLMClient`。Task 3 测试里的 `_client()` 也要用这个名字。）`mistake_ocr.py` 里 `client = llm_client or get_vision_client()`，并把 `get_vision_client` 加进 `__all__`。
 
-- [ ] **Step 6: 跑测试确认通过**
+- [x] **Step 6: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_vision.py -q`
 Expected: `8 passed`
 
-- [ ] **Step 7: 全量回归**
+- [x] **Step 7: 全量回归**
 
 Run: `..\.venv\Scripts\python.exe -m pytest -q`
 Expected: 全绿（应为 877 passed 左右：865 + 4 + 8）
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/ai/prompts/mistake_ocr_v1.md backend/app/ai/vision \
@@ -1004,7 +1004,7 @@ git commit -m "feat(s4-2): 拍照错题识别器（单图严格 JSON + 2 次重�
   - `update_mistake(session, *, user_id: int, mistake_id: int, payload: MistakeUpdateIn) -> MistakeDetailOut`
   - `_commit(session) -> None`
 
-- [ ] **Step 1: 写出入参模型**
+- [x] **Step 1: 写出入参模型**
 
 `backend/app/schemas/mistake.py`：
 
@@ -1120,7 +1120,7 @@ class MistakeStatsOut(BaseModel):
     top_kps: list[KpCountOut]
 ```
 
-- [ ] **Step 2: 写失败测试（含 FakeSession）**
+- [x] **Step 2: 写失败测试（含 FakeSession）**
 
 `backend/tests/test_mistake_service.py` 顶部（**照 S4-1 `tests/test_question_service.py` 的 FakeSession 仿写**，额外加 `execute` 供 Task 6 的统计用）：
 
@@ -1284,12 +1284,12 @@ def test_update_mistake_changes_answer_only():
     assert session.commits == 1
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.services.mistake_service'`
 
-- [ ] **Step 4: 写服务骨架（`_load_owned` / `_detail` / `_commit` / `create_from_question` / `get_detail` / `update_mistake`）**
+- [x] **Step 4: 写服务骨架（`_load_owned` / `_detail` / `_commit` / `create_from_question` / `get_detail` / `update_mistake`）**（实际：复用重置抽成 `_reset_reentry` 且不推进 `last_review_at`；并发 `IntegrityError` 重查赢家后复用；`update_mistake` 用 `model_fields_set` 区分「显式 null 清空」与「未传」）
 
 `backend/app/services/mistake_service.py`（本任务先写这些；Task 6/7 继续往里加）：
 
@@ -1468,12 +1468,12 @@ def update_mistake(
 
 > `Question.options_json` 的字段名以 `app/models/question.py` 实际为准（S4-1 里是 `options_json`），存的形状是 `[{"key": "...", "text": "..."}]`。
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: `7 passed`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/schemas/mistake.py backend/app/services/mistake_service.py backend/tests/test_mistake_service.py
@@ -1495,7 +1495,7 @@ git commit -m "feat(s4-2): 错题服务骨架与题库选题录入（重复录�
   - `delete_mistake(session, *, user_id: int, mistake_id: int) -> None`
   - `stats(session, *, user_id: int, created_from: datetime | None = None, created_to: datetime | None = None) -> MistakeStatsOut`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 追加到 `backend/tests/test_mistake_service.py`：
 
@@ -1567,12 +1567,12 @@ def test_stats_queries_always_filter_owner():
         assert "user_id" in str(statement.compile(compile_kwargs={"literal_binds": False}))
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: FAIL —— `AttributeError: module 'app.services.mistake_service' has no attribute 'record_review'`
 
-- [ ] **Step 3: 实现三个函数**
+- [x] **Step 3: 实现三个函数**
 
 追加到 `backend/app/services/mistake_service.py`：
 
@@ -1675,12 +1675,12 @@ from app.schemas.mistake import (
 )
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: `14 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/mistake_service.py backend/tests/test_mistake_service.py
@@ -1702,7 +1702,7 @@ git commit -m "feat(s4-2): 错题状态机（连续答对 2 次自动掌握）�
   - `build_mistakes_query(*, user_id: int, filters: MistakeFilters) -> Select`
   - `list_mistakes(session, *, user_id: int, filters: MistakeFilters, page: PageParams, sort: SortParams) -> PageData[MistakeSummaryOut]`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def _compiled(statement) -> str:
@@ -1771,12 +1771,12 @@ def test_list_mistakes_returns_rows_with_kp_names(monkeypatch):
     assert data.items[0].stem_excerpt.startswith("已知函数")
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: FAIL —— `AttributeError: ... has no attribute 'build_mistakes_query'`
 
-- [ ] **Step 3: 实现查询与列表**
+- [x] **Step 3: 实现查询与列表**（实际：`kp_names` 与 `cause_type` 改为一页各一次 `IN` 批查（空页跳过），不做 2N 次逐行查询）
 
 追加到 `backend/app/services/mistake_service.py`：
 
@@ -1877,12 +1877,12 @@ from app.schemas.common import PageData
 from app.utils.pagination import PageParams, SortParams, apply_sort
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_service.py -q`
 Expected: `20 passed`
 
-- [ ] **Step 5: 全量回归 + Commit**
+- [x] **Step 5: 全量回归 + Commit**
 
 Run: `..\.venv\Scripts\python.exe -m pytest -q`
 Expected: 全绿
@@ -1909,7 +1909,7 @@ git commit -m "feat(s4-2): 错题列表筛选（错因/知识点 EXISTS）与排
   - `task_create_mistake(session, *, user_id: int, question_id: int, my_answer_md: str | None, correct_answer_md: str | None, image_file_id: int | None) -> tuple[Mistake, bool]`（**不 commit**，任务内用）
   - `tasks/mistake_recognize.py::mistake_recognize_task(session, payload) -> dict`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_mistake_task.py`：
 
@@ -2095,12 +2095,12 @@ def test_start_photo_recognize_uploads_and_enqueues(monkeypatch):
     assert task.id == 98
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_task.py -q`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.tasks.mistake_recognize'`
 
-- [ ] **Step 3: 服务侧两个函数**
+- [x] **Step 3: 服务侧两个函数**（实际：`start_photo_recognize` 增加 `my_answer_md` 参数与上传前 mime 预校验，`IMAGE_MIMES` 只含 PNG/JPEG；`task_create_mistake` 复用 `_reset_reentry` 并 `flush()` 取 id，不再写 `last_review_at`）
 
 追加到 `backend/app/services/mistake_service.py`：
 
@@ -2179,7 +2179,7 @@ from app.tasks.queue import TaskQueue  # 以 api/deps.py 里的类型为准
 from app.services import question_service
 ```
 
-- [ ] **Step 4: 写 handler**
+- [x] **Step 4: 写 handler**
 
 `backend/app/tasks/mistake_recognize.py`：
 
@@ -2295,12 +2295,12 @@ def _subject_name(session: Session, subject_id: int) -> str:
 from app.tasks import mistake_recognize  # noqa: F401  （注册 mistake.recognize）
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistake_task.py -q`
 Expected: `6 passed`
 
-- [ ] **Step 6: 全量回归 + Commit**
+- [x] **Step 6: 全量回归 + Commit**
 
 Run: `..\.venv\Scripts\python.exe -m pytest -q`
 Expected: 全绿
@@ -2324,7 +2324,7 @@ git commit -m "feat(s4-2): mistake.recognize 任务（拍照→识别→建题�
 - Consumes: `app.schemas.common.Envelope`、`TaskOut`、`get_current_user`/`get_db`/`get_storage`/`get_task_queue`、Task 5–8 的全部 service 函数
 - Produces: `mistakes.router`（`prefix="/mistakes"`），8 个路由；`/photo` 与 `/stats` 必须在 `/{mistake_id}` 之前声明
 
-- [ ] **Step 1: 写测试（TestClient + 依赖覆盖）**
+- [x] **Step 1: 写测试（TestClient + 依赖覆盖）**
 
 `backend/tests/test_mistakes_api.py`（照 S4-1 `tests/test_questions_api.py` 的写法；若该文件用 `app.dependency_overrides`，沿用同一套 fixture）：
 
@@ -2375,12 +2375,12 @@ def test_stats_returns_three_dimensions(client, auth_headers):
 
 > fixture 名以 `tests/test_questions_api.py` 实际提供的为准（S4-1 已有一套登录/session 覆盖），**先读那个文件再写**；本任务只新增错题相关用例，不新建 fixture 体系。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_mistakes_api.py -q`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.api.v1.mistakes'`
 
-- [ ] **Step 3: 写路由**
+- [x] **Step 3: 写路由**（实际：`/photo` 的 `file` 描述收窄为 PNG/JPEG，`IMAGE_MIMES` 不含 webp；响应显式带 `trace_id`）
 
 `backend/app/api/v1/mistakes.py`（**注意声明顺序**）：
 
@@ -2533,7 +2533,7 @@ def delete_mistake(
 
 补 `InvalidParamError` import：`from app.core.exceptions import InvalidParamError`。
 
-- [ ] **Step 4: 挂载路由**
+- [x] **Step 4: 挂载路由**
 
 `backend/app/api/router.py` 在 `questions.include_router` 之后加：
 
@@ -2543,12 +2543,12 @@ api_router.include_router(mistakes.router)
 
 并在顶部 import 里加 `mistakes`。
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `..\.venv\Scripts\python.exe -m pytest tests/test_mistakes_api.py -q`
 Expected: 全绿（≤10 条）
 
-- [ ] **Step 6: 全量回归 + Commit**
+- [x] **Step 6: 全量回归 + Commit**
 
 Run: `..\.venv\Scripts\python.exe -m pytest -q`
 Expected: 全绿
@@ -2576,7 +2576,7 @@ git commit -m "feat(s4-2): 错题 8 个接口（拍照/列表/统计/详情/更�
   - `api/mistakes.ts`：`listMistakes(params)`、`getMistakeStats(params?)`、`createMistake(body)`、`createMistakeFromPhoto(file, subjectId)`、`getMistake(id)`、`updateMistake(id, body)`、`reviewMistake(id, correct)`、`deleteMistake(id)`
   - 路由：`/mistakes`、`/mistakes/capture`、`/mistakes/:id`；导航「06 错题本」
 
-- [ ] **Step 1: 写类型**
+- [x] **Step 1: 写类型**
 
 `web/src/types/mistakes.ts`：
 
@@ -2641,7 +2641,7 @@ export interface MistakeFilters {
 }
 ```
 
-- [ ] **Step 2: 写 API 封装（照 `api/questions.ts` 的写法）**
+- [x] **Step 2: 写 API 封装（照 `api/questions.ts` 的写法）**
 
 `web/src/api/mistakes.ts`：
 
@@ -2695,7 +2695,7 @@ export function deleteMistake(id: number) {
 }
 ```
 
-- [ ] **Step 3: 加路由与导航**
+- [x] **Step 3: 加路由与导航**（实际：拍照页路由为 `/mistakes/new`，组件 `MistakeNewView.vue`；未使用 `/mistakes/capture` + `MistakeCaptureView.vue`）
 
 `web/src/router/index.ts`（照 `/questions` 的写法，含角色守卫）：
 
@@ -2729,12 +2729,12 @@ export function deleteMistake(id: number) {
 
 同时把后续条目的编号顺延（原「06 智能问答」→「07」等），并**同步改** `MainLayout.spec.ts` 里的导航条数断言。
 
-- [ ] **Step 4: 跑前端测试确认导航断言**
+- [x] **Step 4: 跑前端测试确认导航断言**
 
 Run: `cd web && npm run test:run -- --pool=threads`
 Expected: 若 `MainLayout.spec.ts` 断言条数，需要更新为新的条数后全绿
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/src/types/mistakes.ts web/src/api/mistakes.ts web/src/router/index.ts \
@@ -2754,7 +2754,7 @@ git commit -m "feat(s4-2): 前端错题契约/API/路由与侧栏入口"
 - Consumes: Task 10 的 `listMistakes`/`getMistakeStats`/`reviewMistake`/`deleteMistake`、`MdPreview` 不用于列表（只用纯文本摘录）、`ElMessageBox`
 - Produces: 页面组件（无导出 API）；`data-testid="mistake-list"` 容器
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/mistakes/__tests__/MistakeListView.spec.ts`：
 
@@ -2854,12 +2854,12 @@ describe('MistakeListView', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd web && npm run test:run -- --pool=threads src/views/mistakes`
 Expected: FAIL —— 组件不存在
 
-- [ ] **Step 3: 写组件**
+- [x] **Step 3: 写组件**
 
 `web/src/views/mistakes/MistakeListView.vue` 要点（完整实现，约 200 行）：
 
@@ -2872,12 +2872,12 @@ Expected: FAIL —— 组件不存在
 - 空态与 `cause_type === null` 时显示「待 S4-3 诊断」
 - 顶部按钮：「从题库选题」（`$router.push('/mistakes?pick=1')` 或直接嵌 `el-dialog` 列表选择）、「拍照录入」→ `/mistakes/capture`
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:run -- --pool=threads src/views/mistakes`
 Expected: `6 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/src/views/mistakes/MistakeListView.vue web/src/views/mistakes/__tests__/MistakeListView.spec.ts
@@ -2897,7 +2897,7 @@ git commit -m "feat(s4-2): 错题列表页（统计卡 + 四维筛选 + 复习/�
 - Consumes: `createMistakeFromPhoto`、`getMistake`、`updateMistake`、`reviewMistake`；任务轮询复用 `web/src/api/tasks.ts::getTask`
 - Produces: 两页组件
 
-- [ ] **Step 1: 写失败测试（两页各 2–3 条）**
+- [x] **Step 1: 写失败测试（两页各 2–3 条）**（实际：拍照页测试文件为 `MistakeNewView.spec.ts`）
 
 `MistakeCaptureView.spec.ts` 关键断言：
 
@@ -2926,12 +2926,12 @@ it('shows the S4-3 placeholder when analysis is null', async () => {
 
 （测试写法照 Task 11：`vi.mock('@/api/mistakes')` + `flushPromises`；任务 API mock `@/api/tasks`。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd web && npm run test:run -- --pool=threads src/views/mistakes`
 Expected: FAIL —— 组件不存在
 
-- [ ] **Step 3: 写两个组件**
+- [x] **Step 3: 写两个组件**（实际：拍照页落地为 `MistakeNewView.vue`，含 4s 轮询/60s 超时/卸载守卫/blob 预览回收；详情页原图经 `getImageBlob` 取回）
 
 `MistakeCaptureView.vue` 要点：
 - `<input type="file" accept="image/*" capture="environment">`（手机直接调起相机）
@@ -2948,17 +2948,17 @@ Expected: FAIL —— 组件不存在
 - `image_url` 存在时显示缩略图（`<img :src="detail.image_url">`，带 token 由 `http.ts` 的拦截器处理——若图片请求不能带 header，则由前端改用 `fetch` + blob，实现时验证一次并在注释里写明）
 - 诊断区：`analysis === null` → 文案「AI 错因诊断将在 S4-3 上线」；否则渲染五维
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:run -- --pool=threads src/views/mistakes`
 Expected: 全绿（列表 6 + 拍照 2 + 详情 3 = 11）
 
-- [ ] **Step 5: build 验证**
+- [x] **Step 5: build 验证**
 
 Run: `cd web && npm run build`
 Expected: `0 error`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/src/views/mistakes/MistakeCaptureView.vue web/src/views/mistakes/MistakeDetailView.vue \
@@ -2984,7 +2984,7 @@ git commit -m "feat(s4-2): 拍照录入页（轮询/重试/兜底）与错题详
 - Consumes: 前面所有 task 的产物 + 真实 PG/Redis/MinIO/Qwen-VL
 - Produces: 文档与验收证据（数字必须来自实跑）
 
-- [ ] **Step 1: 起服务（隔离 Redis 库，避免旧 worker 抢任务）**
+- [ ] **Step 1: 起服务（隔离 Redis 库，避免旧 worker 抢任务）**（实际：真机验收不在 Task 13 文档同步范围，由控制器另行执行）
 
 ```powershell
 cd E:\BiShe-AIStudy\study-agent\backend
@@ -2995,29 +2995,29 @@ $env:REDIS_URL="redis://127.0.0.1:6379/6"
 ..\.venv\Scripts\python.exe -m app.tasks.worker
 ```
 
-- [ ] **Step 2: 题库选录入 10 道 + 重复 1 道**
+- [ ] **Step 2: 题库选录入 10 道 + 重复 1 道**（实际：待控制器真机验收）
 
 脚本内：登录 → `GET /questions?subject_id=7&page_size=10` → 逐题 `POST /mistakes` → 断言 10 个 201；再对第 1 题重复 POST → 断言 `created=false` 且 `status='待订正'`。
 Expected 输出：`created=10 duplicated=0` 与 `reuse: created=false status=待订正 streak=0`
 
-- [ ] **Step 3: 拍照录入 3 张（真调 Qwen-VL）**
+- [ ] **Step 3: 拍照录入 3 张（真调 Qwen-VL）**（实际：待控制器真机验收）
 
 对 `测试数据/mistake_photo/{clean,rotated,answered}.png` 各 `POST /mistakes/photo`（`parse=false` 上传）→ 轮询 `GET /tasks/{id}` 至 `succeeded`。
 Expected：3 个任务 `succeeded`，记录每个的 `elapsed_ms`、`confidence`、`reused_question`；
 人工逐字比对识别出的 `stem_md` 与原题文字（记录差异字符数/总字符数），把数字写进 PROGRESS。
 
-- [ ] **Step 4: 状态机 + 筛选 + 统计 + 引用保护**
+- [ ] **Step 4: 状态机 + 筛选 + 统计 + 引用保护**（实际：待控制器真机验收）
 
 - 取 1 道错题：`review(true)` → 断言 `已订正/streak=1`；再 `review(true)` → `已掌握/streak=2`；`review(false)` → `待订正/streak=0`；
 - `GET /mistakes?status=待订正`、`?kp_id=<某知识点>`、`?created_from=...`、`?cause_type=概念不清`（应为 0 条）各查一次，`total` 与人工统计一致；
 - `GET /mistakes/stats` → `by_status` 三项之和 = `total`；`top_kps` 与人工统计一致；
 - `DELETE /questions/{被错题引用的题号}` → 断言 **409/40900**（S4-2 建表后 S4-1 的守卫首次生效）。
 
-- [ ] **Step 5: 浏览器走一遍**
+- [ ] **Step 5: 浏览器走一遍**（实际：待控制器真机验收）
 
 `/mistakes` 筛选 + 复习 + 删除二次确认；`/mistakes/capture` 上传一张图 → 轮询 → 跳详情；详情页「答对了」→ 徽标变化；诊断区显示 S4-3 占位文案。贴路径与现象。
 
-- [ ] **Step 6: 写文档**
+- [x] **Step 6: 写文档**（实际：错题接口写在 `API.md` 既有 §6「错题本」，不是新增 §5.6；`SCHEMA.md` §5.3/§5.4 与 §10 枚举、`DECISIONS.md` D-045、`PROGRESS.md`、`AGENTS.md`、spec 勘误与 plan 勾选同步完成）
 
 - `docs/API.md` §5.6：8 个接口（表格 + 请求/响应示例 + 错误码 404/40400、422/42200，明确「重复录入返回 201 且 `created=false`」）；
 - `docs/SCHEMA.md` §5.3：补 `UNIQUE(user_id, question_id)`、`ix_`/`ck_` 名、`question_id` RESTRICT；§5.4：补 CASCADE 与 GIN；
@@ -3026,7 +3026,7 @@ Expected：3 个任务 `succeeded`，记录每个的 `elapsed_ms`、`confidence`
 - `AGENTS.md` §9.2 新增 S4-2 条目、§9.6 新增错题锚点；
 - 实施计划 S4-2 勾选 + 实施记录。
 
-- [ ] **Step 7: 全量回归（最终提交前）**
+- [ ] **Step 7: 全量回归（最终提交前）**（实际：后端 `952 passed`；前端 `npm run test:run` 受本会话沙箱限制无法执行，待控制器复跑确认）
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
@@ -3035,7 +3035,7 @@ cd ..\backend; ..\.venv\Scripts\python.exe -m alembic current
 ```
 Expected：后端 ≥905 passed、前端 ≥136 passed、`0010_s4_2 (head)`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add docs AGENTS.md

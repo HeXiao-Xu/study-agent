@@ -257,34 +257,62 @@ erDiagram
 
 ### 5.3 mistakes
 
+> 错题（S4-2 定稿，迁移 `0010_s4_2`）。`UNIQUE(user_id, question_id)` 保证同一学生对同一题只有一条；重复录入是复用重置，不是新增（D-045）。
+
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
 |---|---|---|---|---|---|
-| id | BIGINT | 否 | 自增 | 主键 | PK ⚠ |
-| user_id | BIGINT | 否 | — | 所有者 | idx(user_id, status) ⚠ |
-| question_id | BIGINT | 否 | — | 题目 | — |
-| my_answer_md | TEXT | 是 | — | 学生作答（缺失时不猜错因，方案 6.3） | — |
-| correct_answer_md | TEXT | 是 | — | 正确答案 | — |
-| image_file_id | BIGINT | 是 | — | 拍照原图 | — |
-| status | TEXT | 否 | '待订正' | §10.7 | — |
-| correct_streak | INTEGER | 否 | 0 ⚠ | 连续答对次数 | — |
-| created_at | TIMESTAMPTZ | 否 | now() | | — |
-| last_review_at | TIMESTAMPTZ | 是 | — | 最近复习时间 | — |
+| id | BIGINT | 否 | 自增 | 主键 | PK `mistakes_pkey` ✅ |
+| user_id | BIGINT | 否 | — | 所有者 | UNIQUE 组成列；`ix_mistakes_user_status`、`ix_mistakes_user_created`；FK `fk_mistakes_user_id` → `users.id`（NO ACTION） ✅ |
+| question_id | BIGINT | 否 | — | 题目 | UNIQUE 组成列；`ix_mistakes_question_id`；FK `fk_mistakes_question_id` → `questions.id` **ON DELETE RESTRICT** ✅ |
+| my_answer_md | TEXT | 是 | — | 学生作答；识别不出为 NULL（缺失时不猜错因，方案 6.3） | — |
+| correct_answer_md | TEXT | 是 | — | 正确答案（题目带出或识别得到） | — |
+| image_file_id | BIGINT | 是 | — | 拍照原图 | FK `fk_mistakes_image_file_id` → `files.id` **ON DELETE SET NULL** ✅ |
+| status | TEXT | 否 | `'待订正'` | 状态机，§10.7 | `ck_mistakes_status`；`ix_mistakes_user_status` ✅ |
+| correct_streak | INTEGER | 否 | `0` | 连续答对次数；只由复习接口驱动 | `ck_mistakes_correct_streak`（`>= 0`） ✅ |
+| created_at | TIMESTAMPTZ | 否 | `now()` | 录入时间；列表默认排序 | `ix_mistakes_user_created` ✅ |
+| last_review_at | TIMESTAMPTZ | 是 | — | 最近一次复习时间；录入/改状态都不推进 | — |
+
+**约束与索引（实测 DDL）**
+
+- 主键：`mistakes_pkey`。
+- 唯一约束：`uq_mistakes_user_question` = `UNIQUE(user_id, question_id)`（幂等复用与并发冲突都由它兜底）。
+- 检查约束：
+  - `ck_mistakes_status`：`status IN ('待订正', '已订正', '已掌握')`（`in_check()` 生成，D-021）；
+  - `ck_mistakes_correct_streak`：`correct_streak >= 0`。
+- 普通索引（均为 btree）：
+  - `ix_mistakes_user_status` = `(user_id, status)` → 列表状态筛选与统计；
+  - `ix_mistakes_user_created` = `(user_id, created_at)`（**升序**）→ 默认 `created_at DESC` 排序靠反向扫描即可，无需 DESC 索引；
+  - `ix_mistakes_question_id` = `(question_id)` → S4-1 `_ensure_not_referenced` 反查。
+- 外键（三个 ON DELETE 行为不同，不要混用）：
+  - `fk_mistakes_user_id` → `users.id`，**未声明 `ondelete`**，PostgreSQL 默认 **NO ACTION**；删用户不会级联删错题（当前无删用户接口）；
+  - `fk_mistakes_question_id` → `questions.id`，**ON DELETE RESTRICT**；与 S4-1 `delete_question` 的引用检查形成双保险（`has_table` 守卫在 S4-2 建表后自动生效）；
+  - `fk_mistakes_image_file_id` → `files.id`，**ON DELETE SET NULL**；文件被删时错题保留，只丢原图。
 
 ### 5.4 mistake_analyses
 
+> 错题诊断结果（S4-2 只建表，S4-3 写入）。ER 上是 1:1，靠 `UNIQUE(mistake_id)` 保证。
+
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
 |---|---|---|---|---|---|
-| id | BIGINT | 否 | 自增 | 主键 | PK ⚠ |
-| mistake_id | BIGINT | 否 | — | 错题（ER 为 1:1） | UNIQUE ⚠ |
-| kp_ids | BIGINT[] ⚠ | 是 | — | 定位到的知识点 | — |
-| cause_type | TEXT | 否 | — | 主错因，§10.8 | — |
+| id | BIGINT | 否 | 自增 | 主键 | PK `mistake_analyses_pkey` ✅ |
+| mistake_id | BIGINT | 否 | — | 错题（ER 为 1:1） | `uq_mistake_analyses_mistake_id`；FK `fk_mistake_analyses_mistake_id` → `mistakes.id` **ON DELETE CASCADE** ✅ |
+| kp_ids | BIGINT[] | 是 | — | 定位到的知识点 | `ix_mistake_analyses_kp_ids` **GIN** ✅ |
+| cause_type | TEXT | 否 | — | 主错因，§10.8 | `ck_mistake_analyses_cause_type` ✅ |
 | error_step | TEXT | 是 | — | 第一处出错步骤（引用学生原文） | — |
 | explanation_md | TEXT | 是 | — | 正确解法（分步骤 LaTeX） | — |
-| similar_questions_json | JSONB | 是 | — | 2–3 道变式题 | — |
+| similar_questions_json | JSONB | 是 | — | 2–3 道变式题（S4-3 返回） | — |
 | review_advice_md | TEXT | 是 | — | 复习建议（前置知识 + 笔记关联） | — |
 | model | TEXT | 否 | — | 诊断所用模型 | — |
 | prompt_version | TEXT | 否 | — | Prompt 版本（prompt_templates 引用） | — |
-| created_at | TIMESTAMPTZ | 否 | now() | | — |
+| created_at | TIMESTAMPTZ | 否 | `now()` | 诊断时间 | — |
+
+**约束与索引（实测 DDL）**
+
+- 主键：`mistake_analyses_pkey`。
+- 唯一约束：`uq_mistake_analyses_mistake_id` = `UNIQUE(mistake_id)`（一道错题至多一条诊断）。
+- 检查约束：`ck_mistake_analyses_cause_type`：`cause_type IN ('概念不清', '计算失误', '审题偏差', '方法不当', '知识遗忘', '时间不足', 'unknown')`。
+- 索引：`ix_mistake_analyses_kp_ids` = **GIN** `(kp_ids)`，支撑列表 `kp_ids @>` 的 `EXISTS` 筛选。
+- 外键：`fk_mistake_analyses_mistake_id` → `mistakes.id`，**ON DELETE CASCADE**；删除错题时诊断行自动清理（service 仍显式先删，便于测试断言）。
 
 ## 6. 练习与掌握度
 
@@ -510,8 +538,8 @@ erDiagram
 | 10.4 | note_kps.source、knowledge_edges.source | ai / manual ✅ | 方案 5.2 |
 | 10.5 | questions.origin | textbook / exam / mock / upload / ai ✅ | 方案 5.2 |
 | 10.6 | questions.qtype | 单选 / 多选 / 填空 / 解答 ✅ | 方案 5.2 |
-| 10.7 | mistakes.status | 待订正 / 已订正 / 已掌握 ✅ | 方案 5.2 |
-| 10.8 | mistake_analyses.cause_type | 概念不清 / 计算失误 / 审题偏差 / 方法不当 / 知识遗忘 / 时间不足 / unknown ✅（unknown：作答缺失时不猜错因，方案 6.3） | 方案 5.2 + 6.3 |
+| 10.7 | mistakes.status（`MistakeStatus`） | 待订正 / 已订正 / 已掌握 ✅（S4-2 落库，TEXT + CHECK） | 方案 5.2 |
+| 10.8 | mistake_analyses.cause_type（`CauseType`） | 概念不清 / 计算失误 / 审题偏差 / 方法不当 / 知识遗忘 / 时间不足 / unknown ✅（S4-2 落库；unknown：作答缺失时不猜错因，方案 6.3） | 方案 5.2 + 6.3 |
 | 10.9 | papers.status | 草稿 / 已生成 / 已提交 ✅；generated_by：manual / ai_agent ✅ | 方案 5.2 |
 | 10.10 | answers.self_rated | 0 / 0.5 / 1 ✅ | 方案 5.2 + 6.6 |
 | 10.11 | review_items.ref_type | note / question / mistake ✅ | 方案 5.2 |
@@ -520,6 +548,8 @@ erDiagram
 | 10.14 | llm_call_logs.scene | qa / query_rewrite / kp_align / embed / mistake / gen / agent（S3-7 扩展） | 本卡 S3-7 |
 | 10.15 | async_tasks.status | pending / running / succeeded / failed（S2-7 定稿；失败重试回 pending） | 本卡 S2-7 |
 | 10.16 | llm_call_logs.status | success / failed（S3-7 定稿；流式被关闭记 failed） | 本卡 S3-7 |
+
+> `MistakeStatus` / `CauseType` 常量定义在 `backend/app/models/enums.py`；CHECK 文本由 `in_check()` 生成，与迁移 `0010_s4_2` 的 `ck_mistakes_status` / `ck_mistake_analyses_cause_type` 一致（S4-2 实测 DDL）。
 
 ---
 

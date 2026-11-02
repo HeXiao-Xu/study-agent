@@ -5,10 +5,10 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-1 题库表 + 试卷切题（迁移 `0009_s4_1`、`question.extract` 异步切题、8 个新接口、前端导入/审题两页）；后端 **865 passed, 1 warning**，前端 **125 passed / 30 files**
-- 终审修复：S4-1 终审代码评审 I1–I7（Critical 0 / Important 7 全部修复或转已知限制）——PATCH 空值 422 与更新撞题 409、题型/选项交叉校验、`kps[].weight` 出参 number、列表 `id DESC` 兜底排序、整卷兜底 token 预算按题数伸缩、学科名/`expected_count` 真实渲染、审题页保存不重置知识点权重
-- 下一步：S4-2 错题录入 + 状态机；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1、S4-2 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S4-2 错题录入 + 状态机（迁移 `0010_s4_2`、`mistakes`/`mistake_analyses` 两表、`mistake.recognize` 拍照识别、8 个错题接口、前端列表/录入/详情三页）；后端 **952 passed, 1 warning**，前端 **180 passed**（`npm run test:run` 实测）
+- 关键口径（S4-2）：同 `(user, question)` 重复录入复用重置且仍 201 + `created=false`；并发冲突靠 `IntegrityError` 重查赢家；状态机只由 `POST /review` 驱动（`PATCH status` 不改 streak）；列表 `cause_type`/`kp_id` 全用 EXISTS；统计 `total` = 三状态计数之和；拍照 handler 不 commit、只有 `task_create_mistake` flush
+- 下一步：S4-3 错因诊断服务；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -60,7 +60,7 @@
 
 ### 阶段 4：错题与知识图谱（M3）
 - [x] S4-1 题库表 + 试卷切题
-- [ ] S4-2 错题录入 + 状态机
+- [x] S4-2 错题录入 + 状态机
 - [ ] S4-3 错因诊断服务 ★
 - [ ] S4-4 变式题生成 + 复算自检
 - [ ] S4-5 图谱关系构建 + 人工校验
@@ -182,8 +182,20 @@
 | 83 | 合并/拆分/删除均为硬删，操作不可撤销（S4-1） | 误操作只能重新导入或手工重录 | 前端已二次确认；需要时补软删/回收站 |
 | 84 | 试卷原件留在 `files` 表，文件页与普通附件混排，无用途区分（S4-1） | 文件列表被试卷占位 | 文件管理卡按用途加筛选或分栏 |
 | 85 | 判重只拦同哈希与近似重复（cos ≥ 0.92），不拦“变式题”（S4-1） | 同题换数字会作为新题入库 | 变式识别留给组卷/错题去重 |
+| 86 | 错因诊断未上线（S4-2 只建 `mistake_analyses` 表）：`analysis`/`cause_type` 恒空，`cause_type` 筛选恒无结果（S4-2） | 错题本只有记录与状态，没有“为什么错”的结论 | S4-3 错因诊断服务 |
+| 87 | 拍照上传只收 PNG/JPEG，WebP 未支持（S4-2 d-11） | 少数手机导出的 WebP 图片无法录入 | 补 `file_service` 的 `TYPE_TABLE`/`upload_allowed_extensions` 与 magic 校验，属跨模块改动 |
+| 88 | `last_review_at DESC` 的 NULL 排序口径未定（S4-2） | 未复习过的错题在按复习时间排序时按 PostgreSQL 默认（DESC 下 NULLS FIRST）置前，是否符合复习语义未确认 | 需求出现时明确并补 `NULLS LAST` 或 `COALESCE` |
+| 89 | `similar_questions_json` 未写入、变式题未生成（S4-2） | 诊断结果里的变式训练区为空 | S4-3 返回 2–3 道变式题；S4-4 生成 + 复算自检 |
 
 ## 变更日志
+
+### 2026-11-03（S4-2）
+- S4-2 完成（按 §10 全流程：spec `docs/spec/s4-2-mistakes.md` + plan `docs/plan/s4-2-mistakes.md`）。交付：迁移 `0010_s4_2` 与 `models/mistake.py`、`models/mistake_analysis.py`；`models/enums.py` 增加 `MistakeStatus`/`CauseType`；`ai/vision/mistake_ocr.py` + `ai/prompts/mistake_ocr_v1.md`（`LLMMessage.images` 视觉消息）；`services/mistake_service.py`；`tasks/mistake_recognize.py`；`api/v1/mistakes.py` + `schemas/mistake.py`（8 个路由，复用 `GET /tasks/{task_id}` 轮询）；前端 `views/mistakes/{MistakeListView,MistakeNewView,MistakeDetailView}.vue`、`MistakePickDialog.vue`、`useMistakeList.ts`、`api/mistakes.ts`、路由与「06 错题本」导航。
+- 拍板（D-045）：同 `(user, question)` 重复录入复用重置、不报 409（`last_review_at` 不动）；并发靠 `IntegrityError` 重查赢家；状态机只由 `POST /review` 驱动、`PATCH status` 不改 streak；列表 `cause_type`/`kp_id` 全用 EXISTS；统计 `total` = 三状态计数之和；拍照 handler 不 commit、`task_create_mistake` 唯一 `flush()` 取 id；作答优先级 student > vision > none；`confidence < 0.5` 标低置信；拍照只收 PNG/JPEG（WebP 未开放，d-11）。
+- 测试：后端 **952 passed, 1 warning**（S4-1 基线 865）；前端 **180 passed**（S4-1 基线 125；`npm run test:run`，控制器实测）。无新增依赖，未动 `requirements.txt` / `package.json`。
+- 真机验收：由控制器另行执行（真实 Qwen-VL + 真实 Postgres/Redis/MinIO、10 道题库录入 + 3 张合成图 + 状态机/筛选/引用保护 + 浏览器）；本节文档同步阶段未跑，故不写未实测的验收数字。
+- 文档同步：`API.md` §6 重写为 8 个接口（含 `/photo` 422 与 `/questions/import` 400 不一致的现状说明）；`SCHEMA.md` §5.3/§5.4 改为实测 DDL（列/默认值/UNIQUE/CHECK/GIN/FK ON DELETE）、§10 枚举补 `MistakeStatus`/`CauseType`；`DECISIONS.md` D-045；`AGENTS.md` §9.2/§9.6；spec 按事实勘误（含 §6 编号、`order` 参数、409 口径等附带修正）；plan checkbox 勾选；实施计划 S4-2 勾选。
+- 已知不足（不粉饰）：S4-3 前无错因诊断与变式题（`analysis`/`cause_type` 恒空）；WebP 未支持；`last_review_at DESC` 的 NULL 排序口径未定；视觉识别只验证过印刷体合成图，手写体未验证；`confidence` 未校准；一图一题、无图片预处理；拍照建题进入公共题库（遗留 82）；错题硬删不可恢复；无教师/家长查看学生错题的接口。
 
 ### 2026-11-03（S4-1）
 - S4-1 完成（按 §10 全流程：spec `docs/spec/s4-1-question-bank.md` + plan `docs/plan/s4-1-question-bank.md`，均经用户确认）。交付：迁移 `0009_s4_1` 与 `models/question.py`、`models/question_kp.py`；`ai/extract/{splitter,question_extractor}.py` + `ai/prompts/question_extract_v1.md`；`services/question_service.py`；`tasks/question_extract.py`；`api/v1/questions.py` + `schemas/question.py`（8 个新路由 + 复用 `GET /tasks/{task_id}`）；`file_service` 放宽 `parse=false`；前端 `views/questions/{ImportView,ReviewView}.vue`、`api/questions.ts`、路由与导航（04 题库）；自编 20 题验收卷与生成脚本。
