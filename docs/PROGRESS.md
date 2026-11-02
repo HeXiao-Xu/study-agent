@@ -6,7 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-1 题库表 + 试卷切题（迁移 `0009_s4_1`、`question.extract` 异步切题、8 个新接口、前端导入/审题两页）；后端 **853 passed, 1 warning**，前端 **122 passed / 30 files**
+- 最近完成：S4-1 题库表 + 试卷切题（迁移 `0009_s4_1`、`question.extract` 异步切题、8 个新接口、前端导入/审题两页）；后端 **865 passed, 1 warning**，前端 **125 passed / 30 files**
+- 终审修复：S4-1 终审代码评审 I1–I7（Critical 0 / Important 7 全部修复或转已知限制）——PATCH 空值 422 与更新撞题 409、题型/选项交叉校验、`kps[].weight` 出参 number、列表 `id DESC` 兜底排序、整卷兜底 token 预算按题数伸缩、学科名/`expected_count` 真实渲染、审题页保存不重置知识点权重
 - 下一步：S4-2 错题录入 + 状态机；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
@@ -187,7 +188,7 @@
 ### 2026-11-03（S4-1）
 - S4-1 完成（按 §10 全流程：spec `docs/spec/s4-1-question-bank.md` + plan `docs/plan/s4-1-question-bank.md`，均经用户确认）。交付：迁移 `0009_s4_1` 与 `models/question.py`、`models/question_kp.py`；`ai/extract/{splitter,question_extractor}.py` + `ai/prompts/question_extract_v1.md`；`services/question_service.py`；`tasks/question_extract.py`；`api/v1/questions.py` + `schemas/question.py`（8 个新路由 + 复用 `GET /tasks/{task_id}`）；`file_service` 放宽 `parse=false`；前端 `views/questions/{ImportView,ReviewView}.vue`、`api/questions.ts`、路由与导航（04 题库）；自编 20 题验收卷与生成脚本。
 - 拍板（D-044）：题库为公共语料；`questions.stem_hash` + `UNIQUE(subject_id, stem_hash)` 为判重第一道闸、余弦 0.92 为第二道；切题允许部分成功（单题失败进 `failed_items`，任务仍 `succeeded`）；知识点对齐改为「向量 top-10 候选内由 LLM 选择」，0.75 只作 LLM 失败时的确定性兜底；拆分/合并判重必须 `exclude_ids` 排除源题自身。
-- 测试：后端 **853 passed, 1 warning**（S3-9 基线 770）；前端 **122 passed / 30 files**（S3-8 基线 114/29）。
+- 测试：后端 **865 passed, 1 warning**（S3-9 基线 770）；前端 **125 passed / 30 files**（S3-8 基线 114/29）。
 - 真机验收（真实 Qwen + 真实 Postgres/Redis/MinIO + 本人自编 20 题卷，2026-11-03）：
 
   | 项 | 实测 |
@@ -206,6 +207,7 @@
   | 合并参数非法 | 只给 1 道题 → `422/42200`；含不存在/跨学科 id → `422/42200` |
 
 - 实施中的修正（真机发现）：`check_duplicate` 原实现未排除源题自身，拆分/合并时源题仍在库，子串/拼接与原题余弦 ≥0.92，真实题拆分直接 409；已为 `check_duplicate` 增加 `exclude_ids`（split 传 `[question_id]`、merge 传 `unique_ids`），判重语义不变，并补 3 条测试。验收口径统一采用修复后的干净全量跑（上表）。
+- 终审修复（I1–I7：Critical 0 条，Important 7 条全部修复或转为已知限制）：① PATCH 的 `qtype/difficulty/origin/verified` 显式传 `null` → 422/42200；`UPDATE` 撞 `UNIQUE(subject_id, stem_hash)`（含并发路径）与 INSERT 一样返回 409/40900；题干只改空格/标点也真落库。② 手工新增/编辑走 `validate_question_shape`，按“更新后的有效状态”做题型↔选项交叉校验（单选/多选至少 2 项且 key 不重复，填空/解答不得带选项）。③ 详情 `kps[].weight` 出参改为 JSON number（DB 仍 NUMERIC）。④ 列表排序追加 `id DESC` 兜底，同 `created_at` 的题翻页不重复/漏行。⑤ 整卷兜底 `max_tokens=min(8192, max(2048, 400*expected_count))`（20 题→8000），Prompt 学科名取 `subjects.name`、`expected_count=None` 不渲染。⑥ 审题页保存只在知识点集合真变化时下发 `kp_ids`，只改难度/答案不会重建 `question_kps` 或把权重重置为 1.0。测试基线更新为：后端 **865 passed, 1 warning**，前端 **125 passed / 30 files**。
 
 - 实测偏差（已回填 spec）：列表入参 `mine: bool`（原写 `created_by=me`）；详情只有 `kps[]`、无 `kp_ids`；队列不可用沿用 S2-7 的 `500/50000`（原写 `503/50300`）；split/merge 参数错误统一 `422/42200`（原写 `400/40000`）；`questions.created_at` 为本次新增列；知识点挂载不再以 0.75 为门禁（D-10 重写）。
 - 文档同步：API.md §5.5 + §3 `parse` 说明、DECISIONS D-044、PROGRESS、AGENTS §9.2/§9.6、实施计划 S4-1 勾选与实施记录、spec 偏差回填；无新增依赖、未动 main。

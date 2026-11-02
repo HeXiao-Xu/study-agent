@@ -430,6 +430,7 @@
   | order | string | 否 | `asc` / `desc`，默认 `desc` |
 
 - 出参：`Envelope[PageData[QuestionSummary]]`
+- 排序：按 `sort_by` + `order` 主排序后**追加 `id DESC` 兜底**；同一次导入的题 `created_at` 相同，没有 tiebreaker 时翻页会重复/漏行
 - `QuestionSummary`：`id` / `subject_id` / `qtype` / `difficulty` / `origin` / `verified` / `stem_md` / `source_file_id` / `created_by` / `created_at` / `kp_names`（`list[str]`，一页一次 `IN` 批查填充，按 `question_kps.weight` 降序）
 - 示例：
 
@@ -451,7 +452,7 @@
 - 类型：同步
 - 出参：`Envelope[QuestionDetail]`
 - `QuestionDetail` = `QuestionSummary` + `options_json` / `answer_md` / `analysis_md` / `stem_latex` / `tags` / `kps`
-- `kps[]` 元素：`{kp_id, kp_name, kp_code, weight}`，按 `weight` 降序
+- `kps[]` 元素：`{kp_id, kp_name, kp_code, weight}`，按 `weight` 降序；`weight` 是 **JSON number（float，如 `0.93`）**，不是字符串 `"0.930000"`（DB 仍为 `NUMERIC(8,6)`）
 - 备注：**没有 `kp_ids` 字段**；前端从 `kps[].kp_id` 取（spec 原提过 `kp_ids`，以本契约为准）
 - 错误：`404/40400`「题目不存在」
 
@@ -460,16 +461,22 @@
 - 类型：同步，**201**
 - 入参：`{subject_id, stem_md(≥5), options?(list[{key,text}]), answer_md?, analysis_md?, qtype, difficulty(1–5), kp_ids?, origin?(默认 upload), tags?}`
 - 行为：规范化题干 → 判重（命中 `409/40900`）→ 一次 embedding → 落库；`kp_ids` 为人工指定，直接写 `question_kps(weight=1.0)`，不参与自动对齐；`verified` 固定 `false`（人工录入没有卷面答案来源）
+- 题型/选项交叉校验：`单选` / `多选` 至少 2 个选项且 `key` 不重复；`填空` / `解答` 不得带选项；违反 → `422/42200`
 - 出参：`Envelope[QuestionDetail]`
-- 错误：`409/40900`「题目已存在（题库里已有同一道题）」；`404/40400` 学科不存在；`422/42200` 字段非法 / 知识点不存在或不属于该学科
+- 错误：`409/40900`「题目已存在（题库里已有同一道题）」；`404/40400` 学科不存在；`422/42200` 字段非法 / 题型与选项不自洽 / 知识点不存在或不属于该学科
 
 ### PATCH /api/v1/questions/{question_id}
 - 权限：创建者本人 / teacher / admin（否则 `403/40300`）
 - 类型：同步（部分更新）
-- 入参：`stem_md` / `options` / `answer_md` / `analysis_md` / `qtype` / `difficulty` / `kp_ids` / `origin` / `tags` / `verified` 任选，只改传入字段；`options=null` 表示清空选项
-- 行为：题干规范化后变化 → 重算 `stem_hash` + `embedding` + 自动重新对齐知识点（`kp_names=[]`），先做哈希判重（撞其他题 → `409/40900`）；`kp_ids` 传数组则整体替换为人工关联（`weight=1.0`），传空数组清空
+- 入参：`stem_md` / `options` / `answer_md` / `analysis_md` / `qtype` / `difficulty` / `kp_ids` / `origin` / `tags` / `verified` 任选，只改传入字段
+- `null` 语义：`qtype` / `difficulty` / `origin` / `verified` 显式传 `null` → **422/42200**（这些列非空，不能写 NULL）；`answer_md` / `analysis_md` / `tags` / `options` 传 `null` 表示清空
+- 行为：题干**原始串**变化 → 重算 `stem_hash` + `embedding` + 自动重新对齐知识点（`kp_names=[]`），先做哈希判重（撞其他题 → `409/40900`）；只改空格/标点也会真落库（不会被误判为“未变化”而静默丢弃）
+- 撞题 409 覆盖两条路径：先查先写之间的并发 `INSERT` 冲突，以及 `UPDATE` 撞 `UNIQUE(subject_id, stem_hash)`（统一由唯一约束兜底，不返回 500）
+- 题型/选项交叉校验按**更新后的有效状态**做：只改 `qtype` 时结合库中现有选项校验，只改 `options` 时结合库中现有 `qtype`；`单选`/`多选` 至少 2 个选项且 key 不重复，`填空`/`解答` 不得带选项，违反 → `422/42200`
+- `kp_ids`：传数组则整体替换为人工关联（`weight=1.0`），传空数组清空
+- 前端行为：审题页保存只在**知识点集合真的变化**时才下发 `kp_ids`；只改难度/答案不会重建 `question_kps`，也不会把对齐 `weight` 重置为 1.0（S5-1 组卷要用真实权重）
 - 出参：`Envelope[QuestionDetail]`
-- 错误：`403/40300`；`404/40400`；`409/40900`；`422/42200`
+- 错误：`403/40300`；`404/40400`；`409/40900` 撞题（含并发 UPDATE 撞唯一约束）；`422/42200` 非空字段传 null / 题型与选项不自洽 / 知识点非法
 
 ### POST /api/v1/questions/{question_id}/split
 - 权限：同 PATCH

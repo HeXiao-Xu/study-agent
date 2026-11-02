@@ -138,7 +138,9 @@ class ExtractedQuestion(BaseModel):
   - `stem_md` 去空白后长度 ≥ 5。
   - `difficulty` 越界或 `qtype` 非法 → 校验失败，进重试。
 - 最多 2 次重试（共 3 次调用）；`scene="gen"`；失败抛 `QuestionExtractError`，由任务计入 `failed_items`。
-- 单题模式（`mode="single"`）下 `len(questions) != 1` → 视为失败并重试；`mode="block"` 允许 1..`expected_count` 条，超出部分截断并记 warning。
+- 单题模式（`mode="single"`）下 `len(questions) != 1` → 视为失败并重试；`mode="block"` 在 `expected_count` 有值时超出部分截断并记 warning，`expected_count=None` 时不截断。
+- **`max_tokens` 按模式/题数伸缩**：单题固定 `1500`；整卷兜底 `min(8192, max(2048, 400 * expected_count))`（20 题 → 8000）。原固定 2048 时 20 题 JSON 必然被截断成非法 JSON，重试只是重复超限，故按每题约 400 token 估预算并封顶 8192。
+- Prompt 的学科名取 `subjects.name`（任务侧查询；查不到回退 `"高中数学"` 并记 WARNING）；`expected_count=None` 时“总数应接近 N 条”整句不渲染，避免把 `None` 写进 Prompt。
 - `stem_latex` 与 `tags` 本卡不填：前者仅在“整题可由单个公式表达”时才该有值（切题场景几乎不成立），后者属于人工标注，均留 `NULL`。前端编辑接口支持后续补。`verified` 按 `answer_source` 推导（D-12）。
 
 ### 5.2 规范化与哈希（`question_service.normalize_stem` / `compute_stem_hash`）
@@ -206,24 +208,26 @@ class ExtractedQuestion(BaseModel):
 - 类型：同步分页
 - 入参：`page` / `page_size` / `subject_id` / `qtype` / `kp_id` / `origin` / `mine`（`true` 只看自己导入的；原写 `created_by=me`，实现为布尔 `mine`）/ `verified` / `keyword`（题干模糊）/ `source_file_id`（按导入试卷筛选）/ `sort_by`（白名单：`created_at` `id` `difficulty`）+ `order`
 - 出参：`Envelope[PageData[QuestionSummary]]`（`kp_names: list[str]` 由一页一次 `IN` 批查填充）
+- 排序：主排序后追加 `id DESC` 兜底，同 `created_at` 的题翻页不重复/漏行
 - 错误：`422/42200` 分页越界或非法排序字段
 
 ### GET /api/v1/questions/{question_id}
 - 权限：登录用户
-- 出参：`Envelope[QuestionDetail]` = `QuestionSummary` + `options_json` / `answer_md` / `analysis_md` / `stem_latex` / `tags` / `kps[]`（`kp_id/kp_name/kp_code/weight`）。**没有 `kp_ids` 字段**，前端从 `kps[].kp_id` 取
+- 出参：`Envelope[QuestionDetail]` = `QuestionSummary` + `options_json` / `answer_md` / `analysis_md` / `stem_latex` / `tags` / `kps[]`（`kp_id/kp_name/kp_code/weight`；`weight` 为 JSON number，DB 仍 NUMERIC）。**没有 `kp_ids` 字段**，前端从 `kps[].kp_id` 取
 - 错误：`404/40400`
 
 ### POST /api/v1/questions
 - 权限：`student` / `teacher` / `admin`
 - 入参：`{subject_id, stem_md, options?(list), answer_md?, analysis_md?, qtype, difficulty, kp_ids?, origin?}`
 - 行为：规范化 → 判重（命中返回 **409/40900**，message 不携带已存在 id）→ 补 embedding → 落库 → 按 `kp_ids` 直写 `question_kps(weight=1.0)`（人工指定不参与打分）；`verified` 固定 `false`（人工录入没有卷面答案来源）
+- 题型/选项交叉校验：单选/多选至少 2 个选项且 key 不重复，填空/解答不得带选项，违反 → `422/42200`
 - 出参：**201** `Envelope[QuestionDetail]`
-- 错误：`409/40900` 判重命中；`422/42200` 字段非法 / 知识点不存在或不属于该学科；`404/40400` subject 不存在
+- 错误：`409/40900` 判重命中；`422/42200` 字段非法 / 题型与选项不自洽 / 知识点不存在或不属于该学科；`404/40400` subject 不存在
 
 ### PATCH /api/v1/questions/{question_id}
 - 权限：创建者本人 / teacher / admin（否则 `403/40300`）
-- 入参：上述字段的可选子集 + `kp_ids?`（传则整体替换）；`options=null` 清空选项
-- 行为：题干规范化后变化 → 重算 `stem_hash` + 重算 `embedding` + 重新自动对齐知识点（`kp_names=[]`），并做哈希判重（撞其他题 → `409/40900`）；`kp_ids` 传空数组 = 清空
+- 入参：上述字段的可选子集 + `kp_ids?`（传则整体替换）；`answer_md/analysis_md/tags/options=null` 清空；`qtype/difficulty/origin/verified` 传 `null` → `422/42200`
+- 行为：题干**原始串**变化 → 重算 `stem_hash` + 重算 `embedding` + 重新自动对齐知识点（`kp_names=[]`），只改空格/标点也落库；判重撞其他题或 `UPDATE` 撞唯一键（含并发）→ `409/40900`；题型/选项按更新后的有效状态交叉校验（422）；`kp_ids` 传空数组 = 清空
 - 出参：`Envelope[QuestionDetail]`
 
 ### POST /api/v1/questions/{question_id}/split
@@ -417,7 +421,7 @@ def question_extract_task(session: Session, payload: dict[str, Any]) -> dict[str
 - 拆分：`POST /questions/{id}/split {"split_at":"（2）"}` → **200** 返回 2 题，原题随即 `404`，题库题数 +1；左半挂「通项公式与性质」、右半挂「数列求和」（按半题重新对齐）。
 - 合并：`POST /questions/merge`（两道单选）→ **200** 返回新题 id 45，原 2 题随即 `404`，合并题挂 3 条知识点（拼接后重新对齐）；只给 1 道题、含不存在/跨学科 id → **422/42200**。
 - 其他：删单题 **204** 且 `question_kps` 残留 **0**；删 1 题后重导 `created=1 / duplicated=19`；PATCH 改答案/难度后重新 GET 读到新值；难度非法值（9）`422/42200`；PNG 导入 `400/40000`。
-- 测试基线：后端 **853 passed, 1 warning**；前端 **122 passed / 30 files**。
+- 测试基线：后端 **865 passed, 1 warning**；前端 **125 passed / 30 files**（均为终审修复后实测）。
 
 ## 10. 文档同步
 
