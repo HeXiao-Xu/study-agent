@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.ai.align.scoring import AUTO_THRESHOLD, ancestor_names, combine, cosine, keyword_score, tree_prior
 from app.ai.embedding import EmbeddingClient, get_embedding_client
+from app.ai.extract.question_extractor import ExtractedQuestion
 from app.core.exceptions import ConflictError, ForbiddenError, InvalidParamError, NotFoundError
-from app.models.enums import UserRole
+from app.models.enums import QuestionOrigin, UserRole
 from app.models.knowledge_point import KnowledgePoint
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
@@ -245,6 +246,55 @@ def create_question(
     )
     _commit(session)
     return question
+
+
+def create_extracted_question(
+    session: Session,
+    *,
+    extracted: ExtractedQuestion,
+    subject_id: int,
+    origin: str,
+    created_by: int | None,
+    source_file_id: int | None,
+    vec: list[float],
+) -> tuple[Question, bool]:
+    """任务专用：返回 (题目, 是否命中重复)。不 commit —— 整卷由一个事务提交。
+
+    重复题直接返回库里那道，不修改它：重复导入只补缺口，不覆盖人工修正。
+    """
+    if origin not in {item.value for item in QuestionOrigin}:
+        raise InvalidParamError(f"非法的题目来源：{origin}")
+    duplicate = check_duplicate(
+        session, subject_id=subject_id, stem_hash=compute_stem_hash(extracted.stem_md), vec=vec
+    )
+    if duplicate is not None:
+        return duplicate, True
+    question = _persist_question(
+        session,
+        subject_id=subject_id,
+        origin=origin,
+        source_file_id=source_file_id,
+        stem_md=extracted.stem_md,
+        options_json=(
+            [option.model_dump() for option in extracted.options] if extracted.options else None
+        ),
+        answer_md=extracted.answer_md,
+        analysis_md=extracted.analysis_md,
+        qtype=extracted.qtype,
+        difficulty=extracted.difficulty,
+        tags=None,
+        verified=extracted.answer_source == "paper",
+        embedding=vec,
+        created_by=created_by,
+        links=align_knowledge_points(
+            session,
+            subject_id=subject_id,
+            text=extracted.stem_md,
+            kp_names=extracted.kp_names,
+            vec=vec,
+        ),
+    )
+    return question, False
 
 
 def _load_question(session: Session, question_id: int) -> Question:
