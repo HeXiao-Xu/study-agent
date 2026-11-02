@@ -58,6 +58,7 @@ describe('StudentOnlyView', () => {
     const { wrapper } = await mountGate('student')
     expect(wrapper.text()).not.toContain('暂不支持查看')
     expect(wrapper.find('[data-testid="student-content"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('学生个人学习空间')
   })
 
   it('navigates a teacher to the knowledge page', async () => {

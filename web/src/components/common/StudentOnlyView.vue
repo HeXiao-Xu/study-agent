@@ -17,7 +17,11 @@ const isStudent = computed(() => auth.user?.role === 'student')
 
 <template>
   <div>
-    <PageHeader :title="props.feature" description="学生个人学习空间" />
+    <PageHeader
+      v-if="!isStudent"
+      :title="props.feature"
+      description="学生个人学习空间"
+    />
 
     <slot v-if="isStudent" />
 
