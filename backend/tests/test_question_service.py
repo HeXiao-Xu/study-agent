@@ -5,6 +5,7 @@ import logging
 from decimal import Decimal
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.ai.align.extractor import AlignError, LlmMatch
@@ -14,8 +15,15 @@ from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.models.subject import Subject
 from app.models.user import User
-from app.schemas.question import QuestionCreateIn, QuestionMergeIn, QuestionSplitIn, QuestionUpdateIn
+from app.schemas.question import (
+    KpRefOut,
+    QuestionCreateIn,
+    QuestionMergeIn,
+    QuestionSplitIn,
+    QuestionUpdateIn,
+)
 from app.services import question_service
+from app.utils.pagination import PageParams, SortParams
 
 
 class FakeSession:
@@ -452,3 +460,203 @@ def test_check_duplicate_exclude_ids_adds_sql_filter() -> None:
     question_service.check_duplicate(baseline, subject_id=1, stem_hash="h", vec=[1.0, 0.0])
     assert len(baseline.scalar_statements) == 2
     assert all("NOT IN" not in str(statement) for statement in baseline.scalar_statements)
+
+
+def test_ensure_not_referenced_blocks_only_when_mistakes_reference_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Result:
+        def __init__(self, row: object) -> None:
+            self.row = row
+
+        def first(self) -> object:
+            return self.row
+
+    class _RefSession(FakeSession):
+        def __init__(self, row: object) -> None:
+            super().__init__()
+            self.row = row
+
+        def execute(self, statement, params=None):
+            return _Result(self.row)
+
+    monkeypatch.setattr(question_service, "_mistakes_table_exists", lambda session: True)
+    with pytest.raises(ConflictError):
+        question_service._ensure_not_referenced(_RefSession((1,)), [7])
+    question_service._ensure_not_referenced(_RefSession(None), [7])
+
+
+def test_build_questions_query_kp_filter_uses_exists_not_join() -> None:
+    stmt = question_service.build_questions_query(filters=question_service.QuestionFilters(kp_id=7))
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "EXISTS" in sql.upper()
+    assert "JOIN" not in sql.upper()
+
+
+def test_build_questions_query_keyword_escapes_like_wildcards() -> None:
+    stmt = question_service.build_questions_query(
+        filters=question_service.QuestionFilters(keyword="100%_x")
+    )
+    sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert r"100\%\_x" in sql
+    assert "ESCAPE" in sql
+
+
+def test_build_questions_query_verified_filter_branches() -> None:
+    def _sql(verified: bool | None) -> str:
+        stmt = question_service.build_questions_query(
+            filters=question_service.QuestionFilters(verified=verified)
+        )
+        return str(stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "questions.verified IS true" in _sql(True)
+    assert "questions.verified IS false" in _sql(False)
+    assert "questions.verified IS" not in _sql(None)
+
+
+def test_update_question_rejects_null_for_non_nullable_fields() -> None:
+    for name in ("qtype", "difficulty", "origin", "verified"):
+        question = Question(
+            subject_id=1,
+            stem_md="已知函数内容",
+            stem_hash="h",
+            qtype="填空",
+            difficulty=3,
+            origin="upload",
+            verified=False,
+        )
+        question.id = 3
+        question.created_by = 1
+        session = FakeSession(objects={(Question, 3): question})
+        payload = QuestionUpdateIn(**{name: None})
+        with pytest.raises(InvalidParamError):
+            question_service.update_question(
+                session,
+                question_id=3,
+                payload=payload,
+                viewer=_user(user_id=1),
+                embedder=FakeEmbedder(),
+            )
+        assert session.commits == 0
+        assert getattr(question, name) is not None
+
+
+def test_update_question_maps_update_unique_violation_to_conflict() -> None:
+    class UniqueViolationSession(FakeSession):
+        def commit(self) -> None:
+            raise IntegrityError(
+                "UPDATE questions ...",
+                {},
+                Exception('duplicate key value violates unique constraint "uq_questions_subject_stem_hash"'),
+            )
+
+    question = Question(
+        subject_id=1,
+        stem_md="已知函数内容",
+        stem_hash="h",
+        qtype="填空",
+        difficulty=3,
+        origin="upload",
+        verified=False,
+    )
+    question.id = 3
+    question.created_by = 1
+    session = UniqueViolationSession(objects={(Question, 3): question})
+    with pytest.raises(ConflictError):
+        question_service.update_question(
+            session,
+            question_id=3,
+            payload=QuestionUpdateIn(answer_md="答案"),
+            viewer=_user(user_id=1),
+            embedder=FakeEmbedder(),
+        )
+    assert session.rollbacks == 1
+
+
+def test_update_question_persists_punctuation_only_stem_edit() -> None:
+    old_stem = "1. 已知函数 f(x)，求 f(1)"
+    new_stem = "1. 已知函数 f(x)，求 f(1)。"
+    assert question_service.normalize_stem(old_stem) == question_service.normalize_stem(new_stem)
+    question = Question(
+        subject_id=1,
+        stem_md=old_stem,
+        stem_hash="old",
+        qtype="填空",
+        difficulty=3,
+        origin="upload",
+        verified=False,
+    )
+    question.id = 3
+    question.created_by = 1
+    question.embedding = [0.0, 1.0]
+    session = FakeSession(
+        objects={(Question, 3): question}, scalar_results=[None], scalars_results=[[], []]
+    )
+    updated = question_service.update_question(
+        session,
+        question_id=3,
+        payload=QuestionUpdateIn(stem_md=new_stem),
+        viewer=_user(user_id=1),
+        embedder=FakeEmbedder(),
+    )
+    assert updated.stem_md == new_stem
+    assert updated.stem_hash == question_service.compute_stem_hash(new_stem)
+    assert updated.embedding == [1.0, 0.0]
+    assert session.commits == 1
+
+
+def test_question_shape_validation_rejects_choice_without_options() -> None:
+    with pytest.raises(ValidationError):
+        QuestionCreateIn(subject_id=1, stem_md="已知函数内容超过五字", qtype="单选", difficulty=2)
+
+    question = Question(
+        subject_id=1,
+        stem_md="已知函数内容",
+        stem_hash="h",
+        qtype="解答",
+        difficulty=3,
+        origin="upload",
+        verified=False,
+    )
+    question.id = 3
+    question.created_by = 1
+    session = FakeSession(objects={(Question, 3): question})
+    with pytest.raises(InvalidParamError):
+        question_service.update_question(
+            session,
+            question_id=3,
+            payload=QuestionUpdateIn(qtype="单选"),
+            viewer=_user(user_id=1),
+            embedder=FakeEmbedder(),
+        )
+    assert session.commits == 0
+
+
+def test_list_questions_appends_id_tiebreaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _Page:
+        items: list[object] = []
+        total = 0
+        page = 1
+        page_size = 20
+
+    def fake_paginate(session, stmt, page, *, item_model):
+        captured["sql"] = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        return _Page()
+
+    monkeypatch.setattr(question_service, "paginate_query", fake_paginate)
+    question_service.list_questions(
+        session=None,
+        filters=question_service.QuestionFilters(),
+        page=PageParams(),
+        sort=SortParams(),
+    )
+    assert "questions.created_at DESC" in captured["sql"]
+    assert "questions.id DESC" in captured["sql"]
+
+
+def test_kp_ref_out_serializes_weight_as_float() -> None:
+    ref = KpRefOut(kp_id=1, kp_name="函数的单调性", kp_code="kp.1", weight=Decimal("0.930000"))
+    assert isinstance(ref.weight, float)
+    assert ref.model_dump(mode="json")["weight"] == 0.93

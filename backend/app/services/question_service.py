@@ -12,6 +12,7 @@ import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import NoReturn
 
 from sqlalchemy import Select, exists, inspect, select, text
 from sqlalchemy.exc import IntegrityError
@@ -45,6 +46,7 @@ from app.schemas.question import (
     QuestionDetailOut,
     QuestionSummaryOut,
     QuestionUpdateIn,
+    validate_question_shape,
 )
 from app.services.note_service import escape_like
 from app.utils.pagination import PageParams, SortParams, apply_sort, paginate_query
@@ -276,19 +278,27 @@ def _persist_question(
         # 判重是先查后写，两个并发请求可能同时通过；唯一约束才是最终裁决，
         # 这里把 DB 冲突翻译成 409，而不是让路由层看到 500。
         session.rollback()
-        if "uq_questions_subject_stem_hash" in str(exc.orig):
-            raise ConflictError("题目已存在（题库里已有同一道题）") from exc
-        raise
+        _translate_integrity_error(exc, message="题目已存在（题库里已有同一道题）")
     for kp_id, weight in links:
         session.add(QuestionKp(question_id=question.id, kp_id=kp_id, weight=weight))
     session.flush()
     return question
 
 
-def _commit(session: Session) -> None:
-    """提交失败先回滚再抛：会话带着半完成事务继续被复用会污染后续用例。"""
+def _translate_integrity_error(exc: IntegrityError, *, message: str) -> NoReturn:
+    """唯一约束是判重的最终裁决；只翻译题干唯一键，其余约束原样上抛。"""
+    if "uq_questions_subject_stem_hash" in str(exc.orig):
+        raise ConflictError(message) from exc
+    raise exc
+
+
+def _commit(session: Session, *, conflict_message: str = "题目已存在（题库里已有同一道题）") -> None:
+    """提交失败先回滚再抛；UPDATE 撞题干唯一键与 INSERT 一样翻成 409。"""
     try:
         session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        _translate_integrity_error(exc, message=conflict_message)
     except Exception:
         session.rollback()
         raise
@@ -448,14 +458,36 @@ def update_question(
     ensure_can_edit(question, viewer)
     fields = payload.model_fields_set
 
+    # 非空列（qtype/difficulty/origin/verified）传 null 是非法参数，必须在写库前拦成 422；
+    # 不能落成 NULL 等 commit 时由 DB 抛 NotNullViolation（那会变成 500）。
+    for name in ("qtype", "difficulty", "origin", "verified"):
+        if name in fields and getattr(payload, name) is None:
+            raise InvalidParamError(f"{name} 不能为 null")
+
+    # 校验“更新后的有效状态”：只改 qtype 时选项来自库中现有值，所以不能只看 payload。
+    effective_options = (
+        ([option.model_dump() for option in payload.options] if payload.options else None)
+        if "options" in fields
+        else question.options_json
+    )
+    try:
+        validate_question_shape(
+            qtype=payload.qtype if "qtype" in fields else question.qtype,
+            option_keys=[row["key"] for row in effective_options] if effective_options else None,
+        )
+    except ValueError as exc:
+        raise InvalidParamError(str(exc)) from exc
+
+    # 用原始串判等：只改空格/标点也要落库，否则前端回填旧文本、用户以为没保存。
     if "stem_md" in fields and payload.stem_md is not None:
-        if normalize_stem(payload.stem_md) != normalize_stem(question.stem_md):
+        if payload.stem_md != question.stem_md:
             _replace_stem(session, question, payload.stem_md, embedder=embedder)
     if "options" in fields:
-        question.options_json = (
-            [option.model_dump() for option in payload.options] if payload.options else None
-        )
-    for name in ("answer_md", "analysis_md", "qtype", "difficulty", "origin", "tags", "verified"):
+        question.options_json = effective_options
+    for name in ("answer_md", "analysis_md", "tags"):
+        if name in fields:
+            setattr(question, name, getattr(payload, name))
+    for name in ("qtype", "difficulty", "origin", "verified"):
         if name in fields:
             setattr(question, name, getattr(payload, name))
     if "kp_ids" in fields and payload.kp_ids is not None:
@@ -525,7 +557,7 @@ def split_question(
     for row in list(session.scalars(select(QuestionKp).where(QuestionKp.question_id == question_id))):
         session.delete(row)
     session.delete(question)
-    _commit(session)
+    _commit(session, conflict_message="拆分出的题目已存在于题库")
     return created
 
 
@@ -582,7 +614,7 @@ def merge_questions(
         ):
             session.delete(row)
         session.delete(question)
-    _commit(session)
+    _commit(session, conflict_message="合并后的题目已存在于题库")
     return merged
 
 
@@ -678,6 +710,8 @@ def list_questions(
         allowed=SORTABLE,
         default_sort="created_at",
     )
+    # 同一次导入的 created_at 相同，没有唯一 tiebreaker 时翻页会重复/漏行。
+    stmt = stmt.order_by(Question.id.desc())
     data = paginate_query(session, stmt, page, item_model=QuestionSummaryOut)
     _attach_kp_names(session, data.items)
     return data
