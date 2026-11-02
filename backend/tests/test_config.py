@@ -107,6 +107,12 @@ def test_llm_defaults(monkeypatch) -> None:
     assert s.qa_citation_max_retries == 1
 
 
+def test_vision_model_default_is_qwen3_vl_plus(monkeypatch) -> None:
+    """S4-2：本账号 qwen-vl-max-latest 403，默认值锁定为实测可用的 qwen3-vl-plus。"""
+    monkeypatch.delenv("VISION_MODEL", raising=False)
+    assert Settings(_env_file=None).vision_model == "qwen3-vl-plus"
+
+
 def test_llm_key_falls_back_to_dashscope(monkeypatch) -> None:
     monkeypatch.setenv("LLM_API_KEY", "")
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-llm-fallback")

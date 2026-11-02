@@ -32,7 +32,7 @@
 - `app/services/mistake_service.py`：录入（选题/拍照建任务）、列表、详情、状态更新、复习记录、统计、删除。
 - `app/tasks/mistake_recognize.py` + 注册：`mistake.recognize` 任务（不在 handler 内 commit）。
 - `app/api/v1/mistakes.py` + `app/schemas/mistake.py`：8 个接口 + 复用 `GET /tasks/{task_id}` 轮询。
-- `backend/app/core/config.py` + `.env.example`：`VISION_MODEL`（默认 `qwen-vl-max-latest`）。
+- `backend/app/core/config.py` + `.env.example`：`VISION_MODEL`（默认 `qwen3-vl-plus`）。`qwen-vl-max-latest` 需在百炼控制台开通，本账号实测 403；需换模型时用 `VISION_MODEL` 覆盖。
 - 前端 `views/mistakes/*.vue`、`api/mistakes.ts`、`types/mistakes.ts`、路由与侧栏「06 错题本」入口。
 - `测试数据/_make_s4_2_mistake_photos.py`：Pillow 渲染合成题目图（含一张旋转+加噪，模拟手机拍摄），用于真机验收。
 - 后端测试约 40 条 + 前端 6 条（见 §10）。
@@ -66,7 +66,7 @@
 | D-12 | 删除错题：同事务先删 `mistake_analyses` 再删 `mistakes`（FK 为 `ON DELETE CASCADE` 时的显式等价写法） | 硬删且不留孤儿；显式删除比依赖级联更容易在测试里断言 |
 | D-13 | 拍照识别失败（模型超时/JSON 非法/置信度极低）→ 任务 `failed`，但**图片保留在 `files`**，前端提示可重试或改用「题库选」 | 原图是学生的唯一证据，失败也不能丢；重试由用户决定，不在 handler 里静默吞异常 |
 | D-14 | 识别不出作答时 `my_answer_md = null`，而不是猜一段文本；识别置信度低于 `0.5` 时题目仍入库，但结果 payload 带 `low_confidence=true` 提示人工复核 | 与方案 6.3「作答缺失就不猜」一致；错题本的价值在本卡是「记录 + 状态」，题干错了可以改，编造的作答会污染 S4-3 的错因诊断 |
-| D-15 | 视觉模型走配置 `VISION_MODEL`（默认 `qwen-vl-max-latest`），与文本模型分开配置 | S4-1 的 `llm_model=qwen-plus` 不支持图片；同厂商同 key，换模型只需改一个环境变量 |
+| D-15 | 视觉模型走配置 `VISION_MODEL`（默认 `qwen3-vl-plus`），与文本模型分开配置；`qwen-vl-max-latest` 需在百炼控制台开通，本账号实测 403，需换模型时用 `VISION_MODEL` 覆盖 | S4-1 的 `llm_model=qwen-plus` 不支持图片；同厂商同 key，换模型只需改一个环境变量 |
 | D-16 | 验收用 **Pillow 渲染的合成题目图**（含旋转+噪声模拟拍摄），文档与报告中如实标注「合成图，非真实拍摄」 | 本项目没有真实学生错题照片可用，也不允许伪造；合成图能真实驱动视觉链路（模型确实读图），但结论只对「印刷体照片」有效，手写体表现记为已知限制 |
 
 ## 4. 数据模型（迁移 `0010_s4_2_mistakes.py`）

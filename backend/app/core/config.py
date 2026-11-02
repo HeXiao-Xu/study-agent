@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     llm_temperature: float = 0.3
     llm_max_output_tokens: int = 1200
+    # 元/百万 token；北京区 qwen-plus 列表价，只用于估算展示
+    llm_price_input_per_million: float = 0.8
+    llm_price_output_per_million: float = 2.0
     # --- 视觉（S4-2；拍照错题识别，走同一 DASHSCOPE_API_KEY）---
     vision_model: str = Field(
         default="qwen3-vl-plus",
@@ -78,9 +81,6 @@ class Settings(BaseSettings):
             "默认用本账号实测可用的 qwen3-vl-plus；若已开通 qwen-vl-max 系列可用 VISION_MODEL 覆盖"
         ),
     )
-    # 元/百万 token；北京区 qwen-plus 列表价，只用于估算展示
-    llm_price_input_per_million: float = 0.8
-    llm_price_output_per_million: float = 2.0
 
     # --- Embedding（S1-3；厂商 API，禁止本地大模型依赖）---
     embedding_provider: Literal["dashscope", "openai_compat", "local"] = "dashscope"

@@ -35,3 +35,6 @@ desktop.ini
 *.log
 logs/
 tmp/
+
+# ===== 合成验收图生成物（脚本入库，png 由 S4-2 Task 13 现场生成）=====
+测试数据/mistake_photo/
