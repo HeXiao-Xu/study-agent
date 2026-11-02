@@ -39,6 +39,20 @@ class VisionExtract(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
+    def _normalize_text(self) -> "VisionExtract":
+        # 模型对空作答可能返回 "" 或空格串；统一成 None，避免下游把"有作答"误判成空证据
+        self.stem_md = self.stem_md.strip()
+        if not self.stem_md:
+            raise ValueError("题干为空")
+        for name in ("my_answer_md", "correct_answer_md"):
+            value = getattr(self, name)
+            if value is not None:
+                cleaned = value.strip()
+                setattr(self, name, cleaned or None)
+        self.warnings = [warning.strip() for warning in self.warnings if warning.strip()]
+        return self
+
+    @model_validator(mode="after")
     def _validate_shape(self) -> "VisionExtract":
         if self.qtype in {"单选", "多选"}:
             options = self.options or []
@@ -53,8 +67,11 @@ class VisionExtract(BaseModel):
 
 
 def render_prompt(*, subject_name: str) -> str:
-    template = _ENV.get_template(PROMPT_FILE)
-    return template.render(subject_name=subject_name)
+    try:
+        template = _ENV.get_template(PROMPT_FILE)
+        return template.render(subject_name=subject_name)
+    except Exception as exc:
+        raise VisionError(f"prompt 渲染失败：{exc}") from exc
 
 
 def extract_mistake(

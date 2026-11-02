@@ -100,3 +100,29 @@ def test_extract_mistake_defaults_to_vision_client(monkeypatch):
     result = extract_mistake(_png_bytes(), "image/png", subject_name="高中数学")
     assert result.stem_md.startswith("已知函数")
     assert len(client.calls) == 1
+
+
+def test_empty_string_my_answer_becomes_none():
+    payload = dict(GOOD, my_answer_md="")
+    client = FakeLLM([json.dumps(payload, ensure_ascii=False)])
+    result = extract_mistake(_png_bytes(), "image/png", subject_name="高中数学", llm_client=client)
+    assert result.my_answer_md is None
+
+
+def test_whitespace_my_answer_becomes_none():
+    payload = dict(GOOD, my_answer_md="   ")
+    client = FakeLLM([json.dumps(payload, ensure_ascii=False)])
+    result = extract_mistake(_png_bytes(), "image/png", subject_name="高中数学", llm_client=client)
+    assert result.my_answer_md is None
+
+
+def test_render_prompt_missing_variable_raises_vision_error(monkeypatch):
+    from app.ai.vision import mistake_ocr
+
+    monkeypatch.setattr(
+        mistake_ocr._ENV,
+        "get_template",
+        lambda _name: mistake_ocr._ENV.from_string("{{ missing }}"),
+    )
+    with pytest.raises(VisionError):
+        mistake_ocr.render_prompt(subject_name="高中数学")
