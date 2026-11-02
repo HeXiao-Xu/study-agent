@@ -315,6 +315,14 @@ function onSuggestion(text: string): void {
   question.value = text
 }
 
+function onConversationCommand(conversation: QaConversation, command: string): void {
+  if (command === 'rename') {
+    void onRename(conversation)
+  } else if (command === 'delete') {
+    void onDelete(conversation)
+  }
+}
+
 function onCitation(citation: QaCitation): void {
   if (citation.note_id === null || citation.note_available === false) return
   const query: Record<string, string> = {}
@@ -370,19 +378,29 @@ onBeforeUnmount(() => {
         >
           <span class="conversation-title">{{ conversation.title }}</span>
           <span class="conversation-meta">{{ conversation.message_count }} 条</span>
-          <div class="conversation-actions">
-            <el-button link size="small" @click.stop="void onRename(conversation)">
-              改名
-            </el-button>
-            <el-button
-              link
-              type="danger"
-              size="small"
-              @click.stop="void onDelete(conversation)"
+          <span class="conversation-actions" @click.stop>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              @command="(command: string) => onConversationCommand(conversation, command)"
             >
-              删除
-            </el-button>
-          </div>
+              <button
+                type="button"
+                class="conversation-more"
+                data-testid="conversation-actions"
+                aria-label="会话操作"
+                title="会话操作"
+              >
+                <span aria-hidden="true">⋯</span>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="rename">改名</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </span>
         </div>
         <p v-if="!conversations.length" class="list-empty">
           还没有会话，直接提问开始。
@@ -504,9 +522,9 @@ onBeforeUnmount(() => {
 }
 
 .conversation-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
   padding: 9px 10px;
   border-radius: var(--app-radius-sm);
   cursor: pointer;
@@ -518,6 +536,8 @@ onBeforeUnmount(() => {
 }
 
 .conversation-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   font-size: 13px;
   font-weight: 600;
@@ -526,14 +546,54 @@ onBeforeUnmount(() => {
 }
 
 .conversation-meta {
+  flex-shrink: 0;
   color: var(--app-text-tertiary);
   font-size: 11px;
 }
 
 .conversation-actions {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.conversation-row:hover .conversation-actions,
+.conversation-row:focus-within .conversation-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.conversation-more {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--app-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.conversation-more:hover {
+  color: var(--app-text);
+  background: var(--app-border);
+}
+
+.conversation-more:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .conversation-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .list-error {

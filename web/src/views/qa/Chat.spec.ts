@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,6 +64,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.restoreAllMocks()
+  document.body.innerHTML = ''
 })
 
 describe('Chat', () => {
@@ -86,6 +88,53 @@ describe('Chat', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('错位相减法')
     expect(wrapper.text()).toContain('问题')
+  })
+
+  it('opens conversation actions from the more button', async () => {
+    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(getConversationMessages).mockResolvedValue({
+      conversation,
+      messages: [],
+    })
+    const { wrapper } = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="conversation-actions"]').trigger('click')
+    await flushPromises()
+
+    const menu = document.body.querySelector('.el-dropdown-menu')
+    expect(menu?.textContent).toContain('改名')
+    expect(menu?.textContent).toContain('删除')
+  })
+
+  it('renames from the more menu', async () => {
+    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(getConversationMessages).mockResolvedValue({
+      conversation,
+      messages: [],
+    })
+    vi.mocked(renameConversation).mockResolvedValue({
+      ...conversation,
+      title: '新标题',
+    })
+    vi.spyOn(ElMessageBox, 'prompt')
+      .mockResolvedValue({ value: '新标题' } as never)
+
+    const { wrapper } = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="conversation-actions"]').trigger('click')
+    await flushPromises()
+    const rename = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.el-dropdown-menu__item'),
+    ).find((item) => item.textContent?.includes('改名'))
+    expect(rename).toBeTruthy()
+    rename?.click()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(renameConversation).toHaveBeenCalledWith('12', '新标题')
+    expect(wrapper.text()).toContain('新标题')
   })
 
   it('sends question and renders streamed answer', async () => {

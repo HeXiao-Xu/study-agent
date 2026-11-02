@@ -176,6 +176,11 @@
 
 ## 变更日志
 
+### 2026-11-02（前端细节）
+- 修复笔记、文件页重复标题：`StudentOnlyView` 的 `PageHeader` 仅在非学生拒绝页渲染，学生页只保留页面自身标题。
+- 问答会话列表的“改名/删除”收进悬停出现的 `⋯` 菜单（`el-dropdown`），支持键盘 focus 与触屏常显；菜单点击不触发会话切换。
+- 前端 **116 passed / 29 files**，`npm run build` 退出 0（仅 775KB chunk 警告）。
+
 ### 2026-11-02（S3-9）
 - S3-9 完成（按 §10 全流程：spec `docs/spec/s3-9-online-eval.md` + plan `docs/plan/s3-9-online-eval.md`，均经用户确认）。交付：`retrieval` 三配置（vector/hybrid/hybrid_rerank）与冲突校验；`done.cost_yuan`；`eval/datasets/qa_set_m2.jsonl` 40 条；`eval/api_client.py`；`eval/run.py` 在线模式与 `--config all` 对照输出；`docs/EVAL_M2.md`。
 - 拍板（D-043）：扩展现有 `/retrieval/search` 的 `retrieval` 字段；新建 M2 数据集保留 S1 数据；回答只跑生产 `hybrid_rerank`；人工核对为 AI 初核 + 用户抽查；在线评测只走 HTTP，不直连 DB；token/密码不落盘。
