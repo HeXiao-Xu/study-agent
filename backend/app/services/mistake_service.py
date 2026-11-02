@@ -52,7 +52,9 @@ TASK_MISTAKE_RECOGNIZE = "mistake.recognize"
 MASTERY_STREAK = 2
 LOW_CONFIDENCE = 0.5
 EXCERPT_LEN = 120
-IMAGE_MIMES = frozenset({"image/png", "image/jpeg", "image/webp"})
+# WebP 未在上传层开放（file_service.TYPE_TABLE 与 upload_allowed_extensions 都没有 webp），
+# 视觉层 ALLOWED_MIMES 仍接受，但本链路不可达，故不入集合。
+IMAGE_MIMES = frozenset({"image/png", "image/jpeg"})
 SORTABLE: dict[str, object] = {
     "created_at": Mistake.created_at,
     "last_review_at": Mistake.last_review_at,
@@ -221,16 +223,25 @@ def start_photo_recognize(
     queue: "TaskQueue",
     my_answer_md: str | None = None,
 ) -> AsyncTask:
-    """拍照录入入口：存图（不解析）→ 入队识别（spec D-5）。
+    """拍照录入入口：校验学科 → 校验图片类型 → 存图（不解析）→ 入队识别（spec D-5）。
 
-    学科校验留在路由（与 `/questions/import` 同口径）：这里只负责存图与入队，
-    真正的学科名在 handler 里查，查不到时按 S4-1 口径回退默认值。
+    类型按扩展名预判在落库之前：`upload.content_type` 客户端可伪造，
+    file_service 的准入是「扩展名 + magic」，这里复用同一套纯函数先拦一道，
+    上传后再用 `record.mime` 兜底扩展名与 magic 不一致的情况。
     """
+    # 延迟导入：app.tasks 包会 import 本模块，顶层导入 task_service 会循环
+    from app.services import task_service
+
+    question_service.ensure_subject_exists(session, subject_id)
+    filename = file_service.sanitize_filename(upload.filename or "")
+    _, detected_mime = file_service.detect_type(filename)
+    if detected_mime not in IMAGE_MIMES:
+        raise InvalidParamError("只能上传 PNG/JPEG 图片")
     record, _ = file_service.upload_file(
         session, owner=owner, upload=upload, storage=storage, parse=False
     )
-    if record.mime not in IMAGE_MIMES:
-        raise InvalidParamError("只能上传 PNG/JPEG/WebP 图片")
+    if record.mime not in IMAGE_MIMES:  # 兜底：magic 与扩展名不一致时再拦一次
+        raise InvalidParamError("只能上传 PNG/JPEG 图片")
     return task_service.create_task(
         session,
         owner=owner,
@@ -273,6 +284,9 @@ def task_create_mistake(
         correct_streak=0,
     )
     session.add(mistake)
+    # 立即 flush 取 id：runner 关 autoflush，不 flush 时 mistake.id 恒为 None；
+    # 顺带把唯一约束冲突收进 handler 的 try，而不是留到 runner 的成功提交里炸。
+    session.flush()
     return mistake, True
 
 
@@ -488,12 +502,3 @@ def list_mistakes(
             )
         )
     return PageData(items=items, total=result.total, page=result.page, page_size=result.size)
-
-
-# --------------------------------------------------------------------------
-# 循环导入收尾
-# --------------------------------------------------------------------------
-# tasks 包 import 时会反向加载 handler，而 mistake_recognize 在模块级读取
-# 本模块的 TASK_MISTAKE_RECOGNIZE。若在文件顶部导入 task_service，
-# 循环回到本模块时常量还没定义（部分初始化的模块），因此放到文件末尾。
-from app.services import task_service  # noqa: E402

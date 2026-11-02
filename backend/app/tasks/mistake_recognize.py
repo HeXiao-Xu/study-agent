@@ -42,7 +42,7 @@ def mistake_recognize_task(session: Session, payload: dict[str, Any]) -> dict[st
     if file.user_id != user_id:
         raise ForbiddenError("文件不属于当前用户")
     if file.mime not in mistake_service.IMAGE_MIMES:
-        raise InvalidParamError("只能识别 PNG/JPEG/WebP 图片")
+        raise InvalidParamError("只能识别 PNG/JPEG 图片")
 
     buffer = BytesIO()
     get_storage().download_to(file.storage_path, buffer)
@@ -95,6 +95,7 @@ def mistake_recognize_task(session: Session, payload: dict[str, Any]) -> dict[st
         "confidence": vision.confidence,
         "low_confidence": vision.confidence < mistake_service.LOW_CONFIDENCE,
         "used_answer_source": used_answer_source,
+        "warnings": vision.warnings,
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
     }
     logger.info(
