@@ -371,27 +371,29 @@ def list_mistakes(
 
     mistake_ids = [mistake.id for mistake, _ in rows]
     question_ids = [question.id for _, question in rows]
-    # 一页各一次 IN 批查，替代逐行 _kp_names/_analysis_of 的 2N 条 SQL（d-8）。
+    # 一页各一条 IN 批查，替代逐行 _kp_names/_analysis_of 的 2N 条 SQL（d-8）。
     kp_rows = session.execute(
         select(QuestionKp.question_id, KnowledgePoint.name)
         .join(KnowledgePoint, KnowledgePoint.id == QuestionKp.kp_id)
         .where(QuestionKp.question_id.in_(question_ids))
-        .order_by(QuestionKp.question_id, QuestionKp.weight.desc())
+        # 人工挂载的权重可能全相等（MANUAL_WEIGHT），同权时 DB 不保证行序，
+        # 再加 kp_id 让同一题内的 kp_names 顺序完全确定。
+        .order_by(QuestionKp.question_id, QuestionKp.weight.desc(), QuestionKp.kp_id)
     ).all()
     kp_names: dict[int, list[str]] = {}
     for question_id, name in kp_rows:
         kp_names.setdefault(question_id, []).append(name)
 
-    analyses = {
-        analysis.mistake_id: analysis
-        for analysis in session.scalars(
-            select(MistakeAnalysis).where(MistakeAnalysis.mistake_id.in_(mistake_ids))
+    # 列表只用 cause_type，不必把 explanation_md 等大字段拉进内存。
+    cause_rows = session.execute(
+        select(MistakeAnalysis.mistake_id, MistakeAnalysis.cause_type).where(
+            MistakeAnalysis.mistake_id.in_(mistake_ids)
         )
-    }
+    ).all()
+    cause_types = {mistake_id: cause_type for mistake_id, cause_type in cause_rows}
 
     items: list[MistakeSummaryOut] = []
     for mistake, question in rows:
-        analysis = analyses.get(mistake.id)
         items.append(
             MistakeSummaryOut(
                 id=mistake.id,
@@ -403,7 +405,7 @@ def list_mistakes(
                 qtype=question.qtype,
                 difficulty=question.difficulty,
                 kp_names=kp_names.get(question.id, []),
-                cause_type=analysis.cause_type if analysis else None,
+                cause_type=cause_types.get(mistake.id),
                 has_image=mistake.image_file_id is not None,
                 created_at=mistake.created_at,
                 last_review_at=mistake.last_review_at,

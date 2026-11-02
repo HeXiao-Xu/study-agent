@@ -357,6 +357,7 @@ def test_build_query_kp_filter_uses_exists():
     sql = _compiled(stmt)
     assert "EXISTS" in sql.upper()
     assert "question_kps" in sql
+    # 编译断言只保证走了 EXISTS；`@>` 的真实语义与 NULL 行为由 Task 13 真机验收覆盖。
     assert "mistake_analyses.kp_ids @>" in sql
 
 
@@ -395,8 +396,8 @@ def test_list_mistakes_returns_rows_with_kp_names(monkeypatch):
             "Page", (), {"items": [(mistake, question)], "total": 1, "page": 1, "size": 20}
         )(),
     )
-    # d-8：一页两条批量查询——先 kp 行（execute），再 analyses（scalars）。
-    session = FakeSession(rows_results=[[(65, "函数的单调性")]], scalars_results=[[]])
+    # d-8：一页两条批量查询——先 kp 行，再 cause_type 行（都由 execute 返回）。
+    session = FakeSession(rows_results=[[(65, "函数的单调性")], []])
     data = mistake_service.list_mistakes(
         session,
         user_id=1,
@@ -417,7 +418,7 @@ def test_list_mistakes_empty_page_skips_batch_queries(monkeypatch):
             "Page", (), {"items": [], "total": 0, "page": 1, "size": 20}
         )(),
     )
-    session = FakeSession(rows_results=[[(65, "不该被查")]], scalars_results=[["不该被消费"]])
+    session = FakeSession(rows_results=[[(65, "不该被查")]])
     data = mistake_service.list_mistakes(
         session,
         user_id=1,
@@ -429,4 +430,4 @@ def test_list_mistakes_empty_page_skips_batch_queries(monkeypatch):
     assert data.total == 0
     # 空页没有 id 可批查，KP 与诊断两条 IN 查询都不该发出。
     assert session.execute_statements == []
-    assert session.scalars_results == [["不该被消费"]]
+    assert session.rows_results == [[(65, "不该被查")]]
