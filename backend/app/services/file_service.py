@@ -49,7 +49,21 @@ TYPE_TABLE: dict[str, tuple[str, bytes | None]] = {
     "jpeg": ("image/jpeg", b"\xff\xd8\xff"),
 }
 
+# parse=False 的合法类型：图片（编辑器插图）+ 需要保存原件但自行处理的任务（试卷切题）
+_PASSTHROUGH_MIMES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def allows_parse_flag(parse: bool, mime: str) -> bool:
+    """parse=False 表示「只存原件、不入队 parse.document」。
+
+    S2-6 只允许图片；S4-1 起试卷原件也走这条通道（切题由 question.extract 负责）。
+    """
+    return parse or mime.startswith("image/") or mime in _PASSTHROUGH_MIMES
 
 
 def allowed_extensions() -> list[str]:
@@ -106,8 +120,8 @@ def upload_file(
     """流式读完 → 查重 → 写对象 → 写库；返回 (记录, 是否复用已有记录)。"""
     filename = sanitize_filename(upload.filename)
     ext, mime = detect_type(filename)
-    if not parse and not mime.startswith("image/"):
-        raise InvalidParamError("该文件不是图片")
+    if not allows_parse_flag(parse, mime):
+        raise InvalidParamError("该文件既不是图片，也不是可入库的文档（PDF/DOCX）")
     limit = get_settings().upload_max_size_mb * 1024 * 1024
 
     digest = hashlib.sha256()

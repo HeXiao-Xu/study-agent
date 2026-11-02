@@ -441,11 +441,31 @@ def test_upload_inline_image_skips_parse(client: TestClient) -> None:
     assert record.parse_finished_at is not None
 
 
-def test_upload_inline_image_rejects_non_image(client: TestClient) -> None:
+def test_upload_inline_pdf_skips_parse(client: TestClient) -> None:
+    user = _user()
+    session = FakeSession(user=user)
+    queue = _wire(session)
+    resp = client.post(
+        "/api/v1/files?parse=false", files=_file_payload(), headers=_headers(user)
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["mime"] == "application/pdf"
+    assert data["parse_status"] == "done"
+    assert queue.calls == []
+    record = session.added[0]
+    assert isinstance(record, File)
+    assert record.parse_progress == 100
+    assert record.parse_finished_at is not None
+
+
+def test_upload_inline_rejects_unsupported_type(client: TestClient) -> None:
     user = _user()
     _wire(FakeSession(user=user))
     resp = client.post(
-        "/api/v1/files?parse=false", files=_file_payload(), headers=_headers(user)
+        "/api/v1/files?parse=false",
+        files={"file": ("note.txt", BytesIO(b"plain text\n"), "text/plain")},
+        headers=_headers(user),
     )
     assert resp.status_code == 422
     assert resp.json()["code"] == 42200

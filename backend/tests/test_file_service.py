@@ -21,6 +21,7 @@ from app.models.file import File
 from app.models.user import User
 from app.models.user_relation import UserRelation
 from app.services import file_service
+from app.services.file_service import allows_parse_flag
 
 
 class FakeSession:
@@ -278,3 +279,18 @@ def test_get_file_status_allows_bound_parent() -> None:
         )
         is record
     )
+
+
+def test_parse_flag_allows_images_and_documents() -> None:
+    assert allows_parse_flag(True, "text/markdown") is True
+    assert allows_parse_flag(False, "image/png") is True
+    assert allows_parse_flag(False, "application/pdf") is True
+    assert allows_parse_flag(
+        False,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ) is True
+
+
+def test_parse_flag_still_rejects_plain_text_passthrough() -> None:
+    assert allows_parse_flag(False, "text/markdown") is False
+    assert allows_parse_flag(False, "text/plain") is False
