@@ -256,9 +256,13 @@ def test_record_review_wrong_resets_to_todo():
     mistake = _mistake(status="已掌握", streak=2)
     session = FakeSession(objects={(Question, 65): _question(), (Mistake, 12): mistake},
                           scalar_results=[None], scalars_results=[[]])
+    before = datetime.now(timezone.utc)
     mistake_service.record_review(session, user_id=1, mistake_id=12, correct=False)
     assert mistake.correct_streak == 0
     assert mistake.status == MistakeStatus.TODO.value
+    # spec §6.1：答错也要刷新复习时间，否则「待复习」排序会停在旧值。
+    assert mistake.last_review_at is not None
+    assert mistake.last_review_at >= before
 
 
 def test_record_review_other_user_raises_404():
@@ -273,6 +277,14 @@ def test_delete_mistake_removes_analysis_too():
     mistake_service.delete_mistake(session, user_id=1, mistake_id=12)
     assert mistake in session.deleted
     assert session.commits == 1
+
+
+def test_delete_mistake_other_user_raises_404():
+    session = FakeSession(objects={(Mistake, 12): _mistake(user_id=2)})
+    with pytest.raises(NotFoundError):
+        mistake_service.delete_mistake(session, user_id=1, mistake_id=12)
+    assert session.commits == 0
+    assert session.deleted == []
 
 
 def test_stats_fills_zero_for_missing_statuses():
@@ -297,3 +309,20 @@ def test_stats_queries_always_filter_owner():
     mistake_service.stats(session, user_id=7)
     for statement in session.execute_statements:
         assert "user_id" in str(statement.compile(compile_kwargs={"literal_binds": False}))
+
+
+def test_stats_applies_date_range_to_all_queries():
+    start = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    session = FakeSession(rows_results=[[], [], []])
+    mistake_service.stats(session, user_id=1, created_from=start, created_to=end)
+    for statement in session.execute_statements:
+        sql = str(statement.compile(compile_kwargs={"literal_binds": False}))
+        # created_from/created_to 必须同时下推到三条查询（各自 >= 与 <= 各一次）。
+        assert sql.count("mistakes.created_at") == 2
+
+    plain = FakeSession(rows_results=[[], [], []])
+    mistake_service.stats(plain, user_id=1)
+    for statement in plain.execute_statements:
+        sql = str(statement.compile(compile_kwargs={"literal_binds": False}))
+        assert "created_at" not in sql

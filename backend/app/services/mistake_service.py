@@ -271,6 +271,8 @@ def stats(
         .join(Mistake, Mistake.id == MistakeAnalysis.mistake_id)
         .where(*base_where)
         .group_by(MistakeAnalysis.cause_type)
+        # 并列计数时 DB 不保证行序，显式按 (count DESC, cause_type) 定死，图例不抖。
+        .order_by(func.count().desc(), MistakeAnalysis.cause_type)
     ).all()
     by_cause = [CauseCountOut(cause_type=cause, count=int(count)) for cause, count in cause_rows]
 
