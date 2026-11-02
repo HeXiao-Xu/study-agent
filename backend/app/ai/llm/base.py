@@ -13,6 +13,16 @@ Role = Literal["system", "user", "assistant"]
 class LLMMessage:
     role: Role
     content: str
+    # 图片只允许挂在 user 消息上（OpenAI 兼容协议的系统消息不接受多模态内容）；
+    # 用 tuple 而不是 list，保持 dataclass 可哈希（缓存/去重可能用到）。
+    images: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.images and self.role != "user":
+            raise ValueError("只有 user 消息可以携带图片")
+        for item in self.images or ():
+            if not item.startswith("data:image/"):
+                raise ValueError("图片必须是 data URL（data:image/...;base64,...）")
 
 
 @dataclass(frozen=True)

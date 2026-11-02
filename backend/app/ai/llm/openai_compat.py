@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
+def _build_message(message: LLMMessage) -> dict[str, Any]:
+    """无图消息保持字符串 content（与 S1-6 起的既有行为逐字一致）。"""
+    if not message.images:
+        return {"role": message.role, "content": message.content}
+    parts: list[dict[str, Any]] = [{"type": "text", "text": message.content}]
+    parts.extend({"type": "image_url", "image_url": {"url": url}} for url in message.images)
+    return {"role": message.role, "content": parts}
+
+
 class OpenAICompatibleLLMClient(LLMClient):
     def __init__(
         self,
@@ -159,10 +168,7 @@ class OpenAICompatibleLLMClient(LLMClient):
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [
-                {"role": message.role, "content": message.content}
-                for message in messages
-            ],
+            "messages": [_build_message(message) for message in messages],
             "temperature": self._temperature if temperature is None else temperature,
             "max_tokens": self._max_output_tokens if max_tokens is None else max_tokens,
         }
