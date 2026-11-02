@@ -26,6 +26,24 @@ def get_llm_client() -> LLMClient:
     )
 
 
+@lru_cache(maxsize=1)
+def get_vision_client() -> LLMClient:
+    """S4-2：视觉模型与文本模型是不同能力，模型名分开放配置。"""
+    settings = get_settings()
+    return OpenAICompatibleLLMClient(
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        model=settings.vision_model,
+        timeout=settings.llm_timeout_seconds,
+        max_retries=settings.llm_max_retries,
+        temperature=settings.llm_temperature,
+        max_output_tokens=settings.llm_max_output_tokens,
+        price_input_per_million=settings.llm_price_input_per_million,
+        price_output_per_million=settings.llm_price_output_per_million,
+        log_calls=True,
+    )
+
+
 __all__ = [
     "LLMClient",
     "LLMError",
@@ -34,4 +52,5 @@ __all__ = [
     "LLMStreamChunk",
     "OpenAICompatibleLLMClient",
     "get_llm_client",
+    "get_vision_client",
 ]
