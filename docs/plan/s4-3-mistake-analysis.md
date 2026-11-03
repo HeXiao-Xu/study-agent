@@ -49,7 +49,7 @@
 - Produces: `MistakeAnalysis.secondary_causes: list[str] | None`、`MistakeAnalysis.confidence: Decimal | None`；迁移 `revision="0011_s4_3"`, `down_revision="0010_s4_2"`。
 - Produces: `ck_mistake_analyses_secondary_causes`、`ck_mistake_analyses_confidence`。
 
-- [ ] **Step 1: 先改契约文档（§9.1「契约先行」）**
+- [x] **Step 1: 先改契约文档（§9.1「契约先行」）**
 
 `docs/SCHEMA.md` §5.4 的两列表格追加到既有列清单后：
 
@@ -67,7 +67,7 @@
 
 `docs/API.md` §6 在 `POST /api/v1/mistakes/{mistake_id}/review` 之后插入 analyze 端点小节（内容按 spec §8.1：202、query `force` 默认 true、`skipped` 语义、错误码），并把 `GET /mistakes/{id}` 的 `analysis` 示例补上 `secondary_causes` / `confidence` / `model` / `prompt_version`（spec §8.2）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `backend/tests/test_mistake_models.py` 追加：
 
@@ -82,12 +82,12 @@ def test_mistake_analysis_columns_declared():
     assert isinstance(MistakeAnalysis.__table__.c.confidence.type, Numeric)
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_models.py -q -k secondary_causes`
 Expected: FAIL（`KeyError`/`AssertionError`，两列不存在）
 
-- [ ] **Step 4: 改模型**
+- [x] **Step 4: 改模型**
 
 `backend/app/models/mistake_analysis.py`：
 
@@ -121,7 +121,7 @@ __table_args__ = (
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(3, 2), nullable=True)
 ```
 
-- [ ] **Step 5: 写迁移**
+- [x] **Step 5: 写迁移**
 
 `backend/alembic/versions/0011_s4_3_mistake_analysis.py`：
 
@@ -165,7 +165,7 @@ def downgrade() -> None:
     op.drop_column("mistake_analyses", "secondary_causes")
 ```
 
-- [ ] **Step 6: 跑测试 + 迁移 + 真库核对**
+- [x] **Step 6: 跑测试 + 迁移 + 真库核对**
 
 ```powershell
 cd backend
@@ -185,7 +185,7 @@ Expected: 测试全绿；`heads` 只有 `0011_s4_3 (head)`；`alembic check` 输
 
 Expected: 两行；`secondary_causes` 的 `udt_name=_text`，`confidence` 的 `numeric_precision=3`、`numeric_scale=2`。
 
-- [ ] **Step 7: 回滚一次再升级（验证可逆）**
+- [x] **Step 7: 回滚一次再升级（验证可逆）**
 
 ```powershell
 ..\.venv\Scripts\python.exe -m alembic downgrade -1
@@ -194,7 +194,7 @@ Expected: 两行；`secondary_causes` 的 `udt_name=_text`，`confidence` 的 `n
 
 Expected: 两次都成功，最终 `0011_s4_3 (head)`。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add docs/SCHEMA.md docs/API.md backend/app/models/mistake_analysis.py backend/alembic/versions/0011_s4_3_mistake_analysis.py backend/tests/test_mistake_models.py
@@ -218,7 +218,7 @@ git commit -m "feat(s4-3): 迁移 0011 增加次因与置信度列，先补 SCHE
   - `MistakeAnalysisError(Exception)`
   - `analyze_mistake(context: DiagnosisContext, *, llm_client: LLMClient | None = None, max_retries: int = 2) -> MistakeAnalysisResult`
 
-- [ ] **Step 1: 写 Prompt 文件**
+- [x] **Step 1: 写 Prompt 文件**
 
 `backend/app/ai/prompts/mistake_analyze_v1.md`（Jinja2，使用 `StrictUndefined`，变量必须全部出现）：
 
@@ -267,7 +267,7 @@ git commit -m "feat(s4-3): 迁移 0011 增加次因与置信度列，先补 SCHE
  "explanation_md": "...", "review_advice_md": "...", "confidence": 0.0}
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `backend/tests/test_mistake_analyzer.py`：
 
@@ -391,12 +391,12 @@ def test_loads_json_object_strips_code_fence():
     assert loads_json_object('```json\n{"a":1}\n```') == {"a": 1}
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_analyzer.py -q`
 Expected: FAIL（`ModuleNotFoundError: app.ai.analyze`）
 
-- [ ] **Step 4: 写适配器**
+- [x] **Step 4: 写适配器**
 
 `backend/app/ai/analyze/mistake_analyzer.py`：
 
@@ -582,12 +582,12 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_analyzer.py -q`
 Expected: 8 passed
 
-- [ ] **Step 6: 全量回归 + Commit**
+- [x] **Step 6: 全量回归 + Commit**
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
@@ -617,7 +617,7 @@ git commit -m "feat(s4-3): 错因诊断适配器与 Prompt（严格 JSON、unkno
   - `analyze(session, *, user_id: int, mistake_id: int) -> tuple[MistakeAnalysis, dict[str, Any]]`
   - `safe_enqueue(session, *, owner: User, mistake_id: int, queue: TaskQueue) -> bool`（best-effort 包装，失败记 WARNING 返回 False）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_mistake_analysis_service.py`（FakeSession 复用 `tests/test_mistake_service.py:1-76` 的写法，直接复制该类到本文件顶部即可，不要 import 那个模块的私有类）：
 
@@ -792,12 +792,12 @@ def test_has_analysis_true_and_false():
     assert svc.has_analysis(FakeSession(scalar_results=[1]), 12) is True
     assert svc.has_analysis(FakeSession(scalar_results=[None]), 12) is False
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_analysis_service.py -q`
 Expected: FAIL（`ModuleNotFoundError: app.services.mistake_analysis_service`）
 
-- [ ] **Step 3: 写服务**
+- [x] **Step 3: 写服务**
 
 `backend/app/services/mistake_analysis_service.py`：
 
@@ -992,12 +992,12 @@ def analyze(session: Session, *, user_id: int, mistake_id: int) -> tuple[Mistake
         raise NotFoundError("错题不存在")
 ```
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_analysis_service.py -q`
 Expected: 6 passed（若 `_prerequisite_names` 的 `session.scalars` 在 FakeSession 里返回 `[]`，`build_context` 的前置为 `[]`，符合断言）
 
-- [ ] **Step 5: 全量回归 + Commit**
+- [x] **Step 5: 全量回归 + Commit**
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
@@ -1026,7 +1026,7 @@ git commit -m "feat(s4-3): 诊断服务（上下文构造、检索降级、1:1 �
 - Produces: 任务名 `"mistake.analyze"`；`result` 形如 `{"mistake_id":12,"cause_type":"概念不清","secondary_causes":["计算失误"],"confidence":0.82,"retrieval_hits":2}` 或 `{"mistake_id":12,"skipped":true}`。
 - Produces: `create_from_question(session, *, user_id: int, payload, owner: User | None = None, queue: TaskQueue | None = None)`——`owner`/`queue` 都为 None 时不入队（既有调用零改动）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_mistake_analysis_task.py`：
 
@@ -1134,12 +1134,12 @@ def test_create_from_question_without_owner_skips_enqueue(monkeypatch):
 
 > 传 `owner=object()` 就够：`safe_enqueue` 被 monkeypatch，不会真的用 `owner.id`。真实用户对象只在路由/任务里构造。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistake_analysis_task.py -q`
 Expected: FAIL（`ModuleNotFoundError: app.tasks.analyze_mistake`）
 
-- [ ] **Step 3: 写任务**
+- [x] **Step 3: 写任务**
 
 `backend/app/tasks/analyze_mistake.py`：
 
@@ -1170,7 +1170,7 @@ def run_analyze_mistake(session: Session, payload: dict[str, Any]) -> dict[str, 
 
 在 `backend/app/tasks/__init__.py` 里按现有 import 风格追加 `from app.tasks import analyze_mistake  # noqa: F401`（先读该文件确认写法，保持字母序）。
 
-- [ ] **Step 4: 拍照录入触发诊断**
+- [x] **Step 4: 拍照录入触发诊断**
 
 `backend/app/tasks/mistake_recognize.py` 的 handler，在 `return result` 之前插入：
 
@@ -1190,7 +1190,7 @@ def run_analyze_mistake(session: Session, payload: dict[str, Any]) -> dict[str, 
 - `safe_enqueue` 内部捕获一切异常并记 WARNING，所以这里不需要 try/except；`result["analysis_enqueued"]` 只是给前端/运维看的标记，任务仍算成功。
 - 位置：必须放在 `result` 组装完之后、`return result` 之前——这段之后 handler 只剩 return，提前提交（`create_task` 会 commit session）不会留下半写状态。
 
-- [ ] **Step 5: 题库录入触发诊断**
+- [x] **Step 5: 题库录入触发诊断**
 
 `backend/app/services/mistake_service.py`：
 
@@ -1225,7 +1225,7 @@ def create_from_question(
 
 路由 `create_mistake` 传入 `owner=current_user, queue=queue`（`queue: TaskQueue = Depends(get_task_queue)` 已在该路由的 photo 版本里出现过，照抄依赖）。
 
-- [ ] **Step 6: 跑测试**
+- [x] **Step 6: 跑测试**
 
 ```powershell
 cd backend
@@ -1234,7 +1234,7 @@ cd backend
 
 Expected: 新用例全绿，旧 `mistake_service` 用例零改动全绿
 
-- [ ] **Step 7: 全量回归 + Commit**
+- [x] **Step 7: 全量回归 + Commit**
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
@@ -1260,7 +1260,7 @@ git commit -m "feat(s4-3): mistake.analyze 任务与录入后自动入队"
 - Consumes: `enqueue_analysis`（`skip_if_analyzed=False`）、`TaskOut`。
 - Produces: `POST /api/v1/mistakes/{mistake_id}/analyze?force=true` → `202 Envelope[TaskOut]`；`MistakeAnalysisOut` 增 `secondary_causes` / `confidence` / `model` / `prompt_version`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_mistakes_api.py` 追加：
 
@@ -1298,12 +1298,12 @@ def test_mistake_detail_exposes_analysis_extended_fields(client, auth_headers, a
 
 > `seeded_mistake` / `other_mistake` / `analyzed_mistake` 三个 fixture 放到该文件顶部（照现有 fixture 风格：建 user + subject + question + mistake，`analyzed_mistake` 额外插一行 `mistake_analyses`）。若已有可复用的 fixture 就直接用，不要重复造。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistakes_api.py -q -k analyze`
 Expected: FAIL（404 / 405）
 
-- [ ] **Step 3: 扩 DTO**
+- [x] **Step 3: 扩 DTO**
 
 `backend/app/schemas/mistake.py` 的 `MistakeAnalysisOut`：
 
@@ -1338,7 +1338,7 @@ class MistakeAnalysisOut(BaseModel):
     ) if row else None,
 ```
 
-- [ ] **Step 4: 加路由**
+- [x] **Step 4: 加路由**
 
 `backend/app/api/v1/mistakes.py`（放在 `review` 之后、`delete` 之前）：
 
@@ -1393,12 +1393,12 @@ def enqueue_analysis(session, *, owner, mistake_id, queue, force=False, skip_if_
 - **手动路由**：直接调 `enqueue_analysis(...)`，404 正常透出（错题不属于自己时学生看到 404，与 S4-2 口径一致）。
 - **自动触发**：调 `safe_enqueue(...)`，它把（含 404 在内的）异常吞成 WARNING。自动路径不会传别人的 `mistake_id`，这条兜底只是防御。
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `cd backend; ..\.venv\Scripts\python.exe -m pytest tests/test_mistakes_api.py -q`
 Expected: 新旧用例全绿
 
-- [ ] **Step 6: 全量回归 + Commit**
+- [x] **Step 6: 全量回归 + Commit**
 
 ```powershell
 cd backend; ..\.venv\Scripts\python.exe -m pytest -q
@@ -1425,7 +1425,7 @@ git commit -m "feat(s4-3): 手动诊断接口与诊断 DTO 字段扩展"
 - Consumes: `POST /api/v1/mistakes/{id}/analyze`（任务 `mistake.analyze`）、`GET /api/v1/tasks/{id}`（既有 `getTask`）。
 - Produces: `analyzeMistake(id: number, force = true): Promise<TaskOut>`；组件内 `analysis` computed 增字段后直接渲染。
 
-- [ ] **Step 1: 加类型与 API（先写类型，`npm run build` 会替你抓拼写）**
+- [x] **Step 1: 加类型与 API（先写类型，`npm run build` 会替你抓拼写）**
 
 `web/src/types/mistakes.ts`：
 
@@ -1459,7 +1459,7 @@ export async function analyzeMistake(id: number, force = true): Promise<TaskOut>
 }
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 `web/src/views/mistakes/__tests__/MistakeDetailView.spec.ts` 追加（沿用文件里已有的 `mountView` / `detailFixture` / fake timers 约定；`vi.mock('@/api/mistakes')` 里补 `analyzeMistake: vi.fn()`，`vi.mock('@/api/tasks')` 补 `getTask: vi.fn()`）：
 
@@ -1561,7 +1561,7 @@ it('重新诊断不清空未保存的作答草稿', async () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 ```powershell
 cd web
@@ -1571,7 +1571,7 @@ npm run test:run -- --pool=threads src/views/mistakes/__tests__/MistakeDetailVie
 
 Expected: FAIL（找不到「立即诊断」按钮 / `analyzeMistake is not a function`）
 
-- [ ] **Step 4: 改详情页**
+- [x] **Step 4: 改详情页**
 
 `MistakeDetailView.vue` 的 `<script setup>` 追加：
 
@@ -1735,7 +1735,7 @@ onBeforeUnmount(() => {
 .analyzing { display: flex; align-items: center; gap: 6px; color: var(--el-text-color-secondary); }
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 ```powershell
 cd web
@@ -1745,7 +1745,7 @@ npm run test:run -- --pool=threads src/views/mistakes/__tests__/MistakeDetailVie
 
 Expected: 追加的 8 条全绿，旧用例不回归
 
-- [ ] **Step 6: 全量前端测试 + build**
+- [x] **Step 6: 全量前端测试 + build**
 
 ```powershell
 cd web
@@ -1756,7 +1756,7 @@ npm run build
 
 Expected: ≥ 188 passed；build 成功
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/src/types/mistakes.ts web/src/api/mistakes.ts web/src/views/mistakes/MistakeDetailView.vue web/src/views/mistakes/__tests__/MistakeDetailView.spec.ts
@@ -1775,7 +1775,7 @@ git commit -m "feat(s4-3): 详情页诊断区与重新诊断轮询"
 - Consumes: `POST /auth/register`、`POST /auth/login`、`POST /questions`、`POST /mistakes`、`POST /mistakes/{id}/analyze`、`GET /tasks/{id}`。
 - Produces: `测试数据/s4_3_cases.json`——`{"subject_id": 7, "user": "...", "cases": [{"mistake_id": 1, "question_id": 2, "label": "概念不清", "my_answer_md": "...", "stem": "..."}]}`，Task 8 的评分脚本读它。
 
-- [ ] **Step 1: 写脚本**
+- [x] **Step 1: 写脚本**
 
 `测试数据/_make_s4_3_cases.py`（**只构造数据，不做判定**；判定在 Task 8）：
 
@@ -1947,7 +1947,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: 起服务并跑脚本**
+- [x] **Step 2: 起服务并跑脚本**
 
 ```powershell
 # 终端 1（backend\）：uvicorn 8031
@@ -1961,7 +1961,7 @@ cd E:\BiShe-AIStudy\study-agent\backend
 
 Expected: 30 行 `[NN/30] mistake=… label=…`，最后写出 `测试数据/s4_3_cases.json`；重跑 30 条全部走复用分支（不新建题）。
 
-- [ ] **Step 3: 抽查自动入队是否真的发生**
+- [x] **Step 3: 抽查自动入队是否真的发生**
 
 ```powershell
 ..\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'.'); from sqlalchemy import text; from app.core.db import new_session; s=new_session(); print(s.execute(text(\"select name, status, count(*) from async_tasks where name='mistake.analyze' group by 1,2 order by 2\")).all()); s.close()"
@@ -1969,7 +1969,7 @@ Expected: 30 行 `[NN/30] mistake=… label=…`，最后写出 `测试数据/s4
 
 Expected: 至少 30 行 `mistake.analyze` 的 `succeeded`（worker 在跑）；若为 `pending` 说明 worker 没起或 Redis 不通。
 
-- [ ] **Step 4: Commit（只提交脚本，不提交产物）**
+- [x] **Step 4: Commit（只提交脚本，不提交产物）**
 
 ```bash
 git add 测试数据/_make_s4_3_cases.py
@@ -1989,7 +1989,7 @@ git commit -m "test(s4-3): 30 条错因自测集构造脚本（人工标注，�
 - Consumes: `测试数据/s4_3_cases.json`（Task 7）、`GET /mistakes/{id}`、`POST /mistakes/{id}/analyze`、`GET /tasks/{id}`。
 - Produces: 准确率数字，Task 9 写进 `PROGRESS.md` 与任务卡实施记录。
 
-- [ ] **Step 1: 写验收脚本**
+- [x] **Step 1: 写验收脚本**
 
 `.sdd/s4-3/accept_s4_3.py`：
 
@@ -2090,7 +2090,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: 跑**
+- [x] **Step 2: 跑**
 
 ```powershell
 cd E:\BiShe-AIStudy\study-agent\backend
@@ -2099,7 +2099,7 @@ cd E:\BiShe-AIStudy\study-agent\backend
 
 Expected: 30 行 `OK`/`MISS`，末尾 summary JSON；`primary_accuracy ≥ 0.7` 才 exit 0。
 
-- [ ] **Step 3: 人工逐条核对（这是验收的核心，不许跳过）**
+- [x] **Step 3: 人工逐条核对（这是验收的核心，不许跳过）**
 
 打开 `accept_s4_3.out.json`，逐条看 `explanation_md` / `error_step` / `review_advice_md` 是否真的讲了这道题，把**模型判错但人工认为可接受**（如「概念不清 vs 方法不当」）与**真的离谱**（如答非所问、编造笔记）分开计数，记进 `acceptance-evidence.md`：
 
@@ -2126,7 +2126,7 @@ Expected: 30 行 `OK`/`MISS`，末尾 summary JSON；`primary_accuracy ≥ 0.7` 
 - #27 标注「时间不足」，模型「计算失误」：不可接受？→ 如实写清
 ```
 
-- [ ] **Step 4: 跑边界用例（4 条，必须真跑）**
+- [x] **Step 4: 跑边界用例（4 条，必须真跑）**
 
 ```powershell
 cd E:\BiShe-AIStudy\study-agent\backend
@@ -2142,11 +2142,11 @@ Expected: `cause_type=unknown`、`error_step=null`、`secondary_causes=[]`，`ex
 
 后 3 条直接写进 `accept_s4_3.py` 的 `--edges` 分支（或另写 `accept_s4_3_edges.py`），输出贴进 `acceptance-evidence.md`。`force=false` 的期望：任务 `succeeded` 且 `result.skipped=true`，诊断行 `created_at` 不变。
 
-- [ ] **Step 5: 重复性抽查（3 条 × 2 次）**
+- [x] **Step 5: 重复性抽查（3 条 × 2 次）**
 
 对 #1 / #10 / #20 再跑一次 `force=true`，记录两次 `cause_type` 是否一致，写进证据文档。Expected: 3/3 一致；不一致要如实记录。
 
-- [ ] **Step 6: 不提交（`.sdd/` 是否跟踪按仓库现状：S4-2 的 `.sdd` 未跟踪，继续不跟踪）**
+- [x] **Step 6: 不提交（`.sdd/` 是否跟踪按仓库现状：S4-2 的 `.sdd` 未跟踪，继续不跟踪）**
 
 ---
 
@@ -2160,7 +2160,7 @@ Expected: `cause_type=unknown`、`error_step=null`、`secondary_causes=[]`，`ex
 - Modify: `AGENTS.md` §9.2（错因诊断一条）+ §9.6（锚点）
 - Modify: `docs/AI协作开发实施计划.md`（S4-3 勾选 + 实施记录）
 
-- [ ] **Step 1: DECISIONS.md 追加 D-046**
+- [x] **Step 1: DECISIONS.md 追加 D-046**
 
 ```markdown
 ### D-046 错因诊断（S4-3）
@@ -2173,7 +2173,7 @@ Expected: `cause_type=unknown`、`error_step=null`、`secondary_causes=[]`，`ex
 - **验收口径**：30 条自测集（构造数据，非真实学生），主因准确率 = 命中/总数，目标 ≥70%；文档如实标注数据来源。
 ```
 
-- [ ] **Step 2: PROGRESS.md 增 S4-3 条目**
+- [x] **Step 2: PROGRESS.md 增 S4-3 条目**
 
 ```markdown
 ### S4-3 错因诊断服务（2026-11-0X）
@@ -2188,7 +2188,7 @@ Expected: `cause_type=unknown`、`error_step=null`、`secondary_causes=[]`，`ex
 - 遗留：（按实回填，例如「概念不清 vs 方法不当」混淆、`confidence` 未校准）
 ```
 
-- [ ] **Step 3: AGENTS.md**
+- [x] **Step 3: AGENTS.md**
 
 §9.2 追加「错因诊断（S4-3）」条目（口径按实现回填，至少含：仅入口 `mistake_analysis_service`、1:1 覆盖、unknown 代码强制、error_step 证据校验、检索降级、任务不 commit、`scene="mistake"`）；§9.6 追加锚点行：
 
@@ -2196,11 +2196,11 @@ Expected: `cause_type=unknown`、`error_step=null`、`secondary_causes=[]`，`ex
 - 错因诊断样例：backend/app/ai/analyze/mistake_analyzer.py + backend/app/services/mistake_analysis_service.py + backend/app/tasks/analyze_mistake.py（诊断上下文六块；strict JSON + 2 次重试；缺作答强制 unknown；重跑 1:1 覆盖并刷新 created_at；笔记检索失败降级；任务不 commit）
 ```
 
-- [ ] **Step 4: 任务卡勾选 + 实施记录**
+- [x] **Step 4: 任务卡勾选 + 实施记录**
 
 `docs/AI协作开发实施计划.md`：`- [ ] S4-3 错因诊断服务 ★关键` → `- [x]`，并在 S4-3 小节末追加「实施记录（2026-11-0X）」一行（测试数、准确率、遗留）。
 
-- [ ] **Step 5: 全量回归（贴输出）**
+- [x] **Step 5: 全量回归（贴输出）**
 
 ```powershell
 cd backend
@@ -2215,7 +2215,7 @@ npm run build
 
 Expected: 后端 ≥ 978 passed 1 warning；`0011_s4_3 (head)`；`No new upgrade operations detected.`；前端 ≥ 188 passed；build 成功。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/API.md docs/SCHEMA.md docs/DECISIONS.md docs/PROGRESS.md AGENTS.md docs/AI协作开发实施计划.md
@@ -2228,7 +2228,7 @@ git commit -m "docs(s4-3): 契约与决策同步（D-046）、PROGRESS 与任务
 
 **Files:**（按评审结论）
 
-- [ ] **Step 1: 请求一次整支评审**
+- [x] **Step 1: 请求一次整支评审**
 
 用 `superpowers:requesting-code-review` 起一个评审 subagent，范围 `git diff 655d464..HEAD`（S4-3 全部提交），要求按 Critical / Important / Minor 分级，重点看：
 
@@ -2238,11 +2238,11 @@ git commit -m "docs(s4-3): 契约与决策同步（D-046）、PROGRESS 与任务
 - 前端轮询的卸载/重置竞态；
 - `secondary_causes` 的 `<@` CHECK 是否真在库上生效（用真库验一次非法插入被拒）。
 
-- [ ] **Step 2: 修 Critical / Important**
+- [x] **Step 2: 修 Critical / Important**
 
 每条修复配一条回归测试；修完重跑后端 + 前端全量。
 
-- [ ] **Step 3: 真库验证 CHECK**
+- [x] **Step 3: 真库验证 CHECK**
 
 ```powershell
 cd backend
@@ -2258,7 +2258,7 @@ finally:
 
 Expected: `OK 拒收: IntegrityError`
 
-- [ ] **Step 4: 收尾**
+- [x] **Step 4: 收尾**
 
 按 `superpowers:finishing-a-development-branch` 合并回 `main`（fast-forward）、删分支、更新 `.sdd/s4-3/progress.md` 的收尾记录。**不 push**（用户自己推）。
 
