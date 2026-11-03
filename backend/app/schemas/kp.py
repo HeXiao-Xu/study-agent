@@ -1,5 +1,7 @@
-"""S2-9 知识点出入参（API.md §4）。"""
+"""S2-9/S4-5 知识点出入参（API.md §4、§4.5）。"""
 from __future__ import annotations
+
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -56,3 +58,55 @@ class KpOrderIn(BaseModel):
     parent_id: int | None = Field(description="目标父节点；null 表示根级")
     ordered_ids: list[int] = Field(min_length=1, max_length=200)
     moved_id: int | None = Field(default=None, ge=1)
+
+
+class GraphEdgeOut(BaseModel):
+    """一条知识图谱关系边（API.md §4.5）；两端名称由服务层批查补齐。"""
+
+    id: int
+    src_kp_id: int
+    src_name: str
+    dst_kp_id: int
+    dst_name: str
+    relation: str
+    weight: float | None = None
+    source: str
+    review_status: str
+    reviewed_at: datetime | None = None
+    created_at: datetime
+
+
+class GraphEdgePage(BaseModel):
+    items: list[GraphEdgeOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class GraphStatsOut(BaseModel):
+    subject_id: int | None = None
+    nodes: int
+    edges: int
+    by_relation: dict[str, int]
+    by_status: dict[str, int]
+    last_built_at: datetime | None = None
+
+
+class GraphBuildIn(BaseModel):
+    subject_id: int | None = Field(default=None, ge=1)
+    relations: list[str] | None = Field(default=None, max_length=4)
+    limit: int | None = Field(default=None, ge=1, le=200)
+
+
+class EdgeReviewIn(BaseModel):
+    approve: bool
+
+
+class EdgeReviewBatchIn(BaseModel):
+    edge_ids: list[int] = Field(min_length=1, max_length=200)
+    approve: bool
+
+
+class EdgeReviewBatchOut(BaseModel):
+    updated: int
+    skipped: int
