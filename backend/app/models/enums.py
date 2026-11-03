@@ -28,6 +28,14 @@ class EdgeSource(StrEnum):
     MANUAL = "manual"
 
 
+class EdgeReviewStatus(StrEnum):
+    """knowledge_edges.review_status：AI 边的审核状态（SCHEMA §10.17，S4-5）。"""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class ParseStatus(StrEnum):
     PENDING = "pending"
     PARSING = "parsing"
@@ -57,6 +65,7 @@ class LLMCallScene(StrEnum):
     EMBED = "embed"
     MISTAKE = "mistake"
     GEN = "gen"
+    GRAPH = "graph"
     AGENT = "agent"
 
 

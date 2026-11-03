@@ -124,8 +124,13 @@ erDiagram
 | source | TEXT | 否 | — | ai / manual（§10.4） | — |
 | created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S2-1 补） | — |
 | updated_at | TIMESTAMPTZ | 否 | now() | 应用层 onupdate 维护（S2-1 补） | — |
+| review_status | TEXT | 否 | 'pending' | 审核状态，§10.17（S4-5） | idx |
+| reviewed_by | BIGINT | 是 | — | 审核人 users.id，FK ON DELETE SET NULL（S4-5） | — |
+| reviewed_at | TIMESTAMPTZ | 是 | — | 最近一次审核时间（S4-5） | — |
 
 > S2-1 新增 `ck_knowledge_edges_not_self`（src_kp_id <> dst_kp_id）；relation / source 以 CHECK 约束落库。
+
+> S4-5 新增 `ck_knowledge_edges_review_status`（待校验/通过/驳回）与 `ck_knowledge_edges_reviewed`（`pending` 时 `reviewed_at` 必须为空，非 `pending` 时非空；`reviewed_by` 允许空以支持脚本批量通过）。迁移 `0012_s4_5` 把历史行回填为 `approved`；`contains` 派生边一律直接 `approved`；`rejected` 行作为墓碑保留，重跑不会复活。
 
 ## 4. 笔记与文件
 
@@ -579,9 +584,10 @@ erDiagram
 | 10.11 | review_items.ref_type | note / question / mistake ✅ | 方案 5.2 |
 | 10.12 | messages.role | user / assistant / system ✅ | 方案 5.2 |
 | 10.13 | agent_tasks.status | pending / running / waiting_confirm / succeeded / failed ✅；task_type 首批：weekly_mindmap / mistake_paper（见 API 草案） | 方案 5.2 + 附录 B |
-| 10.14 | llm_call_logs.scene | qa / query_rewrite / kp_align / embed / mistake / gen / agent（S3-7 扩展） | 本卡 S3-7 |
+| 10.14 | llm_call_logs.scene | qa / query_rewrite / kp_align / embed / mistake / gen / graph / agent（S4-5 加 graph） | 本卡 S3-7 + S4-5 |
 | 10.15 | async_tasks.status | pending / running / succeeded / failed（S2-7 定稿；失败重试回 pending） | 本卡 S2-7 |
 | 10.16 | llm_call_logs.status | success / failed（S3-7 定稿；流式被关闭记 failed） | 本卡 S3-7 |
+| 10.17 | knowledge_edges.review_status（`EdgeReviewStatus`） | pending / approved / rejected ✅（S4-5） | 本卡 S4-5 |
 
 > `MistakeStatus` / `CauseType` 常量定义在 `backend/app/models/enums.py`；CHECK 文本由 `in_check()` 生成，与迁移 `0010_s4_2` 的 `ck_mistakes_status` / `ck_mistake_analyses_cause_type` 一致（S4-2 实测 DDL）。
 
