@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # scene 必须落在 llm_call_logs.scene 的 CHECK 白名单内（S4-2 C1：写错就会被静默丢弃）
 SCENE = "mistake"
 
-PROMPT_VERSION = "mistake_analyze_v1"
-PROMPT_FILE = "mistake_analyze_v1.md"
+PROMPT_VERSION = "mistake_analyze_v2"
+PROMPT_FILE = "mistake_analyze_v2.md"
 MAX_RETRIES = 2
 STEM_LIMIT = 2000
 ANSWER_LIMIT = 800

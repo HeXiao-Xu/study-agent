@@ -136,7 +136,7 @@ def test_analyze_inserts_new_analysis(monkeypatch):
     assert analysis.cause_type == "概念不清"
     assert analysis.secondary_causes == ["计算失误"]
     assert analysis.kp_ids == [133]
-    assert analysis.prompt_version == "mistake_analyze_v1"
+    assert analysis.prompt_version == "mistake_analyze_v2"
     assert analysis.confidence == Decimal("0.82")
     assert summary["confidence"] == pytest.approx(0.82)
     assert summary["secondary_causes"] == ["计算失误"]

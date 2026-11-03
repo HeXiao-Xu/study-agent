@@ -454,7 +454,7 @@ def test_detail_exposes_new_analysis_fields(monkeypatch) -> None:
         kp_ids=[133],
         confidence=0.82,
         model="qwen-plus",
-        prompt_version="mistake_analyze_v1",
+        prompt_version="mistake_analyze_v2",
         created_at=_now(),
     )
     monkeypatch.setattr(mistake_service, "get_detail", lambda *a, **k: detail)
@@ -464,7 +464,7 @@ def test_detail_exposes_new_analysis_fields(monkeypatch) -> None:
     assert analysis["secondary_causes"] == ["计算失误"]
     assert analysis["confidence"] == 0.82
     assert analysis["model"] == "qwen-plus"
-    assert analysis["prompt_version"] == "mistake_analyze_v1"
+    assert analysis["prompt_version"] == "mistake_analyze_v2"
 
 
 # --------------------------------------------------------------------------

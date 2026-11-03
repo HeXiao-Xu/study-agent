@@ -621,3 +621,16 @@
 - 决策 8（契约偏差回填）：按既有编号把错题接口写进 `API.md` **§6**（spec/plan 原写 §5.6）；列表排序参数实际是 `order`（spec §8 原写 `sort_order`）；`GET /{id}` 的详情是扁平字段（`stem_md` / `my_answer_md` / `analysis` 等），不是嵌套 `question` 快照；删除 204 无体、`PATCH status=null` → 422、重复录入 201 + `created=false` 均以本文与 API.md 为准。
 - 决策 9（测试）：后端新增 6 个测试文件（模型、服务、任务、视觉、视觉消息、接口），基线 865 → **952 passed, 1 warning**（本卡实测）；前端基线 125 → **180 passed**（`npm run test:run`，控制器实测）。真机验收（真实 Qwen-VL + 真实 Postgres/Redis/MinIO、10 道题库录入 + 3 张合成图 + 状态机/筛选/引用保护 + 浏览器）由控制器另行执行；本文件不写尚未跑出的验收数字。
 - 已知限制：错因诊断、变式题与 `similar_questions_json` 归 S4-3，本卡 `analysis` 恒 null；拍照只收 PNG/JPEG，WebP 未开放；`last_review_at DESC` 时 NULL 行按 PostgreSQL 默认（DESC 下 NULLS FIRST）排序，口径未定（见 PROGRESS 遗留 88）；视觉识别只验证过印刷体合成图，手写体效果未验证；一图一题、无图片预处理；拍照建题会进入公共题库，低质量照片题可能污染题库（遗留 82）；错题硬删不可恢复；无教师/家长查看学生错题的接口。
+## D-046 错因诊断服务（S4-3）
+
+- 背景：S4-3 要求错题录入后自动给出「为什么错」，落 `mistake_analyses`，并在详情页展示与手动重跑。spec/plan 见 `docs/spec/s4-3-mistake-analysis.md`、`docs/plan/s4-3-mistake-analysis.md`。
+- 决策 1（解耦与触发）：诊断与录入解耦——`create_from_question` 成功后 best-effort 入队 `mistake.analyze`，入队异常只 WARNING 不回滚录入（同 S3-1 创建笔记后 best-effort 入队索引）；自动触发默认 `skip_if_analyzed=True`（已有诊断跳过，避免反复烧钱），手动接口 `POST /mistakes/{id}/analyze` 默认 `force=true` 覆盖。
+- 决策 2（1:1 覆盖式 UPDATE）：`uq_mistake_analyses_mistake_id` 决定一题一份诊断；重跑走 UPDATE 原地改字段并刷新 `created_at`（语义定为「最近一次诊断落库时间」），不新增列、不保留历史。upsert 后显式 `session.flush()`：`autoflush=False` 下不 flush，约束错误会逃出 handler 的 try，任务会卡在 `running`（S4-2 C1 教训）。
+- 决策 3（`unknown` 由代码强制）：`my_answer_md` 为空时，无论模型输出什么，一律覆盖为 `cause_type="unknown"`、`secondary_causes=[]`、`error_step=None`，只保留题目讲解；并记 `mistake_analyze_unknown_answer` 日志。模型可能编错因，代码兜底才能保证口径，前端也能据此隐藏错因区。
+- 决策 4（证据校验）：`error_step` 必须包含学生作答里 ≥2 字的片段，否则丢弃为 `None`；宁可空着，也不要泛泛的「计算错误」。
+- 决策 5（上下文与降级）：上下文固定六块（题干截断 2000 字、选项、标准答案、学生作答截断 1500 字、题目已挂 KP ≤3、KP 父节点名 ≤5、笔记 top-3 片段每条截断 200 字）；`kp_ids` 直接取 `question_kps`（不重新对齐，避免与题库展示不一致）；笔记检索失败只 WARNING 降级为空，诊断照常跑。
+- 决策 6（Prompt 与口径，v2）：Prompt 走文件 `ai/prompts/mistake_analyze_v2.md`（S3-4 约定只有 QA 读 `prompt_templates` 表），`scene="mistake"`（白名单值，S4-2 C1 踩过 `mistake_ocr` 不在白名单）。v2 起把「错因判定口径」写进 Prompt：截断→时间不足 > 读题/所求→审题偏差 > 概念/公式（内容记错=知识遗忘，理解用错=概念不清）> 路径方法→方法不当 > 纯运算→计算失误。原因是 v1 只给 6 个枚举时，自测集主因命中率只有 36.7%，六类边界各说各话、指标不可复现（详见证据文档）。
+- 决策 7（任务与事务）：`tasks/analyze_mistake.py` 沿用 S2-7 约定，handler 不 commit，`payload` 只带 `mistake_id`/`user_id`；`force=false` 且已有诊断时返回 `{"mistake_id": N, "skipped": true}` 且任务 `succeeded`。`TASK_ANALYZE_MISTAKE` 常量定义在 service（task 反向导入），`TaskQueue` 走 `TYPE_CHECKING` + 函数内延迟导入 `task_service`，避免 `app.tasks.__init__` 循环导入。
+- 决策 8（验收口径与自测集）：准确率口径 = 主因命中率（目标 ≥70%），另记主因或次因与混淆矩阵；数据是**构造的自测集**（S4-1 题库 + 30 条人工作答，6 类各 5 条），报告一律标注「自测集，非真实学生数据」。三轮数字（36.7% / 63.3% / 86.7%）与"看着错误调 Prompt 的过拟合风险"全部写进 `.sdd/s4-3/acceptance-evidence.md`，不挑数字。
+- 决策 9（测试与契约）：后端基线 952 → **999 passed, 1 warning**；前端 180/35 → **187 passed / 35 files**。`API.md` §6 补 `analysis` 新字段与 `POST /mistakes/{id}/analyze`（202、`force` 默认 true、404/422/500）；`SCHEMA.md` §5.4 补两列两 CHECK 与 `prompt_version` v2。
+- 已知限制：`similar_questions_json` 仍未写入（S4-4）；`confidence` 实测集中在 0.9–0.95，未校准；"时间不足"在"有半截结论"时判定不稳定（#26）；浏览器级 E2E 未做（无 Playwright，§2.1 不擅自加依赖）。

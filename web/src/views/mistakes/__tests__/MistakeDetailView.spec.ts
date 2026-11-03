@@ -86,7 +86,7 @@ function analyzed(overrides: Partial<MistakeAnalysis> = {}): MistakeAnalysis {
     kp_ids: [133],
     confidence: 0.82,
     model: 'qwen-plus',
-    prompt_version: 'mistake_analyze_v1',
+    prompt_version: 'mistake_analyze_v2',
     created_at: '2026-11-03T00:00:00Z',
     ...overrides,
   }
@@ -205,7 +205,7 @@ describe('MistakeDetailView', () => {
     expect(text).toContain('计算失误')
     expect(text).toContain('82%')
     expect(text).toContain('你写的是')
-    expect(text).toContain('mistake_analyze_v1')
+    expect(text).toContain('mistake_analyze_v2')
   })
 
   it('unknown 错因隐藏第一处错误步骤并说明未提供作答', async () => {

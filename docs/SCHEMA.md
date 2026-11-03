@@ -305,7 +305,7 @@ erDiagram
 | review_advice_md | TEXT | 是 | — | 复习建议（前置知识 + 笔记关联） | — |
 | confidence | NUMERIC(3,2) | 是 | — | LLM 自评置信度 0.00–1.00（S4-3） | `ck_mistake_analyses_confidence` ✅ |
 | model | TEXT | 否 | — | 诊断所用模型 | — |
-| prompt_version | TEXT | 否 | — | Prompt 版本（本卡为 `mistake_analyze_v1`） | — |
+| prompt_version | TEXT | 否 | — | Prompt 版本（本卡为 `mistake_analyze_v2`，v2 起带错因判定口径） | — |
 | created_at | TIMESTAMPTZ | 否 | `now()` | **最近一次诊断**落库时间（重跑覆盖时刷新） | — |
 
 **约束与索引（实测 DDL）**

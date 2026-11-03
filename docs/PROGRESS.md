@@ -5,10 +5,11 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1、S4-2 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-2 错题录入 + 状态机（迁移 `0010_s4_2`、`mistakes`/`mistake_analyses` 两表、`mistake.recognize` 拍照识别、8 个错题接口、前端列表/录入/详情三页）；后端 **952 passed, 1 warning**，前端 **180 passed**（`npm run test:run` 实测）
-- 关键口径（S4-2）：同 `(user, question)` 重复录入复用重置且仍 201 + `created=false`；并发冲突靠 `IntegrityError` 重查赢家；状态机只由 `POST /review` 驱动（`PATCH status` 不改 streak）；列表 `cause_type`/`kp_id` 全用 EXISTS；统计 `total` = 三状态计数之和；拍照 handler 不 commit、只有 `task_create_mistake` flush
-- 下一步：S4-3 错因诊断服务；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1、S4-2、S4-3 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S4-3 错因诊断服务（迁移 `0011_s4_3`、`mistake_analyses` 加 `secondary_causes`/`confidence`、`mistake.analyze` 任务、自动入队 + `POST /mistakes/{id}/analyze` 手动重跑、详情页诊断区）；后端 **999 passed, 1 warning**，前端 **187 passed / 35 files**（实测）
+- 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
+- 验收（S4-3，自测集，非真实学生数据）：30 条 6 类错因各 5 条，主因准确率 **86.7%**（26/30），主因或次因 90%，平均 10.3 s，`error_step` 30/30 引用原文；4 条分歧均为口径可争、无离谱输出；边界 3 项真机通过；重复性 3/3 一致。**注**：v1 口径下仅 36.7%，v2 口径收紧后达标，存在自测集过拟合风险，详见 `.sdd/s4-3/acceptance-evidence.md`
+- 下一步：S4-4 变式题生成（`similar_questions_json`）；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -61,7 +62,7 @@
 ### 阶段 4：错题与知识图谱（M3）
 - [x] S4-1 题库表 + 试卷切题
 - [x] S4-2 错题录入 + 状态机
-- [ ] S4-3 错因诊断服务 ★
+- [x] S4-3 错因诊断服务 ★
 - [ ] S4-4 变式题生成 + 复算自检
 - [ ] S4-5 图谱关系构建 + 人工校验
 - [ ] S4-6 图谱可视化前端
@@ -188,6 +189,19 @@
 | 89 | `similar_questions_json` 未写入、变式题未生成（S4-2） | 诊断结果里的变式训练区为空 | S4-3 返回 2–3 道变式题；S4-4 生成 + 复算自检 |
 
 ## 变更日志
+
+### 2026-11-03（S4-3）
+- S4-3 完成（按 §10 全流程：spec `docs/spec/s4-3-mistake-analysis.md` + plan `docs/plan/s4-3-mistake-analysis.md`，均经用户确认）。交付：迁移 `0011_s4_3`（`mistake_analyses` 加 `secondary_causes TEXT[]`、`confidence NUMERIC(3,2)` 与两条 CHECK）；`ai/prompts/mistake_analyze_v2.md` + `ai/analyze/mistake_analyzer.py`（严格 JSON + Pydantic + 2 次重试 + `unknown` 代码强制 + `error_step` 引用校验）；`services/mistake_analysis_service.py`（上下文拼装、笔记检索降级、upsert 覆盖）；`tasks/analyze_mistake.py`（`mistake.analyze`）；`api/v1/mistakes.py` 增加 `POST /api/v1/mistakes/{id}/analyze`；`schemas/mistake.py` DTO 扩展；前端详情页诊断区（重跑按钮 + 4s 轮询 + 低置信提示 + 空态「立即诊断」）。
+- 拍板（D-16/D-17）：准确率口径 = 主因命中率（目标 ≥70%）；错因判定口径写进 Prompt 并作为自测集标注口径（截断→时间不足 > 读题→审题偏差 > 概念/公式 > 方法 > 纯运算→计算失误）。`similar_questions_json` 保持 NULL，留给 S4-4。
+- 测试：后端 **999 passed, 1 warning**（S4-2 基线 952）；前端 **187 passed / 35 files**（S4-2 基线 180/35）。无新增依赖，未动 `requirements.txt` / `package.json`。
+- 真机验收（真实 Qwen-Plus + 真实 Postgres 16/Redis/MinIO + uvicorn `:8031` + ARQ worker，2026-11-03 实跑，证据 `.sdd/s4-3/acceptance-evidence.md`、`accept_s4_3.out.*`）：
+  - 30 条自测集（6 类各 5 条，**自测集，非真实学生数据**）全部诊断成功；主因准确率 **86.7%**（26/30）、主因或次因 **90%**、平均 10.3 s、`error_step` 30/30 引用学生作答原文、平均置信度 0.93
+  - 四轮分歧人工核对：4 条全部属于"口径可争"（审题↔概念、方法↔概念、截断判定），**无答非所问/编造笔记**；三轮迭代数字（v1 口径 36.7% → v2 63.3% → 62 收紧后 86.7%）全部留在证据文档里
+  - 边界真机通过：缺作答 → `unknown`/`secondary=[]`/`error_step=null` 且仍给讲解；他人错题 → 404/40400；`force=false` → `succeeded` + `result.skipped=true` 且 `created_at` 不变；「诊断失败保留旧诊断」由单测覆盖（真机不注入故障无法稳定触发）
+  - 重复性：3 条各跑 2 次，`cause_type` 3/3 一致
+  - 未覆盖（如实）：**浏览器级 E2E 未做**（本机无 Playwright，按 §2.1 不擅自加依赖），前端证据为 187 条单测 + `npm run build`；`confidence` 分布集中在 0.9–0.95，未校准；相似题（S4-4）未生成
+- 事故记录：采集期间发现 **2026-11-02 启动的旧 ARQ worker 进程链**仍在消费同一 Redis 队列，把一半 `mistake.analyze` 任务秒判为 `failed: 未知任务类型`（旧代码不认识该任务名）；定位到 PID 链后终止，单 worker 重跑得到上述数据。属环境问题，与 S4-3 代码无关。
+- 文档同步：`API.md` §6（`analysis` 字段补齐 + 新增 `POST /mistakes/{id}/analyze`）、`SCHEMA.md` §5.4（两列/两 CHECK/`prompt_version` v2）、spec §3 D-17 + §5.3 判定口径、`PROGRESS.md`、`AGENTS.md` §9.2/§9.6 补错因诊断细则。
 
 ### 2026-11-03（S4-2）
 - S4-2 完成（按 §10 全流程：spec `docs/spec/s4-2-mistakes.md` + plan `docs/plan/s4-2-mistakes.md`）。交付：迁移 `0010_s4_2` 与 `models/mistake.py`、`models/mistake_analysis.py`；`models/enums.py` 增加 `MistakeStatus`/`CauseType`；`ai/vision/mistake_ocr.py` + `ai/prompts/mistake_ocr_v1.md`（`LLMMessage.images` 视觉消息）；`services/mistake_service.py`；`tasks/mistake_recognize.py`；`api/v1/mistakes.py` + `schemas/mistake.py`（8 个路由，复用 `GET /tasks/{task_id}` 轮询）；前端 `views/mistakes/{MistakeListView,MistakeNewView,MistakeDetailView}.vue`、`MistakePickDialog.vue`、`useMistakeList.ts`、`api/mistakes.ts`、路由与「06 错题本」导航。

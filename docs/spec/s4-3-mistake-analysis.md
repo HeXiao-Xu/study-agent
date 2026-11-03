@@ -6,7 +6,7 @@
 - 状态：设计已逐节确认，待用户评审本文
 - 上游：S4-2（`mistakes` / `mistake_analyses` 两表、错题状态机、拍照识别）、S4-1（`questions` / `question_kps`、知识点对齐）、S3-2（`retrieval_service.search_chunks`）、S2-7（异步任务 + runner）、S3-4（Prompt 版本约定，本卡沿用文件型 Prompt）、S0-5（`AppError` 体系）
 - 下游：S4-4 变式题生成（读本卡的 `kp_ids` 与错因作为生成条件，写 `similar_questions_json`）、S4-7 掌握度（答错回写）、S4-8 统计看板（`by_cause` 从此有真实数据）、S4-6 图谱前端（前置知识展示）
-- 产物：迁移 `0011_s4_3_mistake_analysis.py`、`models/mistake_analysis.py`（两列）、`ai/analyze/{__init__,mistake_analyzer}.py`、`ai/prompts/mistake_analyze_v1.md`、`services/mistake_analysis_service.py`、`tasks/analyze_mistake.py`、`api/v1/mistakes.py`（+1 路由）、`schemas/mistake.py`（DTO 扩展）、前端 `views/mistakes/MistakeDetailView.vue` 诊断区、`测试数据/_make_s4_3_cases.py`（自测集构造脚本）
+- 产物：迁移 `0011_s4_3_mistake_analysis.py`、`models/mistake_analysis.py`（两列）、`ai/analyze/{__init__,mistake_analyzer}.py`、`ai/prompts/mistake_analyze_v2.md`、`services/mistake_analysis_service.py`、`tasks/analyze_mistake.py`、`api/v1/mistakes.py`（+1 路由）、`schemas/mistake.py`（DTO 扩展）、前端 `views/mistakes/MistakeDetailView.vue` 诊断区、`测试数据/_make_s4_3_cases.py`（自测集构造脚本）
 
 ## 1. 目标
 
@@ -32,7 +32,7 @@
 - `alembic/versions/0011_s4_3_mistake_analysis.py`：`mistake_analyses` 增 `secondary_causes`（`text[]`）与 `confidence`（`numeric(3,2)`），含 CHECK；可逆。
 - `app/models/mistake_analysis.py`：同步两列 + 两个 CHECK。
 - `app/ai/analyze/__init__.py`、`app/ai/analyze/mistake_analyzer.py`：`MistakeAnalysisResult` schema、Prompt 渲染、`analyze_mistake(...)` 单一入口、`MistakeAnalysisError`。
-- `app/ai/prompts/mistake_analyze_v1.md`：错因诊断 Prompt（枚举约束、引用原文、缺作答只讲题、严格 JSON、不确定就说）。
+- `app/ai/prompts/mistake_analyze_v2.md`：错因诊断 Prompt（枚举约束、引用原文、缺作答只讲题、严格 JSON、不确定就说）。
 - `app/services/mistake_analysis_service.py`：`enqueue_analysis`（自动/手动触发）与 `analyze`（任务内执行，含上下文构造、降级、upsert）。
 - `app/tasks/analyze_mistake.py` + 注册：`mistake.analyze`（handler 不 commit）。
 - `app/services/mistake_service.py`：`create_from_question` 在提交后调一次 `enqueue_analysis(force=False)`（best-effort）。
@@ -71,11 +71,12 @@
 | D-9 | 诊断任务 handler 沿用 S2-7 约定：`(Session, payload) -> dict`，**不 commit**，由 runner 提交/回滚；`payload` 只带 `mistake_id` / `user_id`，不带题面正文 | 与 `question.extract`、`mistake.recognize` 一致；payload 落 `async_tasks` 表，不能塞学生作答正文（隐私 + 体积） |
 | D-10 | upsert 后显式 `session.flush()` | S4-2 C1 的教训：`autoflush=False` 下不 flush，约束错误会逃出 handler 的 try 区间，任务卡在 `running`；flush 让失败在 handler 内暴露，交给 runner 重试 |
 | D-11 | `enqueue_analysis` 走 `task_service.create_task`，任务名常量 `TASK_ANALYZE_MISTAKE = "mistake.analyze"` 定义在 service 内 | S3-1 已确认「task 反向导入 service 常量」避免循环导入 |
-| D-12 | Prompt 与模型走**文件型 Prompt**（`ai/prompts/mistake_analyze_v1.md`）+ `get_llm_client()`，`scene="mistake"` | S3-4 约定只有 QA 读 `prompt_templates` 表；OCR 与切题都用文件 Prompt。`scene` 必须是 `llm_call_logs` 白名单内的值（S4-2 C1 踩过） |
+| D-12 | Prompt 与模型走**文件型 Prompt**（`ai/prompts/mistake_analyze_v2.md`）+ `get_llm_client()`，`scene="mistake"` | S3-4 约定只有 QA 读 `prompt_templates` 表；OCR 与切题都用文件 Prompt。`scene` 必须是 `llm_call_logs` 白名单内的值（S4-2 C1 踩过） |
 | D-13 | 输出校验：`cause_type` 必须在 7 个枚举值内、`secondary_causes` ≤2、`error_step` 必须包含学生作答的**片段**（否则置 `None`）、`confidence` 0–1 | 「第一处错误步骤」是本卡最有说服力的输出，如果模型只是泛泛而谈「计算错误」，那这个字段就没有价值，宁可置空 |
 | D-14 | 重试只针对 `ValidationError` / JSON 解析失败 / 传输错误，最多 2 次；仍失败抛 `MistakeAnalysisError`（任务 `failed`），旧诊断**保留不删** | 覆盖式更新不能「写一半」：失败就整体回滚，用户看到的是上一次有效诊断，而不是空白 |
 | D-15 | 验收用**自测集**：S4-1 自编题 + 构造 ≥30 条学生作答（覆盖 6 类），由我逐条人工核对，报告写「自测集，非真实学生数据」并给出主因准确率 | 任务卡要求「30 道真实错题」；本项目没有真实学生数据，按 §6 只能标注为自测集，绝不能把构造数据冒充真实数据 |
 | D-16 | 准确率口径：**主因命中率** = 主因与人工标注一致的条数 / 总条数（目标 ≥70%）；另记「主因或次因命中」与混淆矩阵 | 论文 6.5 要「错因判定准确率」，必须先把口径写死，避免事后挑数字 |
+| D-17 | 错因判定口径写进 Prompt（v2）并作为自测集标注口径：截断→时间不足 > 读题/所求→审题偏差 > 概念/公式 > 方法 > 纯运算→计算失误 | 真机验收（v1 口径）主因只有 36.7%：六类边界没有共同定义时，模型与人工标注各自解释，指标没有意义。把口径写死到 Prompt + 重新按同一口径标注自测集，是"让指标可复现"而不是"让分数好看"；迭代过程与三轮数字全部写进验收证据 |
 
 ## 4. 数据模型（迁移 `0011_s4_3_mistake_analysis.py`）
 
@@ -129,7 +130,7 @@ class MistakeAnalysisResult(BaseModel):
 
 `model_validator` 负责 D-5 的规范化（去重、剔除主因与 `unknown`、超 2 截断）。
 
-### 5.3 Prompt 要点（`ai/prompts/mistake_analyze_v1.md`）
+### 5.3 Prompt 要点（`ai/prompts/mistake_analyze_v2.md`）
 
 1. 角色：高中数学老师，给一名学生讲错题。
 2. 错因只能从 6 类中选 1 个主因 + 至多 2 个次因，**必须给出选择依据**（写进 `explanation_md` 首段）。
@@ -139,6 +140,12 @@ class MistakeAnalysisResult(BaseModel):
 6. 学生作答缺失时：`cause_type` 填 `"unknown"`、`error_step` 为 `null`，只讲题不猜错因。
 7. 严格输出 JSON，不要 Markdown 代码围栏以外的解释。
 8. 不确定时降低 `confidence`，并在 `review_advice_md` 里说明需要人工确认的点。
+
+**v2 增加「错因判定口径」（D-16）**：v1 只给枚举与语气要求，实测 30 条自测集主因命中率 36.7%，
+六类之间边界（概念不清/知识遗忘/审题偏差/方法不当/计算失误）与"作答截断"场景无法稳定区分。
+v2 在 Prompt 里写死按顺序判定的 6 条口径 + 优先级（截断 > 读题 > 概念/公式 > 方法 > 纯运算），
+并给每类配正反例（如「公式写对但用错 → 概念不清；公式本身记错 → 知识遗忘」）。代码侧无改动，
+`prompt_version` 随之变为 `mistake_analyze_v2`。
 
 ### 5.4 调用与错误
 
@@ -195,7 +202,7 @@ def analyze(session: Session, *, user_id: int, mistake_id: int) -> tuple[Mistake
 4. 取前置名称：上述 KP 的父节点（`knowledge_points.parent_id`，同 subject），≤5。
 5. 取笔记片段：`retrieval_service.search_chunks(session, user_id=user_id, query=stem_md[:200], top_k=3)`；**整段 try/except**：任何异常 → `notes=[]` + WARNING `mistake_analyze_retrieval_failed`。
 6. 组装 `DiagnosisContext` → `analyze_mistake(context)`。
-7. upsert：查 `MistakeAnalysis.mistake_id == mistake_id`；存在则原地改字段并 `created_at = now()`，不存在则 `session.add(...)`；`kp_ids` 用步骤 3 的结果；`model` 取 `settings.llm_model`、`prompt_version` 取 `mistake_analyze_v1`。
+7. upsert：查 `MistakeAnalysis.mistake_id == mistake_id`；存在则原地改字段并 `created_at = now()`，不存在则 `session.add(...)`；`kp_ids` 用步骤 3 的结果；`model` 取 `settings.llm_model`、`prompt_version` 取 `mistake_analyze_v2`。
 8. `session.flush()`（D-10）。
 9. 返回 `(analysis, {"mistake_id":..., "cause_type":..., "secondary_causes": [...], "confidence":..., "retrieval_hits": n})`，供任务 `result` 展示。
 
@@ -266,7 +273,7 @@ def run_analyze_mistake(session: Session, payload: dict) -> dict:
   "kp_ids": [133, 116],
   "confidence": 0.82,
   "model": "qwen-plus",
-  "prompt_version": "mistake_analyze_v1",
+  "prompt_version": "mistake_analyze_v2",
   "created_at": "2026-11-03T11:20:31.004Z"
 }
 ```

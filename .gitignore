@@ -38,3 +38,9 @@ tmp/
 
 # ===== 合成验收图生成物（脚本入库，png 由 S4-2 Task 13 现场生成）=====
 测试数据/mistake_photo/
+# ===== 测试/分词缓存与生成物（不入库）=====
+jieba.cache
+backend/jieba.cache
+backend/data-gym-cache/
+backend/pytest-of-HEXIAO/
+测试数据/s4_3_cases.json
