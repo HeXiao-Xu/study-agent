@@ -505,8 +505,10 @@ def list_edges(
     page: Any,
     sort: Any,
 ) -> Any:
+    from fastapi_pagination import Params
+
     from app.schemas.kp import GraphEdgeOut, GraphEdgePage
-    from app.utils.pagination import apply_sort, paginate_query
+    from app.utils.pagination import apply_sort, paginate_sa
 
     if status not in VALID_STATUSES:
         raise InvalidParamError(f"status 只能是 {sorted(VALID_STATUSES)}")
@@ -535,7 +537,10 @@ def list_edges(
         allowed=SORTABLE,
         default_sort="created_at",
     )
-    data = paginate_query(session, stmt, page, item_model=KnowledgeEdge)
+    # 不能用 paginate_query：它要求 Pydantic 的 item_model，而这里要先用两端名称补 DTO
+    data = paginate_sa(
+        session, stmt, params=Params(page=page.page, size=page.page_size)
+    )
     names = _edge_names(session, list(data.items))
     items = [
         GraphEdgeOut(

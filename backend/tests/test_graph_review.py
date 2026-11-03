@@ -36,6 +36,8 @@ def _edge(edge_id: int, *, status: str = "pending") -> KnowledgeEdge:
         weight=0.8,
         review_status=status,
         reviewed_at=NOW if status != "pending" else None,
+        created_at=NOW,
+        updated_at=NOW,
     )
 
 
@@ -94,3 +96,49 @@ def test_review_edges_rejects_empty_list():
         graph_service.review_edges(
             FakeSession([]), edge_ids=[], approve=True, reviewer=REVIEWER
         )
+
+class _FakePage:
+    def __init__(self, items: list[KnowledgeEdge]) -> None:
+        self.items = items
+        self.total = len(items)
+        self.page = 1
+        self.size = 20
+        self.page_size = 20
+
+
+class _ListSession:
+    def __init__(self, edges: list[KnowledgeEdge], names: dict[int, str]) -> None:
+        self.edges = edges
+        self.names = names
+
+    def scalars(self, statement):
+        return iter(
+            [
+                type("Kp", (), {"id": kp_id, "name": name})()
+                for kp_id, name in self.names.items()
+            ]
+        )
+
+
+def test_list_edges_fills_both_end_names(monkeypatch: pytest.MonkeyPatch):
+    """列表必须补出两端名称；这里同时锁住「别把 SQLAlchemy 模型当 item_model」。"""
+    from app.services import graph_service as svc
+    from app.utils import pagination
+
+    edges = [_edge(1)]
+    monkeypatch.setattr(
+        pagination, "paginate_sa", lambda session, stmt, params: _FakePage(edges)
+    )
+    session = _ListSession(edges, {1: "函数", 2: "单调性"})
+    page = svc.list_edges(
+        session,
+        subject_id=7,
+        status="pending",
+        relation=None,
+        keyword=None,
+        page=type("P", (), {"page": 1, "page_size": 20})(),
+        sort=type("S", (), {"sort_by": None, "order": "desc"})(),
+    )
+    assert page.total == 1
+    assert page.items[0].src_name == "函数"
+    assert page.items[0].dst_name == "单调性"
