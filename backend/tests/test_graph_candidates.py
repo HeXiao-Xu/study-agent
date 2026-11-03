@@ -104,3 +104,16 @@ def test_prereq_candidates_excludes_same_name_nodes():
     plain = KpBrief(kp_id=5, name="直线的方程", level=3, parent_id=3, embedding=[0.9, 0.1])
     candidates = prereq_candidates(target, [target, other, plain], {1: "椭圆/定义", 9: "双曲线/定义", 5: "直线/方程"})
     assert [item.kp_id for item in candidates] == [5]
+
+
+def test_pair_candidates_skips_ancestor_descendant_pairs():
+    """上下级关系由 contains 表达，不能再进「相关/易混」，否则人工审核全是噪音。"""
+    nodes = [
+        KpBrief(kp_id=1, name="解析几何", level=2, parent_id=None, embedding=[1.0, 0.0]),
+        KpBrief(kp_id=2, name="椭圆", level=3, parent_id=1, embedding=[0.98, 0.02]),
+        KpBrief(kp_id=3, name="双曲线", level=3, parent_id=1, embedding=[0.97, 0.03]),
+    ]
+    related, confusable = pair_candidates(nodes, top_k=8, confusable_lo=0.95)
+    keys = {(p.src_kp_id, p.dst_kp_id) for p in related + confusable}
+    assert (1, 2) not in keys and (1, 3) not in keys
+    assert (2, 3) in keys  # 同父兄弟仍保留

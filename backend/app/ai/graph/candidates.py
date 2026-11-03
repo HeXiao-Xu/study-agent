@@ -97,6 +97,19 @@ def prereq_candidates(
     return scored[:top_k]
 
 
+def is_ancestor(ancestor_id: int, node: KpBrief, by_id: Mapping[int, KpBrief]) -> bool:
+    """ancestor_id 是否是 node 的祖先（沿 parent 上溯，带层数守卫）。"""
+    cur = node.parent_id
+    guard = 0
+    while cur is not None and guard < PATH_GUARD:
+        if cur == ancestor_id:
+            return True
+        parent = by_id.get(cur)
+        cur = parent.parent_id if parent is not None else None
+        guard += 1
+    return False
+
+
 def pair_candidates(
     nodes: Sequence[KpBrief],
     *,
@@ -132,6 +145,11 @@ def pair_candidates(
             if key in seen:
                 continue
             other = by_id[pair.dst_kp_id if pair.src_kp_id == node.kp_id else pair.src_kp_id]
+            # 祖先-后代对已由 contains 表达，再挂「相关/易混」只会淹没真正的关系
+            if is_ancestor(node.kp_id, other, by_id) or is_ancestor(
+                other.kp_id, node, by_id
+            ):
+                continue
             same_parent = (
                 node.parent_id is not None and node.parent_id == other.parent_id
             )
