@@ -264,6 +264,7 @@ def create_generated_question(
 
 - 只给 AI 变式题用；`origin="ai"`、`verified=False`、`tags=["AI变式"]` 写死在这里，调用方不能改（防"顺手"把 AI 题标成 verified）。
 - 判重与 `_persist_question` 复用既有实现；`links` 由调用方传入（继承原题），不走 LLM 对齐。
+- **事务边界**：该函数自行 `commit`（与 `create_question` 同款，调用方拿到的是已落库的题），`accept_variant` 随后再回写 JSON 并 commit。两步非原子，但**重试收敛**：若建题成功、回写 JSON 失败，用户再点一次会命中 `check_duplicate`（同题）→ 返回同一 `question_id` + `created=false` 并补写 JSON，不会产生重复题。这样比把"建题 + 改 JSONB"塞进一个跨模块事务更简单，也不会让 `accept` 因为 JSONB 写失败而整体回滚掉一道已建好的题。
 
 ## 7. 异步任务（`tasks/generate_variants.py`）
 
