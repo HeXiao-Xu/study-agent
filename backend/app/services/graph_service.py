@@ -422,6 +422,8 @@ def review_edge(
         raise NotFoundError("关系边不存在或已被删除")
     _apply_review(edge, approve=approve, reviewer=reviewer)
     session.flush()
+    # 写用例自带事务：路由层只依赖 get_db（不 commit），漏了这句审核结果会被丢弃
+    session.commit()
     return edge
 
 
@@ -440,6 +442,7 @@ def review_edges(
         _apply_review(edge, approve=approve, reviewer=reviewer)
         updated += 1
     session.flush()
+    session.commit()
     return updated, skipped
 
 

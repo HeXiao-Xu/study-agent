@@ -18,6 +18,10 @@ class FakeSession:
     def __init__(self, edges: list[KnowledgeEdge]) -> None:
         self.edges = {edge.id: edge for edge in edges}
         self.flushed = 0
+        self.committed = 0
+
+    def commit(self) -> None:
+        self.committed += 1
 
     def get(self, model, pk):
         return self.edges.get(pk)
@@ -51,6 +55,8 @@ def test_review_edge_approve_sets_reviewer_and_time():
     assert edge.reviewed_by == 9
     assert edge.reviewed_at is not None
     assert session.flushed == 1
+    # 路由层不 commit，服务层必须自己提交，否则审核结果随 session.close 丢掉
+    assert session.committed == 1
 
 
 def test_review_edge_is_idempotent():
@@ -81,6 +87,7 @@ def test_review_edges_counts_updated_and_skipped():
         session, edge_ids=[1, 2, 999], approve=True, reviewer=REVIEWER
     )
     assert (updated, skipped) == (2, 1)
+    assert session.committed == 1
 
 
 def test_review_edges_dedupes_repeated_ids():
