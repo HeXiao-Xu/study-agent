@@ -165,6 +165,7 @@ _SQRT = re.compile(r"^\\sqrt\{(\d+(?:\.\d+)?)\}$")
 _NUMBER = re.compile(r"^-?\d+(?:\.\d+)?$")
 _OPTION_KEYS = re.compile(r"^[A-H]{1,8}$")
 _SET_SEP = re.compile(r"[或,、;；]")
+_KEY_SEP = re.compile(r"[,、;；]")
 
 _SYNONYM_GROUPS = (
     frozenset({"无解", "没有解", "不存在", "无实数解"}),
@@ -217,8 +218,9 @@ def match_answers(expected: str, actual: str) -> tuple[bool, str]:
     left, right = normalize_answer(expected), normalize_answer(actual)
     if not left or not right:
         return False, "有一边答案为空"
-    if _OPTION_KEYS.match(left) and _OPTION_KEYS.match(right):
-        return (set(left) == set(right)), f"选择题 key：{left} vs {right}"
+    left_keys, right_keys = _option_key_set(left), _option_key_set(right)
+    if left_keys is not None and right_keys is not None:
+        return (left_keys == right_keys), f"选择题 key：{left} vs {right}"
     left_num, right_num = parse_number(left), parse_number(right)
     if left_num is not None and right_num is not None:
         return _numbers_close(left_num, right_num), f"数值：{left} vs {right}"
@@ -243,6 +245,14 @@ def _numbers_close(left: Decimal, right: Decimal) -> bool:
     if left == 0 or right == 0:
         return diff <= REL_TOL
     return diff / max(abs(left), abs(right)) <= REL_TOL
+
+
+def _option_key_set(text: str) -> frozenset[str] | None:
+    """`AC` / `A,C` / `A、C` 都归一成 key 集合；非纯 key 返回 None 交给后续规则。"""
+    compact = _KEY_SEP.sub("", text)
+    if _OPTION_KEYS.match(compact):
+        return frozenset(compact)
+    return None
 
 
 def _synonym_group(text: str) -> frozenset[str] | None:
