@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.ai.gen import GeneratedVariant, VariantVerificationError
+from app.ai.gen import GeneratedVariant, VariantGenerationError, VariantVerificationError
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.mistake import Mistake
 from app.models.mistake_analysis import MistakeAnalysis
@@ -93,9 +93,9 @@ def _session(*, analysis=None, question=None, mistake=None) -> FakeSession:
     )
 
 
-def _variant(answer="$13$") -> GeneratedVariant:
+def _variant(answer="$13$", stem="等差数列 $a_1=1$，公差 $d=2$，求 $a_7$。") -> GeneratedVariant:
     return GeneratedVariant(
-        stem_md="等差数列 $a_1=1$，公差 $d=2$，求 $a_7$。",
+        stem_md=stem,
         options=None,
         answer_md=answer,
         analysis_md="用 $a_n=a_1+(n-1)d$ 得 $a_7=13$。",
@@ -144,9 +144,20 @@ def test_enqueue_variants_creates_task(monkeypatch):
 def test_run_generation_keeps_only_passed_variants(monkeypatch):
     session = _session()
 
-    # 假生成器按 ctx.count 返回（重生成时只补缺的条数），否则重生成轮会越补越多
+    # 假生成器分两轮给：第 1 轮 2 道（1 道复算不一致），第 2 轮补齐 1 道。
+    # 题干必须互不相同——同批重复会被质量护栏丢重（见同文件的重复题干用例）。
+    batches = iter(
+        [
+            [
+                _variant("$13$"),
+                _variant("$99$", stem="等差数列 $a_1=3$，公差 $d=1$，求 $a_9$。"),
+            ],
+            [_variant("$13$", stem="等差数列 $a_1=5$，公差 $d=2$，求 $a_4$。")],
+        ]
+    )
+
     def _fake_generate(ctx, **kwargs):
-        return [_variant("$13$"), _variant("$99$")][: ctx.count]
+        return next(batches, [])[: ctx.count]
 
     # 第 1 轮：第一道复算一致、第二道不一致；第 2 轮补生成的那道复算一致
     answers = iter(["$13$", "$100$", "$13$"])
@@ -192,6 +203,44 @@ def test_run_generation_marks_task_result_even_if_all_rejected(monkeypatch):
     assert payload["items"] == []
     assert payload["stats"]["rejected"] >= 1
     assert payload["stats"]["rounds"] == 3  # 1 次生成 + 2 次重生成，之后放弃
+
+
+def test_run_generation_raises_when_nothing_passed_and_generation_fails(monkeypatch):
+    """一道都没通过又生成失败：必须抛出，让任务 failed 且旧 JSON 不被覆盖（spec §5.5）。"""
+
+    def _boom(ctx, **kwargs):
+        raise VariantGenerationError("已尝试 3 次")
+
+    session = _session()
+    monkeypatch.setattr(svc, "generate_variants", _boom)
+
+    with pytest.raises(VariantGenerationError):
+        svc.run_generation(session, user_id=5, mistake_id=43)
+
+    assert session.objects[(MistakeAnalysis, None)].similar_questions_json is None
+    assert session.commits == 0
+
+
+def test_run_generation_keeps_passed_items_when_later_round_generation_fails(monkeypatch):
+    """已通过几道后重生成失败：保留已通过的，别把成果一起丢掉。"""
+    calls = {"n": 0}
+
+    def _generate(ctx, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [_variant("$13$")][: ctx.count]
+        raise VariantGenerationError("第 2 轮生成失败")
+
+    answers = iter(["$13$", "$100$"])
+    session = _session()
+    monkeypatch.setattr(svc, "generate_variants", _generate)
+    monkeypatch.setattr(svc, "verify_answer", lambda ctx, **k: next(answers))
+
+    summary = svc.run_generation(session, user_id=5, mistake_id=43)
+
+    payload = session.objects[(MistakeAnalysis, None)].similar_questions_json
+    assert summary["passed"] == 1
+    assert len(payload["items"]) == 1
 
 
 def test_run_generation_treats_verification_error_as_rejected(monkeypatch):
@@ -293,3 +342,69 @@ def test_accept_variant_unknown_id_404():
 
     with pytest.raises(NotFoundError, match="变式题不存在"):
         svc.accept_variant(session, owner=_Owner(), mistake_id=43, variant_id="nope")
+
+
+def test_run_generation_drops_duplicate_stem_in_same_batch(monkeypatch):
+    """同批出现两道同题干：第二道不再花一次复算调用，直接换（真机 m=43 变式1/3）。"""
+    session = _session()
+    duplicate = _variant("$13$")
+    third = GeneratedVariant(
+        stem_md="等差数列 $a_1=4$，公差 $d=1$，求 $a_6$。",
+        options=None,
+        answer_md="$9$",
+        analysis_md="用通项公式得 $a_6=9$。",
+        qtype="解答",
+        difficulty=3,
+    )
+    rounds = {"n": 0}
+
+    def _fake_generate(ctx, **kwargs):
+        rounds["n"] += 1
+        if rounds["n"] == 1:
+            # 第 1 道与第 2 道题干完全相同（只差空格，指纹相同）
+            same = _variant("$13$")
+            same = GeneratedVariant(
+                stem_md=duplicate.stem_md + "  ",
+                options=None,
+                answer_md=" $13$ ",
+                analysis_md="用通项公式得 $a_7=13$。",
+                qtype="解答",
+                difficulty=3,
+            )
+            return [duplicate, same, third][: ctx.count]
+        return [third][: ctx.count]
+
+    monkeypatch.setattr(svc, "generate_variants", _fake_generate)
+    monkeypatch.setattr(svc, "verify_answer", lambda ctx, **k: ctx.stem_md and "$13$")
+
+    summary = svc.run_generation(session, user_id=5, mistake_id=43)
+
+    payload = session.objects[(MistakeAnalysis, None)].similar_questions_json
+    reasons = [item["reason"] for item in payload["rejected"]]
+    assert any("同批题干重复" in reason for reason in reasons)
+    assert summary["passed"] >= 1
+
+
+def test_run_generation_rejects_self_talk_analysis(monkeypatch):
+    """解析里自问自答/自我改题：不入库（真机 m=48 变式1 把题干自己改了）。"""
+    session = _session()
+    bad = GeneratedVariant(
+        stem_md="计算 $\\int_{-1}^{2} (3x-2)\\,dx$。",
+        options=None,
+        answer_md="$\\frac{3}{2}$",
+        analysis_md="原函数为 $\\frac{3}{2}x^2-2x$，代入得 $-\\frac{3}{2}$？错！重算：改为 $\\int_2^4 x\\,dx$。",
+        qtype="解答",
+        difficulty=3,
+    )
+    good = _variant("$13$")
+    monkeypatch.setattr(
+        svc, "generate_variants", lambda ctx, **k: ([bad, good, good][: ctx.count])
+    )
+    monkeypatch.setattr(svc, "verify_answer", lambda ctx, **k: "$13$")
+
+    svc.run_generation(session, user_id=5, mistake_id=43)
+
+    payload = session.objects[(MistakeAnalysis, None)].similar_questions_json
+    reasons = [item["reason"] for item in payload["rejected"]]
+    assert any("解析自问自答" in reason for reason in reasons)
+    assert all("自问自答" not in (item["analysis_md"] or "") for item in payload["items"])

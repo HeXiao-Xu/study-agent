@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.gen.quality import find_self_talk, stem_fingerprint
 from app.ai.gen import (
     MAX_VARIANTS,
     PROMPT_VERSION,
@@ -182,6 +183,7 @@ def run_generation(session: Session, *, user_id: int, mistake_id: int) -> dict[s
     rejected: list[dict] = []
     rounds = 0
     calls = 0
+    seen_stems: set[str] = set()
     pending = MAX_VARIANTS
     while pending > 0 and rounds <= MAX_ROUNDS and calls < MAX_TOTAL_CALLS:
         rounds += 1
@@ -195,12 +197,46 @@ def run_generation(session: Session, *, user_id: int, mistake_id: int) -> dict[s
                 rounds,
                 exc,
             )
+            # 一道都没通过时不能静默返回空结果：让任务 failed，旧 JSON 保持不变（spec §5.5）
+            if not passed:
+                raise
             break
         failed: list[GeneratedVariant] = []
         for variant in variants:
             if calls >= MAX_TOTAL_CALLS:
                 failed.append(variant)
                 continue
+            fingerprint = stem_fingerprint(variant.stem_md)
+            if fingerprint in seen_stems:
+                # 同批重复题干不值一次复算调用，直接换一道（真机 m=43 变式1/3 同题）
+                logger.warning(
+                    "variant_guard_rejected mistake_id=%s reason=同批题干重复 stem_excerpt=%s",
+                    mistake_id,
+                    variant.stem_md[:EXCERPT_LIMIT],
+                )
+                rejected.append(
+                    {"reason": "同批题干重复", "stem_excerpt": variant.stem_md[:EXCERPT_LIMIT]}
+                )
+                failed.append(variant)
+                continue
+            marker = find_self_talk(variant.analysis_md)
+            if marker is not None:
+                # 解析在自问自答/自我改题，答案往往跟着错（真机 m=48 变式1）
+                logger.warning(
+                    "variant_guard_rejected mistake_id=%s reason=解析自问自答 marker=%s stem_excerpt=%s",
+                    mistake_id,
+                    marker,
+                    variant.stem_md[:EXCERPT_LIMIT],
+                )
+                rejected.append(
+                    {
+                        "reason": f"解析自问自答（命中「{marker}」）",
+                        "stem_excerpt": variant.stem_md[:EXCERPT_LIMIT],
+                    }
+                )
+                failed.append(variant)
+                continue
+            seen_stems.add(fingerprint)
             try:
                 verified = verify_answer(
                     VerifyContext(
