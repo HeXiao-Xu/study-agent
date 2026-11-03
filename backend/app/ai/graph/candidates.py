@@ -72,14 +72,18 @@ def prereq_candidates(
     top_k: int = TOPK,
     exclude_ids: AbstractSet[int] = frozenset(),
 ) -> list[KpCandidate]:
-    """候选前置：同 subject 内按余弦取 top_k，排除自身/父子/调用方指定集合。"""
+    """候选前置：同 subject 内按余弦取 top_k，排除自身/父子/调用方指定集合。
+
+    同名节点也排除：不同章节里同名的知识点（如「定义与标准方程」在椭圆/双曲线/抛物线
+    下各有一份）余弦≈1，但彼此不构成前置关系，只可能是易混。
+    """
     if not target.embedding:
         return []
     scored: list[KpCandidate] = []
     for node in nodes:
         if node.kp_id == target.kp_id or node.kp_id in exclude_ids:
             continue
-        if not node.embedding:
+        if not node.embedding or node.name == target.name:
             continue
         scored.append(
             KpCandidate(

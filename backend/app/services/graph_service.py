@@ -205,6 +205,9 @@ def _prereq_plans(
         if node.parent_id is not None:
             children_of.setdefault(node.parent_id, set()).add(node.id)
     plans: list[_EdgePlan] = []
+    # 本轮已计划的前置对：反向对只在落库前的 _merge 才会撞上唯一约束，
+    # 实时校验能避免同一轮里 A→B 与 B→A 同时出现（真机验收抓到过）
+    planned: set[tuple[int, int]] = set()
     for node in targets:
         if budget.exhausted:
             break
@@ -221,12 +224,15 @@ def _prereq_plans(
         )
         budget.spend()
         for item in inferred:
-            if (node.id, item.src_kp_id) in known_pairs:
+            pair = (item.src_kp_id, node.id)
+            opposite = (node.id, item.src_kp_id)
+            if opposite in known_pairs or opposite in planned:
                 logger.info(
                     "graph_direction_conflict",
                     extra={"src": item.src_kp_id, "dst": node.id},
                 )
                 continue
+            planned.add(pair)
             plans.append(
                 _EdgePlan(
                     src_kp_id=item.src_kp_id,

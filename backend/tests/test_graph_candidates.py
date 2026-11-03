@@ -95,3 +95,12 @@ def test_pair_candidates_never_duplicates_a_pair():
 def test_direction_conflicts_flags_reverse_edge():
     existing = [(5, 6, "prerequisite"), (9, 8, "related")]
     assert direction_conflicts(existing) == {(5, 6)}
+
+
+def test_prereq_candidates_excludes_same_name_nodes():
+    """不同章节的同名节点余弦≈1，但只能算易混，不能当前置。"""
+    target = KpBrief(kp_id=1, name="定义与标准方程", level=3, parent_id=2, embedding=[1.0, 0.0])
+    other = KpBrief(kp_id=9, name="定义与标准方程", level=3, parent_id=8, embedding=[1.0, 0.0])
+    plain = KpBrief(kp_id=5, name="直线的方程", level=3, parent_id=3, embedding=[0.9, 0.1])
+    candidates = prereq_candidates(target, [target, other, plain], {1: "椭圆/定义", 9: "双曲线/定义", 5: "直线/方程"})
+    assert [item.kp_id for item in candidates] == [5]

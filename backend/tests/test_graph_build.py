@@ -225,3 +225,20 @@ def test_build_creates_related_edges_from_pair_review():
     # NODES 里 2 与 3 余弦 ≈0.9999（同父且同向）→ 落在 confusable 桶，related 应为 0
     assert summary.created == 0
     assert all(edge.relation != "related" for edge in session.added)
+
+
+def test_build_keeps_only_one_direction_within_a_run():
+    """同一轮里 A→B 与 B→A 不能同时落库（真机验收抓到过 120/122 反向对）。"""
+    session = FakeSession(NODES)
+    llm = FakeLLM(
+        {
+            "单调性": [{"src_kp_id": 3, "confidence": 0.9, "reason": "反向"}],
+            "导数应用": [{"src_kp_id": 2, "confidence": 0.9, "reason": "正向"}],
+        }
+    )
+    summary = graph_service.build(
+        session, subject_id=7, relations=["prerequisite"], llm_client=llm
+    )
+    pairs = {(edge.src_kp_id, edge.dst_kp_id) for edge in session.added}
+    assert not (pairs & {(dst, src) for src, dst in pairs}), pairs
+    assert summary.created == len(pairs)
