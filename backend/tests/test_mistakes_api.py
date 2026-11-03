@@ -168,9 +168,11 @@ def test_every_route_requires_auth(method, path, kwargs) -> None:
 def test_create_from_question_returns_201(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_create(session, *, user_id, payload):
+    def fake_create(session, *, user_id, payload, owner=None, queue=None):
         captured["user_id"] = user_id
         captured["question_id"] = payload.question_id
+        captured["owner_id"] = getattr(owner, "id", None)
+        captured["has_queue"] = queue is not None
         return _detail(11), True
 
     monkeypatch.setattr(mistake_service, "create_from_question", fake_create)
@@ -182,7 +184,7 @@ def test_create_from_question_returns_201(monkeypatch) -> None:
     assert body["code"] == 0
     assert body["data"]["created"] is True
     assert body["data"]["id"] == 11
-    assert captured == {"user_id": 42, "question_id": 11}
+    assert captured == {"user_id": 42, "question_id": 11, "owner_id": 42, "has_queue": True}
 
 
 def test_create_duplicate_returns_201_with_created_false(monkeypatch) -> None:

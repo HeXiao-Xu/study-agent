@@ -13,6 +13,7 @@ from app.models.mistake import Mistake
 from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.services import mistake_analysis_service as svc
+from app.services import task_service
 
 
 class _Rows:
@@ -282,7 +283,7 @@ def test_enqueue_analysis_skips_when_analyzed(monkeypatch):
     owner = type("U", (), {"id": 1})()
     session = FakeSession(scalar_results=[12, 55])  # 归属校验命中，已有诊断 id=55
     called: list[dict] = []
-    monkeypatch.setattr(svc.task_service, "create_task", lambda *a, **k: called.append(k))
+    monkeypatch.setattr(task_service, "create_task", lambda *a, **k: called.append(k))
 
     result = svc.enqueue_analysis(session, owner=owner, mistake_id=12, queue=object())
 
@@ -296,7 +297,7 @@ def test_enqueue_analysis_force_path_creates_task(monkeypatch):
     task = type("T", (), {"id": 88})()
     called: list[dict] = []
     monkeypatch.setattr(
-        svc.task_service, "create_task", lambda *a, **k: called.append(k) or task
+        task_service, "create_task", lambda *a, **k: called.append(k) or task
     )
 
     result = svc.enqueue_analysis(
@@ -311,7 +312,7 @@ def test_enqueue_analysis_force_path_creates_task(monkeypatch):
 def test_enqueue_analysis_other_user_404s(monkeypatch):
     owner = type("U", (), {"id": 1})()
     session = FakeSession(scalar_results=[None])
-    monkeypatch.setattr(svc.task_service, "create_task", lambda *a, **k: None)
+    monkeypatch.setattr(task_service, "create_task", lambda *a, **k: None)
 
     with pytest.raises(NotFoundError):
         svc.enqueue_analysis(session, owner=owner, mistake_id=12, queue=object())

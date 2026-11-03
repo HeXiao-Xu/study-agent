@@ -105,9 +105,10 @@ def create_mistake(
     payload: MistakeCreateIn,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
 ) -> Envelope[MistakeCreateOut]:
     detail, created = mistake_service.create_from_question(
-        session, user_id=current_user.id, payload=payload
+        session, user_id=current_user.id, payload=payload, owner=current_user, queue=queue
     )
     return Envelope(
         trace_id=get_trace_id(),

@@ -19,7 +19,9 @@ from app.core.exceptions import ForbiddenError, InvalidParamError
 from app.core.storage import get_storage
 from app.models.file import File
 from app.models.subject import Subject
-from app.services import mistake_service, question_service
+from app.models.user import User
+from app.services import mistake_analysis_service, mistake_service, question_service
+from app.tasks.queue import get_task_queue
 from app.tasks.registry import register
 
 logger = logging.getLogger(__name__)
@@ -107,6 +109,15 @@ def mistake_recognize_task(session: Session, payload: dict[str, Any]) -> dict[st
             "reused_question": reused_question,
         },
     )
+    # 诊断是 best-effort（S4-3 D-1）：入队失败不影响识别成功，只回一个标记。
+    # 放在 return 前：create_task 会提交 session，此处之后没有还会失败的写操作。
+    owner = session.get(User, user_id)
+    if owner is not None:
+        result["analysis_enqueued"] = mistake_analysis_service.safe_enqueue(
+            session, owner=owner, mistake_id=mistake.id, queue=get_task_queue()
+        )
+    else:
+        result["analysis_enqueued"] = False
     return result
 
 

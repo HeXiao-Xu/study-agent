@@ -167,9 +167,18 @@ def _detail(session: Session, *, mistake: Mistake) -> MistakeDetailOut:
 # 公开函数区（Task 6/7/8 的 list / stats / review / recognize 继续加在这里）
 # --------------------------------------------------------------------------
 def create_from_question(
-    session: Session, *, user_id: int, payload: MistakeCreateIn
+    session: Session,
+    *,
+    user_id: int,
+    payload: MistakeCreateIn,
+    owner: User | None = None,
+    queue: TaskQueue | None = None,
 ) -> tuple[MistakeDetailOut, bool]:
-    """题库选题录入。同 (user, question) 已存在时复用并重置（spec D-1）。"""
+    """题库选题录入。同 (user, question) 已存在时复用并重置（spec D-1）。
+
+    `owner`/`queue` 同时给出时，提交后 best-effort 入队错因诊断（S4-3 D-1）；
+    老调用方不传这两个参数，行为与 S4-2 一致。
+    """
     question = session.get(Question, payload.question_id)
     if question is None:
         raise NotFoundError("题目不存在")
@@ -210,7 +219,14 @@ def create_from_question(
             _commit(session)
         else:
             created = True
-    return _detail(session, mistake=mistake), created
+    detail = _detail(session, mistake=mistake)
+    if owner is not None and queue is not None:
+        from app.services import mistake_analysis_service
+
+        mistake_analysis_service.safe_enqueue(
+            session, owner=owner, mistake_id=mistake.id, queue=queue
+        )
+    return detail, created
 
 
 def start_photo_recognize(

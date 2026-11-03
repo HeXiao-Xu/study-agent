@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,8 +28,10 @@ from app.models.mistake_analysis import MistakeAnalysis
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.models.user import User
-from app.services import retrieval_service, task_service
-from app.tasks.queue import TaskQueue
+from app.services import retrieval_service
+
+if TYPE_CHECKING:  # 顶层导入 app.tasks 会让「任务注册表 ↔ service 常量」互相循环（同 S3-1）
+    from app.tasks.queue import TaskQueue
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,9 @@ def enqueue_analysis(
     _ensure_owned(session, user_id=owner.id, mistake_id=mistake_id)
     if skip_if_analyzed and has_analysis(session, mistake_id):
         return None
+    # 延迟导入：app.tasks 包会 import 本模块，顶层导入 task_service 会循环（同 S3-1 index_service）
+    from app.services import task_service
+
     return task_service.create_task(
         session,
         owner=owner,

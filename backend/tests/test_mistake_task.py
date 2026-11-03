@@ -204,6 +204,35 @@ def test_task_rejects_non_image_file(patched):
         task_module.mistake_recognize_task(session, _payload())
 
 
+def test_task_enqueues_analysis_best_effort(monkeypatch, patched):
+    """S4-3：识别成功后 best-effort 入队诊断，失败也不影响识别结果。"""
+    enqueued: list[int] = []
+    monkeypatch.setattr(
+        task_module.mistake_analysis_service,
+        "safe_enqueue",
+        lambda session, *, owner, mistake_id, queue: enqueued.append(mistake_id) or True,
+    )
+    monkeypatch.setattr(task_module, "get_task_queue", lambda: "fake-queue")
+    owner = type("U", (), {"id": 1})()
+    session = FakeSession(
+        objects={(task_module.File, 41): FakeFile(), (task_module.User, 1): owner},
+        scalar_results=[None],
+    )
+
+    result = task_module.mistake_recognize_task(session, _payload())
+
+    assert result["analysis_enqueued"] is True
+    assert enqueued == [result["mistake_id"]]
+
+
+def test_task_marks_analysis_not_enqueued_without_owner(patched):
+    session = FakeSession(objects={(task_module.File, 41): FakeFile()}, scalar_results=[None])
+
+    result = task_module.mistake_recognize_task(session, _payload())
+
+    assert result["analysis_enqueued"] is False
+
+
 def test_task_reuses_existing_mistake_without_commit(patched):
     reviewed_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
     existing = Mistake(
