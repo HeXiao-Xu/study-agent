@@ -310,7 +310,7 @@ def run_analyze_mistake(session: Session, payload: dict) -> dict:
 | 文件 | 覆盖 |
 |---|---|
 | `tests/test_mistake_analyzer.py`（约 10） | JSON 解析成功；`cause_type` 非法 → 重试后抛 `MistakeAnalysisError`；`secondary_causes` 超 2 截断、去重、剔主因；缺作答强制 `unknown`（模型返回 `概念不清` 也被覆盖）；`error_step` 不含作答片段 → 置 `None`；`confidence` 越界校验；传输异常重试计数；Prompt 渲染变量缺失抛错 |
-| `tests/test_mistake_analysis_service.py`（约 12） | `analyze` 正常 upsert（INSERT）；重跑 UPDATE 同一行且 `created_at` 刷新；越权/不存在 404；检索异常降级为空且诊断仍成功；`kp_names` 取 `question_kps` 权重排序；无父节点时前置为空；缺作答走 unknown；`flush` 被调用；`enqueue_analysis` 已有诊断且 `force=False` 跳过；`force=True` 入队；入队失败返回 None 不抛 |
+| `tests/test_mistake_analysis_service.py`（约 12） | `analyze` 正常 upsert（INSERT）；重跑 UPDATE 同一行且 `created_at` 刷新；越权/不存在 404；检索异常降级为空且诊断仍成功；`kp_names` 取 `question_kps` 权重排序；无父节点时前置为空；缺作答走 unknown；`flush` 被调用；`enqueue_analysis(skip_if_analyzed=True)` 已有诊断 → 返回 `None` 且不建任务；`skip_if_analyzed=False` 一定建任务且 payload 带 `force`；入队异常由调用方捕获为 WARNING |
 | `tests/test_mistake_analysis_task.py`（约 4） | handler 返回 dict 且不 commit；`payload` 只用 `mistake_id/user_id`；LLM 失败向上抛（runner 重试语义）；成功时 `result` 字段齐全 |
 | `tests/test_mistakes_api.py`（+4） | `POST /analyze` 202 + 任务名正确；他人错题 404；`force=false` 已有诊断 → 任务 succeeded `skipped=true`；详情 DTO 含新字段 |
 
