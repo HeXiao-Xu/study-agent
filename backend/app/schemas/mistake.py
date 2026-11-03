@@ -45,6 +45,28 @@ class OptionOut(BaseModel):
     text: str
 
 
+class MistakeVariantOut(BaseModel):
+    """S4-4 变式题出参：只暴露通过自检的题，被丢弃的只在 variants_stats 里计数。"""
+
+    variant_id: str
+    stem_md: str
+    options: list[OptionOut] | None = None
+    answer_md: str
+    analysis_md: str | None = None
+    qtype: str
+    difficulty: int
+    self_check: str = "passed"
+    accepted_question_id: int | None = None
+
+
+class VariantsStatsOut(BaseModel):
+    requested: int
+    passed: int
+    rejected: int
+    rounds: int
+    generated_at: datetime | None = None
+
+
 class MistakeAnalysisOut(BaseModel):
     cause_type: str
     secondary_causes: list[str] = Field(default_factory=list)
@@ -57,6 +79,14 @@ class MistakeAnalysisOut(BaseModel):
     model: str | None = None
     prompt_version: str | None = None
     created_at: datetime
+    # S4-4：未生成过是 null；已生成但 0 道通过时是空数组 + stats
+    similar_questions: list[MistakeVariantOut] | None = None
+    variants_stats: VariantsStatsOut | None = None
+
+
+class VariantAcceptOut(BaseModel):
+    question_id: int
+    created: bool
 
 
 class MistakeSummaryOut(BaseModel):

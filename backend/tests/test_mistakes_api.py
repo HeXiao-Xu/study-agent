@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_current_user, get_db
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import get_storage
 from app.main import app
 from app.models.subject import Subject
@@ -25,9 +25,11 @@ from app.schemas.mistake import (
     MistakeDetailOut,
     MistakeStatsOut,
     MistakeSummaryOut,
+    MistakeVariantOut,
     StatusCountOut,
+    VariantsStatsOut,
 )
-from app.services import mistake_analysis_service, mistake_service
+from app.services import mistake_analysis_service, mistake_service, question_gen_service
 from app.tasks.queue import get_task_queue
 
 
@@ -138,6 +140,8 @@ _AUTH_CASES = [
     ("patch", "/api/v1/mistakes/1", {"json": {"my_answer_md": "待订正"}}),
     ("post", "/api/v1/mistakes/1/review", {"json": {"correct": True}}),
     ("post", "/api/v1/mistakes/1/analyze", {}),
+    ("post", "/api/v1/mistakes/1/variants", {}),
+    ("post", "/api/v1/mistakes/1/variants/abcdef12/accept", {}),
     ("delete", "/api/v1/mistakes/1", {}),
     (
         "post",
@@ -155,7 +159,8 @@ _AUTH_CASES = [
     ("method", "path", "kwargs"),
     _AUTH_CASES,
     ids=[
-        "list", "create", "detail", "update", "review", "analyze", "delete", "photo", "stats",
+        "list", "create", "detail", "update", "review", "analyze", "variants",
+        "accept-variant", "delete", "photo", "stats",
     ],
 )
 def test_every_route_requires_auth(method, path, kwargs) -> None:
@@ -497,3 +502,145 @@ def test_delete_missing_or_foreign_returns_404(monkeypatch, mistake_id) -> None:
     response = _client(user=_user(user_id=42)).delete(f"/api/v1/mistakes/{mistake_id}")
     assert response.status_code == 404
     assert response.json()["code"] == 40400
+
+
+# --------------------------------------------------------------------------
+# S4-4 变式题：POST /mistakes/{id}/variants 与 accept
+# --------------------------------------------------------------------------
+def test_generate_variants_returns_202(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_enqueue(session, *, owner, mistake_id, queue):
+        captured.update(owner_id=owner.id, mistake_id=mistake_id)
+        return SimpleNamespace(
+            id=77, name="mistake.variants", status="pending", created_at=_now()
+        )
+
+    monkeypatch.setattr(question_gen_service, "enqueue_variants", fake_enqueue)
+    response = _client(user=_user(user_id=42)).post("/api/v1/mistakes/43/variants")
+
+    assert response.status_code == 202
+    body = response.json()["data"]
+    assert body["id"] == 77
+    assert body["name"] == "mistake.variants"
+    assert body["status"] == "pending"
+    assert captured == {"owner_id": 42, "mistake_id": 43}
+
+
+@pytest.mark.parametrize("message", ["请先完成错因诊断", "这道题题干太短，暂不支持生成变式"])
+def test_generate_variants_409_without_precondition(monkeypatch, message) -> None:
+    def boom(*args, **kwargs):
+        raise ConflictError(message)
+
+    monkeypatch.setattr(question_gen_service, "enqueue_variants", boom)
+    response = _client().post("/api/v1/mistakes/43/variants")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == 40900
+    assert response.json()["message"] == message
+
+
+def test_generate_variants_404_for_foreign_mistake(monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise NotFoundError("错题不存在")
+
+    monkeypatch.setattr(question_gen_service, "enqueue_variants", boom)
+    response = _client().post("/api/v1/mistakes/999/variants")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 40400
+
+
+def test_accept_variant_returns_question_id(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_accept(session, *, owner, mistake_id, variant_id):
+        captured.update(owner_id=owner.id, mistake_id=mistake_id, variant_id=variant_id)
+        return SimpleNamespace(id=128), True
+
+    monkeypatch.setattr(question_gen_service, "accept_variant", fake_accept)
+    response = _client(user=_user(user_id=42)).post(
+        "/api/v1/mistakes/43/variants/abc12345/accept"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"question_id": 128, "created": True}
+    assert captured == {"owner_id": 42, "mistake_id": 43, "variant_id": "abc12345"}
+
+
+def test_accept_variant_404(monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise NotFoundError("变式题不存在或已被重新生成")
+
+    monkeypatch.setattr(question_gen_service, "accept_variant", boom)
+    response = _client().post("/api/v1/mistakes/43/variants/nope/accept")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 40400
+
+
+def test_detail_exposes_variants(monkeypatch) -> None:
+    detail = MistakeDetailOut(
+        id=43,
+        question_id=100,
+        status="待订正",
+        correct_streak=0,
+        stem_excerpt="等差数列求项",
+        subject_id=7,
+        qtype="解答",
+        difficulty=2,
+        created_at=_now(),
+        stem_md="等差数列 $a_1=2$，公差 $d=3$，求 $a_{10}$。",
+        analysis=MistakeAnalysisOut(
+            cause_type="计算失误",
+            created_at=_now(),
+            similar_questions=[
+                MistakeVariantOut(
+                    variant_id="abc12345",
+                    stem_md="求 $2+2$ 的值。",
+                    answer_md="$4$",
+                    qtype="解答",
+                    difficulty=2,
+                )
+            ],
+            variants_stats=VariantsStatsOut(
+                requested=3, passed=1, rejected=2, rounds=2, generated_at=None
+            ),
+        ),
+    )
+    monkeypatch.setattr(mistake_service, "get_detail", lambda *a, **k: detail)
+    response = _client().get("/api/v1/mistakes/43")
+
+    assert response.status_code == 200
+    body = response.json()["data"]["analysis"]
+    assert body["similar_questions"][0]["variant_id"] == "abc12345"
+    assert body["similar_questions"][0]["self_check"] == "passed"
+    assert body["variants_stats"] == {
+        "requested": 3,
+        "passed": 1,
+        "rejected": 2,
+        "rounds": 2,
+        "generated_at": None,
+    }
+
+
+def test_detail_without_variants_keeps_fields_null(monkeypatch) -> None:
+    detail = MistakeDetailOut(
+        id=43,
+        question_id=100,
+        status="待订正",
+        correct_streak=0,
+        stem_excerpt="等差数列求项",
+        subject_id=7,
+        qtype="解答",
+        difficulty=2,
+        created_at=_now(),
+        stem_md="等差数列 $a_1=2$，公差 $d=3$，求 $a_{10}$。",
+        analysis=MistakeAnalysisOut(cause_type="计算失误", created_at=_now()),
+    )
+    monkeypatch.setattr(mistake_service, "get_detail", lambda *a, **k: detail)
+    response = _client().get("/api/v1/mistakes/43")
+
+    body = response.json()["data"]["analysis"]
+    assert body["similar_questions"] is None
+    assert body["variants_stats"] is None

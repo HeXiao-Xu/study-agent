@@ -26,9 +26,10 @@ from app.schemas.mistake import (
     MistakeStatsOut,
     MistakeSummaryOut,
     MistakeUpdateIn,
+    VariantAcceptOut,
 )
 from app.schemas.tasks import TaskOut
-from app.services import mistake_analysis_service, mistake_service
+from app.services import mistake_analysis_service, mistake_service, question_gen_service
 from app.tasks.queue import TaskQueue, get_task_queue
 from app.utils.pagination import PageParams, SortParams, page_params, sort_params
 
@@ -164,6 +165,44 @@ def trigger_mistake_analysis(
     )
     assert task is not None  # skip_if_analyzed=False 时必有任务
     return Envelope(trace_id=get_trace_id(), data=TaskOut.model_validate(task))
+
+
+@router.post(
+    "/{mistake_id}/variants",
+    status_code=202,
+    response_model=Envelope[TaskOut],
+    summary="生成变式题",
+)
+def generate_mistake_variants(
+    mistake_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> Envelope[TaskOut]:
+    task = question_gen_service.enqueue_variants(
+        session, owner=current_user, mistake_id=mistake_id, queue=queue
+    )
+    return Envelope(trace_id=get_trace_id(), data=TaskOut.model_validate(task))
+
+
+@router.post(
+    "/{mistake_id}/variants/{variant_id}/accept",
+    response_model=Envelope[VariantAcceptOut],
+    summary="变式题存入题库",
+)
+def accept_mistake_variant(
+    mistake_id: int,
+    variant_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[VariantAcceptOut]:
+    question, created = question_gen_service.accept_variant(
+        session, owner=current_user, mistake_id=mistake_id, variant_id=variant_id
+    )
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=VariantAcceptOut(question_id=question.id, created=created),
+    )
 
 
 @router.post("/{mistake_id}/review", response_model=Envelope[MistakeDetailOut], summary="复习记录")

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import UploadFile
 from fastapi_pagination import Params
 from fastapi_pagination.ext.sqlalchemy import paginate as paginate_sa
+from pydantic import ValidationError
 from sqlalchemy import Select, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,8 +37,10 @@ from app.schemas.mistake import (
     MistakeStatsOut,
     MistakeSummaryOut,
     MistakeUpdateIn,
+    MistakeVariantOut,
     OptionOut,
     StatusCountOut,
+    VariantsStatsOut,
 )
 from app.services import file_service, question_service
 from app.utils.pagination import PageParams, SortParams, apply_sort
@@ -100,12 +103,52 @@ def _kp_names(session: Session, question_id: int) -> list[str]:
     return list(rows)
 
 
+def _flatten_self_check(raw: dict) -> dict:
+    """JSONB 里 self_check 是对象（带 attempts/verified_answer_md），出参只要状态字符串。"""
+    data = dict(raw)
+    check = data.get("self_check")
+    if isinstance(check, dict):
+        data["self_check"] = str(check.get("status") or "passed")
+    elif not isinstance(check, str):
+        data["self_check"] = "passed"
+    return data
+
+
+def _variants_of(
+    payload: object,
+) -> tuple[list[MistakeVariantOut] | None, VariantsStatsOut | None]:
+    """从 JSONB 读变式题；结构版本不认识就当作没有（向前兼容，不抛错）。"""
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        return None, None
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list):
+        return None, None
+    items: list[MistakeVariantOut] = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            items.append(MistakeVariantOut.model_validate(_flatten_self_check(raw)))
+        except ValidationError:
+            continue
+    stats_raw = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
+    stats = VariantsStatsOut(
+        requested=int(stats_raw.get("requested", 0)),
+        passed=int(stats_raw.get("passed", 0)),
+        rejected=int(stats_raw.get("rejected", 0)),
+        rounds=int(stats_raw.get("rounds", 0)),
+        generated_at=payload.get("generated_at"),
+    )
+    return items, stats
+
+
 def _analysis_of(session: Session, mistake_id: int) -> MistakeAnalysisOut | None:
     analysis = session.scalar(
         select(MistakeAnalysis).where(MistakeAnalysis.mistake_id == mistake_id)
     )
     if analysis is None:
         return None
+    variants, variants_stats = _variants_of(analysis.similar_questions_json)
     return MistakeAnalysisOut(
         cause_type=analysis.cause_type,
         secondary_causes=list(analysis.secondary_causes or []),
@@ -117,6 +160,8 @@ def _analysis_of(session: Session, mistake_id: int) -> MistakeAnalysisOut | None
         model=analysis.model,
         prompt_version=analysis.prompt_version,
         created_at=analysis.created_at,
+        similar_questions=variants,
+        variants_stats=variants_stats,
     )
 
 
