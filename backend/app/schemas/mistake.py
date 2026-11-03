@@ -47,10 +47,15 @@ class OptionOut(BaseModel):
 
 class MistakeAnalysisOut(BaseModel):
     cause_type: str
+    secondary_causes: list[str] = Field(default_factory=list)
     error_step: str | None = None
     explanation_md: str | None = None
     review_advice_md: str | None = None
     kp_ids: list[int] | None = None
+    # 出参是数字（API.md §6）而不是 Decimal 字符串：DB 用 NUMERIC 存，DTO 转 float
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    model: str | None = None
+    prompt_version: str | None = None
     created_at: datetime
 
 

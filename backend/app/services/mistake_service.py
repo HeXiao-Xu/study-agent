@@ -108,10 +108,14 @@ def _analysis_of(session: Session, mistake_id: int) -> MistakeAnalysisOut | None
         return None
     return MistakeAnalysisOut(
         cause_type=analysis.cause_type,
+        secondary_causes=list(analysis.secondary_causes or []),
         error_step=analysis.error_step,
         explanation_md=analysis.explanation_md,
         review_advice_md=analysis.review_advice_md,
         kp_ids=analysis.kp_ids,
+        confidence=analysis.confidence,
+        model=analysis.model,
+        prompt_version=analysis.prompt_version,
         created_at=analysis.created_at,
     )
 

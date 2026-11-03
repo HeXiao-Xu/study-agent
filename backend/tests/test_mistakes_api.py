@@ -21,12 +21,13 @@ from app.schemas.common import PageData
 from app.schemas.mistake import (
     CauseCountOut,
     KpCountOut,
+    MistakeAnalysisOut,
     MistakeDetailOut,
     MistakeStatsOut,
     MistakeSummaryOut,
     StatusCountOut,
 )
-from app.services import mistake_service
+from app.services import mistake_analysis_service, mistake_service
 from app.tasks.queue import get_task_queue
 
 
@@ -136,6 +137,7 @@ _AUTH_CASES = [
     ("get", "/api/v1/mistakes/1", {}),
     ("patch", "/api/v1/mistakes/1", {"json": {"my_answer_md": "待订正"}}),
     ("post", "/api/v1/mistakes/1/review", {"json": {"correct": True}}),
+    ("post", "/api/v1/mistakes/1/analyze", {}),
     ("delete", "/api/v1/mistakes/1", {}),
     (
         "post",
@@ -152,7 +154,9 @@ _AUTH_CASES = [
 @pytest.mark.parametrize(
     ("method", "path", "kwargs"),
     _AUTH_CASES,
-    ids=["list", "create", "detail", "update", "review", "delete", "photo", "stats"],
+    ids=[
+        "list", "create", "detail", "update", "review", "analyze", "delete", "photo", "stats",
+    ],
 )
 def test_every_route_requires_auth(method, path, kwargs) -> None:
     # 只覆盖 get_db、不覆盖 get_current_user：无 Bearer 时由 get_current_user 拦下。
@@ -366,6 +370,101 @@ def test_review_passes_correct_to_service(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["data"]["id"] == 9
     assert captured == {"user_id": 42, "mistake_id": 9, "correct": True}
+
+
+# --------------------------------------------------------------------------
+# POST /mistakes/{id}/analyze —— 202 + 任务壳（S4-3）
+# --------------------------------------------------------------------------
+def _task(task_id: int = 88):
+    return SimpleNamespace(
+        id=task_id, name="mistake.analyze", status="pending", created_at=_now()
+    )
+
+
+def test_analyze_returns_202_with_task(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_enqueue(session, *, owner, mistake_id, queue, force, skip_if_analyzed):
+        captured.update(
+            owner_id=owner.id, mistake_id=mistake_id, force=force,
+            skip_if_analyzed=skip_if_analyzed, has_queue=queue is not None,
+        )
+        return _task()
+
+    monkeypatch.setattr(mistake_analysis_service, "enqueue_analysis", fake_enqueue)
+    response = _client(user=_user(user_id=42)).post("/api/v1/mistakes/12/analyze")
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["code"] == 0
+    assert body["data"] == {
+        "id": 88, "name": "mistake.analyze", "status": "pending",
+        "created_at": "2026-11-03T00:00:00Z",
+    }
+    # 手动重跑永远建任务（skip_if_analyzed=False），默认 force=True
+    assert captured == {
+        "owner_id": 42, "mistake_id": 12, "force": True,
+        "skip_if_analyzed": False, "has_queue": True,
+    }
+
+
+def test_analyze_force_false_passthrough(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_enqueue(session, *, owner, mistake_id, queue, force, skip_if_analyzed):
+        captured["force"] = force
+        return _task()
+
+    monkeypatch.setattr(mistake_analysis_service, "enqueue_analysis", fake_enqueue)
+    response = _client().post("/api/v1/mistakes/12/analyze?force=false")
+
+    assert response.status_code == 202
+    assert captured["force"] is False
+
+
+def test_analyze_rejects_non_bool_force(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mistake_analysis_service, "enqueue_analysis", lambda *a, **k: _task()
+    )
+    response = _client().post("/api/v1/mistakes/12/analyze?force=maybe")
+
+    assert response.status_code == 422
+    assert response.json()["code"] == 42200
+
+
+@pytest.mark.parametrize("mistake_id", [999, 7], ids=["not-found", "other-owner"])
+def test_analyze_missing_or_foreign_returns_404(monkeypatch, mistake_id) -> None:
+    def boom(*_args, **_kwargs):
+        raise NotFoundError("错题不存在")
+
+    monkeypatch.setattr(mistake_analysis_service, "enqueue_analysis", boom)
+    response = _client().post(f"/api/v1/mistakes/{mistake_id}/analyze")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 40400
+
+
+def test_detail_exposes_new_analysis_fields(monkeypatch) -> None:
+    detail = _detail(11)
+    detail.analysis = MistakeAnalysisOut(
+        cause_type="概念不清",
+        secondary_causes=["计算失误"],
+        explanation_md="配方后对称轴 $x=2$。",
+        review_advice_md="复习配方法。",
+        kp_ids=[133],
+        confidence=0.82,
+        model="qwen-plus",
+        prompt_version="mistake_analyze_v1",
+        created_at=_now(),
+    )
+    monkeypatch.setattr(mistake_service, "get_detail", lambda *a, **k: detail)
+    body = _client().get("/api/v1/mistakes/11").json()
+
+    analysis = body["data"]["analysis"]
+    assert analysis["secondary_causes"] == ["计算失误"]
+    assert analysis["confidence"] == 0.82
+    assert analysis["model"] == "qwen-plus"
+    assert analysis["prompt_version"] == "mistake_analyze_v1"
 
 
 # --------------------------------------------------------------------------

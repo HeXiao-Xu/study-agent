@@ -28,7 +28,7 @@ from app.schemas.mistake import (
     MistakeUpdateIn,
 )
 from app.schemas.tasks import TaskOut
-from app.services import mistake_service
+from app.services import mistake_analysis_service, mistake_service
 from app.tasks.queue import TaskQueue, get_task_queue
 from app.utils.pagination import PageParams, SortParams, page_params, sort_params
 
@@ -139,6 +139,31 @@ def update_mistake(
         session, user_id=current_user.id, mistake_id=mistake_id, payload=payload
     )
     return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.post(
+    "/{mistake_id}/analyze",
+    status_code=202,
+    response_model=Envelope[TaskOut],
+    summary="触发错因诊断",
+)
+def trigger_mistake_analysis(
+    mistake_id: int,
+    force: bool = Query(default=True, description="false 时已有诊断则跳过，不再调用 LLM"),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> Envelope[TaskOut]:
+    task = mistake_analysis_service.enqueue_analysis(
+        session,
+        owner=current_user,
+        mistake_id=mistake_id,
+        queue=queue,
+        force=force,
+        skip_if_analyzed=False,
+    )
+    assert task is not None  # skip_if_analyzed=False 时必有任务
+    return Envelope(trace_id=get_trace_id(), data=TaskOut.model_validate(task))
 
 
 @router.post("/{mistake_id}/review", response_model=Envelope[MistakeDetailOut], summary="复习记录")
