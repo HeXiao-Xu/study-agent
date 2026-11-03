@@ -142,3 +142,29 @@ def test_list_edges_fills_both_end_names(monkeypatch: pytest.MonkeyPatch):
     assert page.total == 1
     assert page.items[0].src_name == "函数"
     assert page.items[0].dst_name == "单调性"
+
+
+def test_list_edges_adds_id_tiebreaker(monkeypatch: pytest.MonkeyPatch):
+    """分页稳定性：created_at 相同必须再用 id 兜底，否则同页会重复/漏行。"""
+    from app.services import graph_service as svc
+    from app.utils import pagination
+
+    captured: dict[str, str] = {}
+
+    def fake_paginate(session, stmt, params):
+        captured["sql"] = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        return _FakePage([])
+
+    monkeypatch.setattr(pagination, "paginate_sa", fake_paginate)
+    svc.list_edges(
+        _ListSession([], {}),
+        subject_id=7,
+        status="pending",
+        relation=None,
+        keyword=None,
+        page=type("P", (), {"page": 1, "page_size": 20})(),
+        sort=type("S", (), {"sort_by": None, "order": "desc"})(),
+    )
+    sql = captured["sql"].upper()
+    assert "ORDER BY" in sql
+    assert "CREATED_AT" in sql and "KNOWLEDGE_EDGES.ID" in sql

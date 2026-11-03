@@ -543,6 +543,11 @@ def list_edges(
         allowed=SORTABLE,
         default_sort="created_at",
     )
+    # 同一次构建写入的边 created_at 完全相同，只按 created_at 排序在分页时会
+    # 出现同一行跨页重复/漏行（真机验收抓到 234 行里 19 行重复）→ 补 id 兜底
+    stmt = stmt.order_by(
+        KnowledgeEdge.id.asc() if sort.order == "asc" else KnowledgeEdge.id.desc()
+    )
     # 不能用 paginate_query：它要求 Pydantic 的 item_model，而这里要先用两端名称补 DTO
     data = paginate_sa(
         session, stmt, params=Params(page=page.page, size=page.page_size)
