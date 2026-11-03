@@ -521,6 +521,7 @@
   | multipart | my_answer_md | string | 否 | 学生手填作答；**优先于**视觉识别结果 |
 
 - 行为：校验学科 → 按扩展名预判 PNG/JPEG → `file_service.upload_file(parse=false)` 落 `files`（`parse_status=done`、`parse_progress=100`，不建笔记/不切片）→ 入队 `mistake.recognize`；任务从图片识别题干并建题（进入公共题库，`origin=upload`、`source_file_id=图片 file_id`），再建/复用错题并挂原图。
+- 复用同题时的字段覆盖：同 `(user, question)` 已存在则复用并重置（与 `POST /api/v1/mistakes` 同一语义）；`my_answer_md` 只有本次识别到作答才覆盖（`used_answer_source=vision/student`），识别为 `none` 时保留原值；`correct_answer_md` 同理，只有视觉从图中读出答案才覆盖（**不会**回填题目 `answer_md`）；`image_file_id` 总是替换成本次上传的图片。
 - 成功：**202** `Envelope[TaskOut]`：`id` / `name`（`mistake.recognize`）/ `status`（`pending`）/ `created_at`
 - 任务结果 `result`（`status=succeeded` 后）：
 
@@ -620,7 +621,11 @@
   | my_answer_md | string | 否 | 学生作答 |
   | correct_answer_md | string | 否 | 正确答案；缺省时取题目的 `answer_md` |
 
-- 行为：题目不存在 → `404/40400`；同 `(user, question)` 已存在 → 复用并重置（`status=待订正`、`correct_streak=0`，`last_review_at` 不动，只覆盖本次显式传入的作答/答案），返回 **201 + `created=false`**；并发重复录入撞唯一约束时由服务端重查赢家后按同一语义复用，不把 `IntegrityError` 暴露成 500。
+- 行为：题目不存在 → `404/40400`；同 `(user, question)` 已存在 → 复用并重置（`status=待订正`、`correct_streak=0`，`last_review_at` 不动），返回 **201 + `created=false`**；并发重复录入撞唯一约束时由服务端重查赢家后按同一语义复用，不把 `IntegrityError` 暴露成 500。
+- 复用分支的作答覆盖规则（与代码一致，按此为准）：
+  - `my_answer_md`：只在本次**显式传入**时覆盖，不传保留原值；
+  - `correct_answer_md`：先按「本次传入 > 题目 `answer_md`」定值，**非空就覆盖** —— 即本次不传且题目有标准答案时，会用题目答案覆盖已存的正确答案（用户在详情页手工改过的值会被还原）；
+  - 两者都取不到值（本次不传且题目无 `answer_md`）时保留原值。
 - 出参：`Envelope[MistakeCreateOut]`（= `MistakeDetail` + `created: bool`）
 - 错误：`404/40400` 题目不存在；`409/40900`「错题录入冲突，请重试」（并发冲突且重查不到赢家，极少数）；`422/42200` `question_id` 非法；`401/40100`
 

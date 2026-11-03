@@ -135,6 +135,30 @@ def test_create_from_question_reuses_existing_and_resets():
     assert session.commits == 1
 
 
+def test_create_from_question_reentry_backfills_question_answer():
+    """复用分支：本次不传正确答案且题目有 answer_md → 覆盖（API.md 已按此口径写明）。"""
+    existing = _mistake(status="已掌握", streak=2)
+    existing.correct_answer_md = "用户改过的答案"
+    session = FakeSession(
+        objects={(Question, 65): _question(answer="B"), (Mistake, 12): existing},
+        scalar_results=[existing],
+    )
+    mistake_service.create_from_question(session, user_id=1, payload=MistakeCreateIn(question_id=65))
+    assert existing.correct_answer_md == "B"
+
+
+def test_create_from_question_reentry_keeps_answer_when_question_has_none():
+    """复用分支：本次不传正确答案且题目无 answer_md → 保留用户已改的值。"""
+    existing = _mistake(status="已订正", streak=1)
+    existing.correct_answer_md = "用户改过的答案"
+    session = FakeSession(
+        objects={(Question, 65): _question(answer=None), (Mistake, 12): existing},
+        scalar_results=[existing],
+    )
+    mistake_service.create_from_question(session, user_id=1, payload=MistakeCreateIn(question_id=65))
+    assert existing.correct_answer_md == "用户改过的答案"
+
+
 def test_create_from_question_concurrent_insert_reuses_winner(monkeypatch):
     reviewed_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
     winner = _mistake(status="已掌握", streak=2, last_review_at=reviewed_at)
