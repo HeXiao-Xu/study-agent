@@ -559,7 +559,11 @@ def list_edges(
         for edge in data.items
     ]
     return GraphEdgePage(
-        items=items, total=data.total, page=data.page, page_size=data.page_size
+        # fastapi-pagination 的 Page 用 size，不是 page_size（真机验收抓到）
+        items=items,
+        total=data.total,
+        page=data.page,
+        page_size=data.size,
     )
 
 

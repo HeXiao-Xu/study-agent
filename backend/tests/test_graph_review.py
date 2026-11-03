@@ -102,8 +102,8 @@ class _FakePage:
         self.items = items
         self.total = len(items)
         self.page = 1
+        # 只暴露真实 Page 的字段：size（不提供 page_size，免得再被假对象掩盖）
         self.size = 20
-        self.page_size = 20
 
 
 class _ListSession:
