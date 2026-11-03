@@ -9,17 +9,29 @@ from app.ai.gen.variant_generator import (
     generate_variants,
     render_prompt,
 )
+from app.ai.gen.variant_verifier import (
+    VERIFY_PROMPT_VERSION,
+    VerifyContext,
+    VariantVerificationError,
+    render_verify_prompt,
+    verify_answer,
+)
 
 __all__ = [
     "MAX_VARIANTS",
     "PROMPT_VERSION",
     "REL_TOL",
+    "VERIFY_PROMPT_VERSION",
     "GenerationContext",
     "GeneratedVariant",
     "VariantGenerationError",
+    "VariantVerificationError",
+    "VerifyContext",
     "generate_variants",
     "match_answers",
     "normalize_answer",
     "parse_number",
     "render_prompt",
+    "render_verify_prompt",
+    "verify_answer",
 ]
