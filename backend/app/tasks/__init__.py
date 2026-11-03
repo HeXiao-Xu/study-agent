@@ -5,6 +5,7 @@ worker/runner 只 import 本包时也必须能看到全部内置任务。
 """
 from app.tasks import analyze_mistake as _analyze_mistake  # noqa: F401  注册 mistake.analyze
 from app.tasks import demo as _demo  # noqa: F401  注册 demo.sleep
+from app.tasks import generate_variants as _generate_variants  # noqa: F401  注册 mistake.variants
 from app.tasks import index_note as _index_note  # noqa: F401  注册 index.note
 from app.tasks import kp_align as _kp_align  # noqa: F401  注册 kp.align
 from app.tasks import mistake_recognize as _mistake_recognize  # noqa: F401  注册 mistake.recognize
@@ -14,6 +15,7 @@ from app.tasks import question_extract as _question_extract  # noqa: F401  注�
 __all__ = [
     "_analyze_mistake",
     "_demo",
+    "_generate_variants",
     "_index_note",
     "_kp_align",
     "_mistake_recognize",
