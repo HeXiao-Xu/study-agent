@@ -132,7 +132,9 @@ class GenerationContext:
 def generate_variants(context, *, llm_client=None, max_retries=MAX_RETRIES) -> list[GeneratedVariant]
 ```
 
-- 调用：`client.chat(messages, temperature=0.7, max_tokens=2000, scene="gen")`（方案 §6.5 表格：生成 0.7）。
+- 调用：`client.chat(messages, temperature=0.7, max_tokens=3500, scene="gen")`（方案 §6.5 表格：生成 0.7）。
+  - 立项时写的是 2000，真机验收改为 3500：3 道解答题连解析一起输出常到 1700~2500 tokens，
+    2000 会让 JSON 在字符串中途被截断（实测错题 46 三次尝试全部截断、错题 48 第一次同截断）。
 - 输出 schema（严格 JSON）：
 
 ```json
@@ -140,8 +142,11 @@ def generate_variants(context, *, llm_client=None, max_retries=MAX_RETRIES) -> l
             "answer_md": "...", "analysis_md": "...", "qtype": "解答", "difficulty": 3}]}
 ```
 
-- Pydantic 校验：`stem_md` ≥5 且 ≤2000；`answer_md` 非空 ≤500；`analysis_md` ≥10 ≤1500；`qtype ∈ {单选,多选,填空,解答}`；`difficulty ∈ 1..5`；`options` 规则直接复用 `schemas/question.py::validate_question_shape`（该模块只依赖 pydantic，ai 层引用它不会把 fastapi 拖进来）。
+- Pydantic 校验：`stem_md` ≥5 且 ≤2000；`answer_md` 非空 ≤500；`analysis_md` ≥10 ≤2000
+  （立项时 1500，真机验收放宽：解析常超 1500 导致整批 3 道全废）；`qtype ∈ {单选,多选,填空,解答}`；`difficulty ∈ 1..5`；`options` 规则直接复用 `schemas/question.py::validate_question_shape`（该模块只依赖 pydantic，ai 层引用它不会把 fastapi 拖进来）。
 - 条数不足 `count` → 视为本次失败（记 `variant_generate_count_short`），按重试处理，不"有多少算多少"（否则验收的 3 道/题会漂移）。重生成时 `count = len(pending)`。
+- 解析/题干长度：Prompt 明确「解析 ≤200 字、题干 ≤200 字」，因为 `analysis_md ≤1500` 是整批失败口径，
+  实测一次超长会让 3 道全废（错题 48 第 2 轮 attempt 1）。超长仍按失败处理，不截断（截断会改题面语义）。
 
 ### 5.2 复算（`variant_verifier.py`）
 
@@ -158,8 +163,25 @@ def verify_answer(context, *, llm_client=None, max_retries=MAX_RETRIES) -> str
 ```
 
 - 只喂题干与选项，**不喂答案、不喂解析**；Prompt 要求"独立解题，输出最终答案与不超过 3 步的关键过程"。
-- 输出 schema：`{"answer_md": "...", "reasoning_md": "..."}`，`answer_md` 非空。
+- 输出 schema：`{"answer_md": "...", "reasoning_md": "..."}`，`answer_md` 非空 ≤800；
+  `reasoning_md` 只用于展示、不参与比对，超 1500 字符**截断**而不是判失败（真机验收：
+  判失败会让一道题的三次尝试全废、白跑 160 秒）。
 - 复算自身的失败（JSON 非法/重试耗尽）→ `VariantVerificationError`；该题记为"复算失败"并进入重生成（视同未通过）。
+- 调参：复算 `max_tokens = 2600`（立项时 1200）。真机验收时对数不等式类题目（错题 46）的推理会写满上限，
+  1200 与 1800 都被截断成非法 JSON、整题白跑数分钟；同时 Prompt 要求「过程 ≤3 步、总长 ≤120 字」。
+
+### 5.2.1 确定性质量护栏（不经 LLM）
+
+真机验收抓到两类坏题，加两条纯字符串护栏（`app/ai/gen/quality.py`），在**复算之前**执行，省调用也省时间：
+
+1. **同批题干重复**：同一轮 3 道里出现同一道题（只差空格/全角）→ 直接丢重，`rejected.reason = "同批题干重复"`，
+   并占用一次重生成名额。指纹 = NFKC 全角转半角 + 去空白（只用于批内查重，不替代题库的 `stem_hash`）。
+   证据：m=43 变式1 与变式3 题干完全相同。
+2. **解析自问自答**：解析里出现「？错」「重算」「改为」「再核」「换一题」「修正题目」等 14 个标记之一
+   → 判废，`rejected.reason = "解析自问自答（命中「X」）"`。原因：模型会一边算一边改题，
+   题干与答案对不上（m=48 变式1：题干仍是 $\int_{-1}^{2}(3x-2)dx$，解析却改成 $\int_2^4 x\,dx$，答案符号也错）。
+
+两条护栏都不依赖模型判断，可复现、零成本；Prompt 侧同时加了硬约束（三题题干互不相同、解析只写标准解法）。
 
 ### 5.3 比对（`compare.py`，纯函数）
 

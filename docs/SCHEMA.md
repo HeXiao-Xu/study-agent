@@ -272,6 +272,36 @@ erDiagram
 | created_at | TIMESTAMPTZ | 否 | `now()` | 录入时间；列表默认排序 | `ix_mistakes_user_created` ✅ |
 | last_review_at | TIMESTAMPTZ | 是 | — | 最近一次复习时间；录入/改状态都不推进 | — |
 
+**S4-4 写入的 `similar_questions_json` 结构（版本化，`version=1`）**
+
+```json
+{
+  "version": 1,
+  "generated_at": "2026-11-03T15:39:39+00:00",
+  "model": "qwen-plus",
+  "prompt_version": "question_gen_v1",
+  "stats": {"requested": 3, "passed": 3, "rejected": 0, "rounds": 1},
+  "items": [
+    {
+      "variant_id": "abc12345",
+      "stem_md": "...", "options": null, "answer_md": "...",
+      "analysis_md": "...", "qtype": "解答", "difficulty": 3,
+      "kp_ids": [133],
+      "self_check": {"status": "passed", "attempts": 1, "verified_answer_md": "..."},
+      "accepted_question_id": null, "accepted_at": null
+    }
+  ],
+  "rejected": [{"reason": "数值：3 vs \frac{3}{2}", "stem_excerpt": "计算 $\int_{-1}^{2}...$"}]
+}
+```
+
+- `variant_id`：8 位十六进制（`secrets.token_hex(4)`），只在「本次生成结果」内唯一，**不是**数据库 id；
+  重新生成会整体覆盖，旧 id 立即失效（accept 时 404 提示「已被重新生成」）。
+- `items` 只含通过自检的题；`rejected` 记录被丢弃题（最多 9 条，`stem_excerpt` ≤80 字，不落整题面）。
+- `accepted_question_id` 由 accept 接口回写；非空即表示已入库（幂等靠它 + `questions.stem_hash` 两道）。
+- 结构不认识（`version` 不是 1）时读侧当 `null` 处理，不报错（前端按"尚未生成"展示）。
+- 旧库无迁移：列 S4-2 已有，S4-4 只写不建表（`alembic heads` 仍为 `0011_s4_3`）。
+
 **约束与索引（实测 DDL）**
 
 - 主键：`mistakes_pkey`。
@@ -301,7 +331,7 @@ erDiagram
 | secondary_causes | TEXT[] | 是 | — | 次错因，至多 2 个，元素属于 `CauseType` 值集（S4-3） | `ck_mistake_analyses_secondary_causes` ✅ |
 | error_step | TEXT | 是 | — | 第一处出错步骤（引用学生原文） | — |
 | explanation_md | TEXT | 是 | — | 正确解法（分步骤 LaTeX） | — |
-| similar_questions_json | JSONB | 是 | — | 2–3 道变式题（S4-4 写入；S4-3 保持 NULL） | — |
+| similar_questions_json | JSONB | 是 | — | 变式题结果包（S4-4 写入；S4-3 保持 NULL），结构见下 | — |
 | review_advice_md | TEXT | 是 | — | 复习建议（前置知识 + 笔记关联） | — |
 | confidence | NUMERIC(3,2) | 是 | — | LLM 自评置信度 0.00–1.00（S4-3） | `ck_mistake_analyses_confidence` ✅ |
 | model | TEXT | 否 | — | 诊断所用模型 | — |

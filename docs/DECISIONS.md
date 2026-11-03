@@ -634,3 +634,15 @@
 - 决策 8（验收口径与自测集）：准确率口径 = 主因命中率（目标 ≥70%），另记主因或次因与混淆矩阵；数据是**构造的自测集**（S4-1 题库 + 30 条人工作答，6 类各 5 条），报告一律标注「自测集，非真实学生数据」。三轮数字（36.7% / 63.3% / 86.7%）与"看着错误调 Prompt 的过拟合风险"全部写进 `.sdd/s4-3/acceptance-evidence.md`，不挑数字。
 - 决策 9（测试与契约）：后端基线 952 → **999 passed, 1 warning**；前端 180/35 → **187 passed / 35 files**。`API.md` §6 补 `analysis` 新字段与 `POST /mistakes/{id}/analyze`（202、`force` 默认 true、404/422/500）；`SCHEMA.md` §5.4 补两列两 CHECK 与 `prompt_version` v2。
 - 已知限制：`similar_questions_json` 仍未写入（S4-4）；`confidence` 实测集中在 0.9–0.95，未校准；"时间不足"在"有半截结论"时判定不稳定（#26）；浏览器级 E2E 未做（无 Playwright，§2.1 不擅自加依赖）。
+
+## D-047 变式题生成与自检（S4-4）
+
+- 背景：S4-3 把 `similar_questions_json` 留空，S4-4 要按方案 6.5 生成变式题并过「格式校验 + 独立复算」。spec/plan 见 `docs/spec/s4-4-variant-generation.md`、`docs/plan/s4-4-variant-generation.md`。
+- 决策 1（触发与数量）：**只手动触发**（`POST /mistakes/{id}/variants`），一次固定 3 道，不做自动生成——一道错题自动跑一次生成会烧掉 4~12 次 LLM 调用，学生录 10 道错题就是几十次调用，成本不可控。前置条件两道 409/40900：无诊断（「请先完成错因诊断」）、题干 <10 字（「这道题题干太短」）。
+- 决策 2（三分工，不设第三个 LLM 判官）：生成只产出结构化题目（`variant_generator`）；复算**只给题干与选项、不给答案**让模型重解（`variant_verifier`，独立侧的关键）；判定是纯函数 `compare.match_answers`（选项集合 → 数值容差 1e-6 → 同义组 → 多解集合 → 字符串）。**不加「让模型判断两份答案是否一致」的第三方角色**：那等于让同一族模型互相打分，成本翻倍且无独立证据。最多 2 轮 / 12 次调用。
+- 决策 3（存储与入库）：结果写 `mistake_analyses.similar_questions_json`（版本化 v1，覆盖式，不建新表、不加迁移，`alembic heads` 仍 `0011_s4_3`）；**不自动入库**，用户在详情页逐题「存入题库」才建题（`POST .../variants/{variant_id}/accept`），入库时 `origin=ai`、`verified=false`、`tags=["AI变式"]`、知识点链接继承原题。accept 幂等两道：JSON 里的 `accepted_question_id` + 题库 `stem_hash` 判重；建题 commit 与回写 JSON 的 commit 非原子，靠重试收敛（spec §6.4）。
+- 决策 4（失败语义）：**生成彻底失败（重试耗尽）时抛错 → 任务 `failed` 且旧 JSON 保持不动**；已有通过项时保留部分结果并照常 `succeeded`。真机踩过：原实现无论成败都覆盖 JSON，一道题生成失败把上一次的结果也清了（spec §5.5）。
+- 决策 5（确定性质量护栏，验收后补）：`ai/gen/quality.py` 两条零成本护栏在复算前跑——① 同批题干指纹重复（NFKC + 去空白）直接丢重；② 解析命中「？错」「重算」「改为」等 14 个自问自答标记直接判废。理由：真机抓到同批两道同题，以及解析一边算一边改题导致题干与答案不符（§5.2.1 有原文）。
+- 决策 6（真机调参四次，全部留存证据在 `.sdd/s4-4/progress.md`）：生成 `max_tokens` 2000→**3500**（解答题常需 1700~2500，2000 处被截断成非法 JSON）；复算 1200→1800→**2600**；生成 `analysis_md` 上限 1500→**2000**；复算 `reasoning_md` 超 1500 字符改为**截断不判失败**（展示字段，判死会白跑整题）。另加 `ai/gen/json_repair.py::loads_lenient_json` 三档兜底修 LaTeX 反斜杠（`\sqrt` 非法转义、`\frac` 变被吃成换页符）。
+- 决策 7（测试与契约）：后端基线 999 → **1082 passed, 1 warning**；前端 187/35 → **194 passed / 35 files**。`API.md` §6 补两个接口 + 变式题说明、§7 说明通用「凭空出题」仍未实现；`SCHEMA.md` §5.4 补 `similar_questions_json` v1 结构。
+- 已知限制：复算与生成若**犯了同一个错**，比对仍会通过（m=44 变式2 题面自相矛盾、两侧都算成 -1）；解析长度、模板腔调仍由模型决定；不生成图形题/需要画图的题；一次固定 3 道不可指定；已入库的变式题与普通 AI 题一样没有审核流；浏览器级 E2E 未做（无 Playwright，§2.1 不擅自加依赖）。

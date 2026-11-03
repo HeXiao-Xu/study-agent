@@ -6,10 +6,11 @@
 ## 当前状态
 
 - 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1、S4-2、S4-3 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-3 错因诊断服务（迁移 `0011_s4_3`、`mistake_analyses` 加 `secondary_causes`/`confidence`、`mistake.analyze` 任务、自动入队 + `POST /mistakes/{id}/analyze` 手动重跑、详情页诊断区）；后端 **999 passed, 1 warning**，前端 **187 passed / 35 files**（实测）
+- 最近完成：S4-4 变式题生成 + 自检（手动触发生成 3 道 → 独立复算 → 确定性比对 → 逐题入库；`POST /mistakes/{id}/variants` 与 `.../accept`；结果写 `mistake_analyses.similar_questions_json` v1）；后端 **1082 passed, 1 warning**，前端 **194 passed / 35 files**（实测）
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
+- 关键口径（S4-4）：只手动触发、一次固定 3 道；三分工（生成 → 只给题干的独立复算 → 纯函数比对），**不设第三个 LLM 判官**；最多 2 轮 / 12 次调用；结果写 `similar_questions_json`（v1、覆盖式、无迁移）；**不自动入库**，逐题 accept 才建题（`origin=ai`、`verified=false`、`tags=["AI变式"]`）；生成彻底失败 → 任务 `failed` 且旧 JSON 不动（D-047）
 - 验收（S4-3，自测集，非真实学生数据）：30 条 6 类错因各 5 条，主因准确率 **86.7%**（26/30），主因或次因 90%，平均 10.3 s，`error_step` 30/30 引用原文；4 条分歧均为口径可争、无离谱输出；边界 3 项真机通过；重复性 3/3 一致。**注**：v1 口径下仅 36.7%，v2 口径收紧后达标，存在自测集过拟合风险，详见 `.sdd/s4-3/acceptance-evidence.md`
-- 下一步：S4-4 变式题生成（`similar_questions_json`）；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：S4-5 知识图谱关系构建 + 人工校验；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -63,7 +64,7 @@
 - [x] S4-1 题库表 + 试卷切题
 - [x] S4-2 错题录入 + 状态机
 - [x] S4-3 错因诊断服务 ★
-- [ ] S4-4 变式题生成 + 复算自检
+- [x] S4-4 变式题生成 + 复算自检
 - [ ] S4-5 图谱关系构建 + 人工校验
 - [ ] S4-6 图谱可视化前端
 - [ ] S4-7 掌握度模型 ★
@@ -186,9 +187,27 @@
 | 86 | 错因诊断未上线（S4-2 只建 `mistake_analyses` 表）：`analysis`/`cause_type` 恒空，`cause_type` 筛选恒无结果（S4-2） | 错题本只有记录与状态，没有“为什么错”的结论 | S4-3 错因诊断服务 |
 | 87 | 拍照上传只收 PNG/JPEG，WebP 未支持（S4-2 d-11） | 少数手机导出的 WebP 图片无法录入 | 补 `file_service` 的 `TYPE_TABLE`/`upload_allowed_extensions` 与 magic 校验，属跨模块改动 |
 | 88 | `last_review_at DESC` 的 NULL 排序口径未定（S4-2） | 未复习过的错题在按复习时间排序时按 PostgreSQL 默认（DESC 下 NULLS FIRST）置前，是否符合复习语义未确认 | 需求出现时明确并补 `NULLS LAST` 或 `COALESCE` |
-| 89 | `similar_questions_json` 未写入、变式题未生成（S4-2） | 诊断结果里的变式训练区为空 | S4-3 返回 2–3 道变式题；S4-4 生成 + 复算自检 |
+| 89 | ~~`similar_questions_json` 未写入、变式题未生成（S4-2）~~ **S4-4 已闭环**：手动生成 3 道 + 独立复算 + 确定性比对 + 逐题入库 | 已解决 | — |
+| 95 | 变式题的「同解不同写法」会被判不一致而丢弃（`m=3` vs `3`、`\pm4` vs `b=-4或b=4`），代价是偶尔少一道变式（S4-4） | 自动重生成补位，不影响正确性，但通过率偏低 | 需要时给 `compare.match_answers` 加「变量前缀」归一（如 `x=`、`m=` 统一剥掉）并补测试 |
+| 96 | 生成与复算可能犯同一个错，比对一致但答案错（S4-4 实测 m=44 变式2、m=48 变式1） | 自检机制无法自证数学正确，靠逐题人工确认兜底 | 若需更强保证，只能引入独立来源（教材答案库/教师审核流），成本高 |
+| 97 | 变式题一次固定 3 道、不可指定数量/题型，也不生成需要画图的题（S4-4） | 少数知识点（几何作图）出不了变式 | 需求出现时扩参数 |
 
 ## 变更日志
+
+### 2026-11-04（S4-4）
+- S4-4 完成（按 §10 全流程：spec `docs/spec/s4-4-variant-generation.md` + plan `docs/plan/s4-4-variant-generation.md`，均经用户确认）。交付：`ai/gen/{compare,variant_generator,variant_verifier,json_repair,quality}.py`（确定性比对 / 生成 / 独立复算 / JSON 兜底修复 / 质量护栏）、`ai/prompts/question_gen_v1.md` + `question_verify_v1.md`、`services/question_gen_service.py`（上下文拼装、入队、编排、自检、入库）、`tasks/generate_variants.py`（`mistake.variants`）、`api/v1/mistakes.py` 新增 `POST /{id}/variants`（202）与 `POST /{id}/variants/{variant_id}/accept`（200）、`schemas/mistake.py` DTO 扩展、`services/mistake_service.py` 读侧展平 `self_check` 并输出 `similar_questions` / `variants_stats`；前端 `MistakeDetailView.vue` 变式题区（生成/轮询/逐题入库/重新生成）+ `types`/`api` 扩展。
+- 拍板（D-047）：只手动触发、一次固定 3 道；三分工（生成 → 独立复算 → 确定性比对）且**不设第三个 LLM 判官**；结果写 `mistake_analyses.similar_questions_json`（版本化 v1，覆盖式，不建表不加迁移，`alembic heads` 仍 `0011_s4_3`）；**不自动入库**，逐题 accept 才建题且 `origin=ai`/`verified=false`/`tags=["AI变式"]`；生成彻底失败时任务 `failed` 且旧 JSON 不动。
+- 测试：后端 **1082 passed, 1 warning**（S4-3 基线 999）；前端 **194 passed / 35 files**（S4-3 基线 187/35）；`npm run build` 退出 0。无新增依赖，未动 `requirements.txt` / `package.json`。
+- 真机验收（真实 Qwen-Plus + 真实 PG16/Redis/MinIO + uvicorn `:8031` + 单 ARQ worker，2026-11-03 23:2x ~ 2026-11-04 00:19，证据 `.sdd/s4-4/acceptance-evidence.md`、`accept-final3.out.txt`、`variants.json`）：
+  - 7 道已诊断错题 × 3 道 = 21 个名额，**实际入库 19 道**（m=46 与 m=48 各 2 道），7 个任务全部 `succeeded`；单题耗时 14.2~173.8 s（中位 22.6 s）
+  - **19 道全部人工复算正确（19/19）**，无重复题干、无自问自答解析
+  - 调用与费用（`llm_call_logs` `scene='gen'`）：**44 次 / 36,045 tokens / ¥0.0507**，单任务 4~9 次（上限 12），延迟 avg 9.5 s、p95 30.8 s、max 53.0 s
+  - 自检拦截 10 条（DB 逐条核对）：6 条答案不一致（其中 2 条是「同解不同写法」的**误拦**：`m=3` vs `3`、`\pm4` vs `b=-4或b=4`）+ 4 条新护栏命中（1 同批重复 + 3 解析自问自答）
+  - **负面证据（已写进证据文档）**：早一轮 20 道里有 2 道错题自检判过——m=44 变式2 题面自相矛盾（$a<0$ 却在 $x=2$ 取最值）、m=48 变式1 答案符号错且解析自改题干；原因是生成与复算**犯同一个错**，比对因此一致。结论：复算一致 ≠ 数学正确，逐题人工确认是必要环节
+  - 验收后按实测抓修 7 轮调参（生成 2000→3500、复算 1200→1800→2600、解析 1500→2000、reasoning 超长改截断、JSON 反斜杠三档兜底、两条质量护栏 + Prompt 硬约束），全部留在 `.sdd/s4-4/progress.md` 与证据文档 §5；其中 JSON 兜底修复第一版正则写错（没锚 `(?<!\\)`，把已正确转义的 `\\frac` 又改坏）导致一轮 3 道全废，已补回归测试
+  - 未覆盖（如实）：**浏览器级 E2E 未做**（本机无 Playwright，§2.1 不擅自加依赖），前端证据为 194 条单测 + build；`accept` 与题库判重靠单测覆盖，真机只验了本人数据的幂等（同一 `variant_id` 两次都返回同一 `question_id`）
+- 事故记录：调参期间两次人工中止在跑的 `mistake.variants` 任务（token 上限与 JSON 修复上线时），均手工置 `failed` 并写明原因；每轮验收前确认 Redis 只有一个 ARQ 消费者（`CLIENT LIST` 里只有一条 `zrangebyscore`）。
+- 文档同步：`API.md` §6（两个新接口 + 变式题说明）、§7（说明通用「凭空出题」仍未实现）、`SCHEMA.md` §5.4（`similar_questions_json` v1 结构）、`DECISIONS.md` D-047、`AGENTS.md` §9.2/§9.6、`PROGRESS.md`、实施计划 S4-4 勾选；无迁移、无新依赖。
 
 ### 2026-11-03（S4-3）
 - S4-3 完成（按 §10 全流程：spec `docs/spec/s4-3-mistake-analysis.md` + plan `docs/plan/s4-3-mistake-analysis.md`，均经用户确认）。交付：迁移 `0011_s4_3`（`mistake_analyses` 加 `secondary_causes TEXT[]`、`confidence NUMERIC(3,2)` 与两条 CHECK）；`ai/prompts/mistake_analyze_v2.md` + `ai/analyze/mistake_analyzer.py`（严格 JSON + Pydantic + 2 次重试 + `unknown` 代码强制 + `error_step` 引用校验）；`services/mistake_analysis_service.py`（上下文拼装、笔记检索降级、upsert 覆盖）；`tasks/analyze_mistake.py`（`mistake.analyze`）；`api/v1/mistakes.py` 增加 `POST /api/v1/mistakes/{id}/analyze`；`schemas/mistake.py` DTO 扩展；前端详情页诊断区（重跑按钮 + 4s 轮询 + 低置信提示 + 空态「立即诊断」）。

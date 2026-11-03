@@ -508,6 +508,9 @@
 > 同一 `(user_id, question_id)` 只保留一条错题：重复录入**不返回 409**，而是复用既有行并重置 `status=待订正`、`correct_streak=0`（`last_review_at` 不动），响应仍是 **201**、`created=false`。
 > `mistake_analyses` 由 S4-3 写入：录入后异步诊断（`mistake.analyze`），也可用 `POST /{id}/analyze` 手动重跑；一道错题至多一条诊断（重跑覆盖同一行）。
 > 路由声明顺序：`/photo`、`/stats` 必须先于 `/{mistake_id}`（否则会被路径参数吞掉，与 §5.5 `/questions/import` 同款坑）。
+> S4-4 起 `mistake_analyses.similar_questions_json` 存变式题（版本化 JSON，见 `SCHEMA.md` §5.4）：
+> 手动触发一次生成 3 道，经「独立复算 + 确定性答案比对」自检后只保留通过的题；用户在详情页**逐题**确认后才入库。
+> 详情接口的 `analysis.similar_questions` / `analysis.variants_stats` 在未生成时为 `null`，生成过但一道未通过时为 `[]` + 计数。
 
 ### POST /api/v1/mistakes/photo
 - 权限：登录用户
@@ -677,6 +680,35 @@
 - 错误：`404/40400`「错题不存在」；`422/42200` `force` 非布尔；`500/50000`「任务队列不可用」（任务已落库为 `failed`）；`401/40100`
 - 备注：录入错题时（`POST /mistakes` 与拍照识别成功后）会自动 best-effort 入队同一任务，已有诊断则跳过；入队失败只记日志，不影响录入本身
 
+### POST /api/v1/mistakes/{mistake_id}/variants
+- 权限：登录用户（仅本人；他人与不存在统一 `404/40400`）
+- 类型：异步（**202**，用 §3.5 的 `GET /api/v1/tasks/{task_id}` 轮询，不新增任务查询接口）
+- 行为：手动触发生成 3 道变式题（不自动触发，避免一次录入烧掉多次生成调用）。前置条件两道，均为 **409/40900**：
+  1. 该错题已有诊断（`mistake_analyses` 一行）→ 否则「请先完成错因诊断」；
+  2. 原题题干 ≥10 字 → 否则「这道题题干太短，暂不支持生成变式」。
+- 任务结果 `result`（`succeeded` 后）：
+
+```json
+{"mistake_id": 12, "requested": 3, "passed": 2, "rejected": 1, "rounds": 2, "elapsed_ms": 41235}
+```
+
+- 出参：**202** `Envelope[TaskOut]`
+- 错误：`404/40400`「错题不存在」；`409/40900` 上面前置条件；`500/50000`「任务队列不可用」（任务已落库为 `failed`）；`401/40100`
+- 备注：结果写进 `mistake_analyses.similar_questions_json`（覆盖上一次，前端**重新生成**语义即覆盖）；
+  **生成彻底失败（重试耗尽）时任务 `failed` 且旧 JSON 保持不变**，已通过的部分则保留并照常成功。
+
+### POST /api/v1/mistakes/{mistake_id}/variants/{variant_id}/accept
+- 权限：登录用户（仅本人）
+- 类型：同步（把一道变式题写进题库 `questions`）
+- 入参：路径 `variant_id`（JSON 里的 8 位十六进制 id，不是数据库 id）
+- 行为：已在本次 JSON 里确认过的变式题 → 幂等返回既有 `question_id` + `created=false`；
+  题库里已有同 `stem_hash` 的题 → 同样复用 + `created=false`；否则新建
+  （`origin=ai`、`verified=false`、`tags=["AI变式"]`、知识点链接继承原题、`created_by`=本人）。
+- 出参：**200** `Envelope[{"question_id": 128, "created": true}]`
+- 错误：`404/40400`「变式题不存在或已被重新生成」；`401/40100`
+- 备注：服务内两次提交（建题一次、回写 JSON 的 `accepted_question_id` 一次）非原子，
+  但重试收敛到同一 `question_id`（spec §6.4 已说明）。
+
 ### DELETE /api/v1/mistakes/{mistake_id}
 - 权限：登录用户（仅本人）
 - 类型：同步（硬删）
@@ -688,9 +720,12 @@
 
 ### POST /api/v1/questions/generate
 - 权限：student
-- 类型：异步任务 ⚠（TODO 同步/异步 S4-4 定）
-- 说明：生成后必须过「格式校验（LaTeX 可编译、选项齐全、答案在选项内）+ 独立复算」两道关，不一致丢弃或重生成（最多 2 次），通过后入库并标 `verified`（方案 6.5）
-- 入参：TODO（S4-4）
+- 类型：异步任务 ⚠（通用「凭空出题」仍为 TODO）
+- 说明：S4-4 只交付了**错题变式**这一条路径 —— `POST /api/v1/mistakes/{id}/variants`（见 §6）。
+  它已实现方案 6.5 要求的两道关：格式校验（题型↔选项交叉校验）+ 独立复算（答案由第二遍无答案解题得出，
+  再用确定性比对判定），不一致丢弃并重生成（最多 2 轮 / 12 次调用）。与本文旧设想不同的是：
+  通过的题**不自动入库**，由用户逐题确认（`.../variants/{variant_id}/accept`），入库时 `verified=false`、`origin=ai`。
+- 本接口（不带错题的通用生成）未实现，留待后续任务卡。
 
 ## 8. 组卷与作答
 

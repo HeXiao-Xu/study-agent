@@ -499,8 +499,12 @@ PROMPT_VERSION = "question_gen_v1"
 PROMPT_FILE = "question_gen_v1.md"
 MAX_VARIANTS = 3
 MAX_RETRIES = 2
+# 真机验收：3 道解答题连解析一起输出常到 1700~2500 tokens，2000 会整批截断成非法 JSON
+MAX_TOKENS = 3500
 STEM_LIMIT = 2000
 ANSWER_LIMIT = 800
+# 真机验收：解析常写到 1500 字符以上，整批 3 道全废；放宽到 2000（Prompt 仍要求 ≤200 字）
+ANALYSIS_LIMIT = 2000
 KP_LIMIT = 3
 TEMPERATURE = 0.7
 
@@ -535,7 +539,7 @@ class GeneratedVariant(BaseModel):
     stem_md: str = Field(min_length=5, max_length=STEM_LIMIT)
     options: list[OptionIn] | None = None
     answer_md: str = Field(min_length=1, max_length=ANSWER_LIMIT)
-    analysis_md: str = Field(min_length=10, max_length=1500)
+    analysis_md: str = Field(min_length=10, max_length=ANALYSIS_LIMIT)
     qtype: str
     difficulty: int = Field(ge=1, le=5)
 
@@ -591,7 +595,7 @@ def generate_variants(
     for attempt in range(max_retries + 1):
         attempts = attempt + 1
         response = client.chat(
-            messages, temperature=TEMPERATURE, max_tokens=2000, scene=SCENE
+            messages, temperature=TEMPERATURE, max_tokens=MAX_TOKENS, scene=SCENE
         )
         try:
             parsed = _ItemsOut.model_validate(loads_json_object(response.text))
@@ -804,6 +808,8 @@ MAX_RETRIES = 2
 STEM_LIMIT = 2000
 ANSWER_LIMIT = 500
 TEMPERATURE = 0.2
+# 真机验收：对数不等式类题目的推理会写满上限，1200/1800 都被截断成非法 JSON，故留 2600
+MAX_TOKENS = 2600
 
 _ENV = Environment(
     loader=FileSystemLoader(str(Path(__file__).resolve().parent.parent / "prompts")),
@@ -824,9 +830,19 @@ class VerifyContext:
     options: list[tuple[str, str]] = field(default_factory=list)
 
 
+REASONING_LIMIT = 1500
+
+
 class _VerifyOut(BaseModel):
     answer_md: str = Field(min_length=1, max_length=ANSWER_LIMIT)
-    reasoning_md: str | None = Field(default=None, max_length=1500)
+    reasoning_md: str | None = None
+
+    @model_validator(mode="after")
+    def _trim_reasoning(self) -> "_VerifyOut":
+        # reasoning 只用于展示、不参与比对：超长就截断，不能因为写多了把整道题判死
+        if self.reasoning_md is not None and len(self.reasoning_md) > REASONING_LIMIT:
+            self.reasoning_md = self.reasoning_md[:REASONING_LIMIT]
+        return self
 
 
 def render_verify_prompt(context: VerifyContext) -> str:
@@ -853,7 +869,7 @@ def verify_answer(
     for attempt in range(max_retries + 1):
         attempts = attempt + 1
         response = client.chat(
-            messages, temperature=TEMPERATURE, max_tokens=1200, scene=SCENE
+            messages, temperature=TEMPERATURE, max_tokens=MAX_TOKENS, scene=SCENE
         )
         try:
             parsed = _VerifyOut.model_validate(loads_json_object(response.text))
@@ -1565,6 +1581,9 @@ def run_generation(session: Session, *, user_id: int, mistake_id: int) -> dict[s
             logger.warning(
                 "variant_generate_failed mistake_id=%s rounds=%s error=%s", mistake_id, rounds, exc
             )
+            # 一道都没通过时不能静默返回空结果：让任务 failed，旧 JSON 保持不变（spec §5.5）
+            if not passed:
+                raise
             break
         failed: list[GeneratedVariant] = []
         for variant in variants:
@@ -1869,6 +1888,17 @@ class VariantAcceptOut(BaseModel):
 并把 `similar_questions=variants[0], variants_stats=variants[1]` 传进构造；在 `_analysis_of` 之后新增：
 
 ```python
+def _flatten_self_check(raw: dict) -> dict:
+    """JSONB 里 self_check 是对象（带 attempts/verified_answer_md），出参只要状态字符串。"""
+    data = dict(raw)
+    check = data.get("self_check")
+    if isinstance(check, dict):
+        data["self_check"] = str(check.get("status") or "passed")
+    elif not isinstance(check, str):
+        data["self_check"] = "passed"
+    return data
+
+
 def _variants_of(payload: object) -> tuple[list[MistakeVariantOut] | None, VariantsStatsOut | None]:
     """从 JSONB 读变式题；结构版本不认识就当作没有（向前兼容，不抛错）。"""
     if not isinstance(payload, dict) or payload.get("version") != 1:
@@ -1881,7 +1911,7 @@ def _variants_of(payload: object) -> tuple[list[MistakeVariantOut] | None, Varia
         if not isinstance(raw, dict):
             continue
         try:
-            items.append(MistakeVariantOut.model_validate(raw))
+            items.append(MistakeVariantOut.model_validate(_flatten_self_check(raw)))
         except ValidationError:
             continue
     stats_raw = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
@@ -2830,3 +2860,43 @@ npm run test:run -- --pool=threads
 - [ ] **Step 5: 停掉验收用的服务**
 
 把 Task 9 Step 1 起的 uvicorn / worker 后台任务都停掉，并复查 Redis 没有残留消费者。**不要 push**（用户自己推）。
+
+## 附：确定性质量护栏（真机验收后补，spec §5.2.1）
+
+新增 `backend/app/ai/gen/quality.py`：
+
+```python
+SELF_TALK_MARKERS = ("？错", "?错", "错！", "重算", "重新计算", "再核", "改为", "换一道", "换一题",
+                     "修正题目", "但题目", "等等，", "让我重新", "重新写")
+
+
+def stem_fingerprint(stem_md: str) -> str:
+    return _SPACE.sub("", unicodedata.normalize("NFKC", stem_md or ""))
+
+
+def find_self_talk(analysis_md: str) -> str | None:
+    for marker in SELF_TALK_MARKERS:
+        if marker in (analysis_md or ""):
+            return marker
+    return None
+```
+
+`run_generation` 的循环在调用 `verify_answer` **之前**插入两道检查（`rejected` 记因、`failed` 占重生成名额）：
+
+```python
+    seen_stems: set[str] = set()
+    ...
+            fingerprint = stem_fingerprint(variant.stem_md)
+            if fingerprint in seen_stems:
+                rejected.append({"reason": "同批题干重复", "stem_excerpt": variant.stem_md[:EXCERPT_LIMIT]})
+                failed.append(variant)
+                continue
+            marker = find_self_talk(variant.analysis_md)
+            if marker is not None:
+                rejected.append({"reason": f"解析自问自答（命中「{marker}」）", ...})
+                failed.append(variant)
+                continue
+            seen_stems.add(fingerprint)
+```
+
+验证命令：`cd backend && ..\.venv\Scripts\python.exe -m pytest tests/test_variant_quality.py tests/test_question_gen_service.py -q`
