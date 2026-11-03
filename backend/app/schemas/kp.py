@@ -93,7 +93,7 @@ class GraphStatsOut(BaseModel):
 
 
 class GraphBuildIn(BaseModel):
-    subject_id: int | None = Field(default=None, ge=1)
+    subject_id: int = Field(ge=1)
     relations: list[str] | None = Field(default=None, max_length=4)
     limit: int | None = Field(default=None, ge=1, le=200)
 

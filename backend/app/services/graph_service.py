@@ -372,8 +372,9 @@ def build(
         extra={
             "subject_id": subject_id,
             "nodes": summary.nodes,
-            "created": summary.created,
-            "updated": summary.updated,
+            # 键名不能叫 created/updated：与 LogRecord 自带属性冲突会抛 KeyError
+            "created_edges": summary.created,
+            "updated_edges": summary.updated,
             "skipped_approved": summary.skipped_approved,
             "skipped_rejected": summary.skipped_rejected,
             "calls": summary.calls,

@@ -1,4 +1,4 @@
-"""S2-9 知识点树接口（API.md §4）。"""
+"""S2-9/S4-5 知识点树与图谱关系接口（API.md §4、§4.5）。"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -11,14 +11,28 @@ from app.core.permissions import require_role
 from app.models.note import Note
 from app.models.user import User
 from app.schemas.common import Envelope, PageData
-from app.schemas.kp import KpCreate, KpNodeOut, KpOrderIn, KpTreeOut, KpUpdate, SubjectOut
+from app.schemas.kp import (
+    EdgeReviewBatchIn,
+    EdgeReviewBatchOut,
+    EdgeReviewIn,
+    GraphBuildIn,
+    GraphEdgeOut,
+    GraphEdgePage,
+    GraphStatsOut,
+    KpCreate,
+    KpNodeOut,
+    KpOrderIn,
+    KpTreeOut,
+    KpUpdate,
+    SubjectOut,
+)
 from app.schemas.kp_align import AlignBatchIn, AlignBatchOut, PendingAlignOut
 from app.schemas.tasks import TaskOut
-from app.services import kp_align_service, kp_service, task_service
+from app.services import graph_service, kp_align_service, kp_service, task_service
 from app.services.kp_align_service import AlignPair
 from app.tasks.kp_align import TASK_KP_ALIGN
 from app.tasks.queue import TaskQueue, get_task_queue
-from app.utils.pagination import PageParams, page_params
+from app.utils.pagination import PageParams, SortParams, page_params, sort_params
 
 router = APIRouter(prefix="/kp", tags=["kp"])
 
@@ -164,3 +178,106 @@ def reject_align(
         pairs=[AlignPair(**item.model_dump()) for item in payload.items],
     )
     return Envelope(trace_id=get_trace_id(), data=result)
+
+
+@router.post(
+    "/graph/build",
+    status_code=202,
+    response_model=Envelope[TaskOut],
+    summary="构建知识图谱关系（异步）",
+)
+def build_graph(
+    payload: GraphBuildIn,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> Envelope[TaskOut]:
+    task = graph_service.enqueue_build(
+        session,
+        owner=current_user,
+        subject_id=payload.subject_id,
+        relations=payload.relations,
+        limit=payload.limit,
+        queue=queue,
+    )
+    return Envelope(trace_id=get_trace_id(), data=TaskOut.model_validate(task))
+
+
+@router.get(
+    "/graph/edges",
+    response_model=Envelope[GraphEdgePage],
+    summary="图谱关系边列表（默认只出待校验）",
+)
+def list_graph_edges(
+    params: PageParams = Depends(page_params),
+    sort: SortParams = Depends(sort_params),
+    status: str = Query("pending", description="pending/approved/rejected/all"),
+    relation: str | None = Query(None, description="contains/prerequisite/related/confusable"),
+    subject_id: int | None = Query(None, description="学科 id"),
+    q: str | None = Query(None, description="任一端知识点名称关键词"),
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[GraphEdgePage]:
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=graph_service.list_edges(
+            session,
+            subject_id=subject_id,
+            status=status,
+            relation=relation,
+            keyword=q,
+            page=params,
+            sort=sort,
+        ),
+    )
+
+
+# 必须排在 /graph/edges/{edge_id}/review 之前，否则 "review" 会被当成 edge_id
+@router.post(
+    "/graph/edges/review",
+    response_model=Envelope[EdgeReviewBatchOut],
+    summary="批量通过/驳回关系边",
+)
+def review_graph_edges(
+    payload: EdgeReviewBatchIn,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[EdgeReviewBatchOut]:
+    updated, skipped = graph_service.review_edges(
+        session, edge_ids=payload.edge_ids, approve=payload.approve, reviewer=current_user
+    )
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=EdgeReviewBatchOut(updated=updated, skipped=skipped),
+    )
+
+
+@router.post(
+    "/graph/edges/{edge_id}/review",
+    response_model=Envelope[GraphEdgeOut],
+    summary="通过/驳回一条关系边",
+)
+def review_graph_edge(
+    edge_id: int,
+    payload: EdgeReviewIn,
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[GraphEdgeOut]:
+    edge = graph_service.review_edge(
+        session, edge_id=edge_id, approve=payload.approve, reviewer=current_user
+    )
+    return Envelope(trace_id=get_trace_id(), data=graph_service.edge_out(session, edge))
+
+
+@router.get(
+    "/graph/stats", response_model=Envelope[GraphStatsOut], summary="图谱统计"
+)
+def graph_stats(
+    subject_id: int | None = Query(None, description="学科 id"),
+    current_user: User = Depends(require_role("admin", "teacher")),
+    session: Session = Depends(get_db),
+) -> Envelope[GraphStatsOut]:
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=graph_service.stats(session, subject_id=subject_id),
+    )

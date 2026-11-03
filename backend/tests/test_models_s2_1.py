@@ -24,7 +24,7 @@ from app.models import (
     User,
     UserRelation,
 )
-from app.models.enums import EdgeRelation, EdgeSource, UserRole, in_check
+from app.models.enums import EdgeRelation, EdgeReviewStatus, EdgeSource, UserRole, in_check
 
 
 def test_user_role_values_match_schema() -> None:
@@ -87,6 +87,9 @@ _EXPECTED_COLUMNS: dict[str, set[str]] = {
         "relation",
         "weight",
         "source",
+        "review_status",
+        "reviewed_by",
+        "reviewed_at",
         "created_at",
         "updated_at",
     },
@@ -97,7 +100,7 @@ _NULLABLE: dict[str, set[str]] = {
     "user_relations": set(),
     "subjects": {"config_json"},
     "knowledge_points": {"parent_id", "description", "exam_weight", "embedding"},
-    "knowledge_edges": {"weight"},
+    "knowledge_edges": {"weight", "reviewed_by", "reviewed_at"},
 }
 
 
@@ -231,9 +234,14 @@ def test_knowledge_edges_constraints() -> None:
     assert checks["ck_knowledge_edges_relation"] == in_check("relation", EdgeRelation)
     assert checks["ck_knowledge_edges_source"] == in_check("source", EdgeSource)
     assert "ck_knowledge_edges_not_self" in checks
+    assert checks["ck_knowledge_edges_review_status"] == in_check(
+        "review_status", EdgeReviewStatus
+    )
+    assert "ck_knowledge_edges_reviewed" in checks
     assert _foreign_keys(KnowledgeEdge) == {
         "src_kp_id": "knowledge_points.id",
         "dst_kp_id": "knowledge_points.id",
+        "reviewed_by": "users.id",
     }
     assert tuple(_indexes(KnowledgeEdge)["ix_knowledge_edges_dst_kp_id"].columns.keys()) == (
         "dst_kp_id",
