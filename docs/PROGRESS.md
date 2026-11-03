@@ -5,12 +5,14 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1、S4-2、S4-3 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-4 变式题生成 + 自检（手动触发生成 3 道 → 独立复算 → 确定性比对 → 逐题入库；`POST /mistakes/{id}/variants` 与 `.../accept`；结果写 `mistake_analyses.similar_questions_json` v1）；后端 **1082 passed, 1 warning**，前端 **194 passed / 35 files**（实测）
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1～S4-5 已完成（tag `m0-env-ready` / `m0-rag-validated`）
+- 最近完成：S4-5 知识图谱关系构建 + 人工校验（四类关系、AI 边先进 `pending`、人工通过才算数、驳回当墓碑；5 条接口 + 前端「图谱关系」tab；真机 357 条边、人工校验 200 条）；后端 **1142 passed, 1 warning**，前端 **204 passed / 36 files**（实测）
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
 - 关键口径（S4-4）：只手动触发、一次固定 3 道；三分工（生成 → 只给题干的独立复算 → 纯函数比对），**不设第三个 LLM 判官**；最多 2 轮 / 12 次调用；结果写 `similar_questions_json`（v1、覆盖式、无迁移）；**不自动入库**，逐题 accept 才建题（`origin=ai`、`verified=false`、`tags=["AI变式"]`）；生成彻底失败 → 任务 `failed` 且旧 JSON 不动（D-047）
+- 关键口径（S4-5）：`contains` 结构边（107 条，自动 `approved`）+ `prerequisite`（向量 top-8 候选 + 每节点一次 LLM，≤2 条）+ `related`/`confusable`（余弦分档 + 批量复核）；**AI 边一律 `pending`**，`rejected` 当墓碑不复活、`approved` 永不降级；单次构建 ≤180 次调用、超时 1800 s；候选排除同名/祖先-后代对，前置还拦反向对（D-048）
 - 验收（S4-3，自测集，非真实学生数据）：30 条 6 类错因各 5 条，主因准确率 **86.7%**（26/30），主因或次因 90%，平均 10.3 s，`error_step` 30/30 引用原文；4 条分歧均为口径可争、无离谱输出；边界 3 项真机通过；重复性 3/3 一致。**注**：v1 口径下仅 36.7%，v2 口径收紧后达标，存在自测集过拟合风险，详见 `.sdd/s4-3/acceptance-evidence.md`
-- 下一步：S4-5 知识图谱关系构建 + 人工校验；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 验收（S4-5，真机 + 开发者自查）：学科 7（108 知识点）构建出 **357 条边**（contains 107 / prerequisite 142 / confusable 78 / related 30），单次构建 144 次调用、~490 s、¥0.12 量级；**人工校验 200 条**（157 通过 / 43 驳回，驳回逐条给理由）——**由开发者判定，不是真实教师口径**；重跑验证 `approved` 降级 0 条、`rejected` 复活 0 条、`skipped_approved=243`/`skipped_rejected=29`。验收中抓到并修掉 8 个缺陷（含「审核接口不 commit 导致静默丢数据」「分页不稳定导致重复/漏行」），详见 `.sdd/s4-5/acceptance-evidence.md`
+- 下一步：S4-6 知识图谱可视化（把已审核的边画出来 + 按前置推荐）；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -65,7 +67,7 @@
 - [x] S4-2 错题录入 + 状态机
 - [x] S4-3 错因诊断服务 ★
 - [x] S4-4 变式题生成 + 复算自检
-- [ ] S4-5 图谱关系构建 + 人工校验
+- [x] S4-5 知识图谱关系构建 + 人工校验
 - [ ] S4-6 图谱可视化前端
 - [ ] S4-7 掌握度模型 ★
 - [ ] S4-8 错题统计看板

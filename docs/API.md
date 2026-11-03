@@ -300,7 +300,7 @@
 - 类型：异步（`graph.build`）
 - 入参：`{"subject_id": 7, "relations": ["contains", "prerequisite", "related", "confusable"], "limit": 50}`（`relations`/`limit` 可选，`limit` 只对前置推断生效）
 - 出参：202 `Envelope[TaskOut]`
-- 备注：`contains` 直接 `approved`；其余 `pending`；单次调用上限 180 次，超限任务仍 `succeeded` 且结果 `truncated=true`
+- 备注：`subject_id` 必填；`contains` 直接 `approved`（自动补 `reviewed_at`，`reviewed_by` 为空）；其余 `pending`；单次调用上限 180 次，超限任务仍 `succeeded` 且结果 `truncated=true`；任务超时口径见 `TASK_JOB_TIMEOUT_SECONDS`（默认 1800 s）
 - 错误：`403/40300`（学生）、`422/42200`（未知 relation）、`500/50000`（队列不可用）
 
 #### GET /api/v1/kp/graph/edges
@@ -308,14 +308,14 @@
 - 入参：`status`（默认 `pending`，可选 `approved`/`rejected`/`all`）、`relation`、`subject_id`、`q`（任一端名称包含）、`page`/`page_size`/`sort_by`/`order`
 - 出参：`Envelope[PageData[GraphEdgeOut]]`
 - `GraphEdgeOut`：`{"id": 12, "src_kp_id": 3, "src_name": "函数单调性", "dst_kp_id": 8, "dst_name": "导数应用", "relation": "prerequisite", "weight": 0.82, "source": "ai", "review_status": "pending", "reviewed_at": null, "created_at": "2026-11-04T01:00:00Z"}`
-- 备注：两端名称一次 `IN` 批查，禁止 N+1；`weight` = 置信度（前置）或余弦相似度（相关/易混）
+- 备注：两端名称一次 `IN` 批查，禁止 N+1；`weight` = 置信度（前置）或余弦相似度（相关/易混）；排序在 `created_at`/`weight`/`id` 之上**始终追加 `id` 兜底**（同批写入的边时间戳相同，否则分页会重复/漏行）
 - 错误：`403/40300`、`422/42200`
 
 #### POST /api/v1/kp/graph/edges/{edge_id}/review
 - 权限：admin / teacher
 - 入参：`{"approve": true}`
 - 出参：`Envelope[GraphEdgeOut]`
-- 备注：幂等——重复提交同一结论只刷新 `reviewed_at`；`reviewed_by` 记当前账号
+- 备注：幂等——重复提交同一结论只刷新 `reviewed_at`；`reviewed_by` 记当前账号；服务层直接 `commit`（路由的 `get_db` 不提交）
 - 错误：`403/40300`、`404/40400`
 
 #### POST /api/v1/kp/graph/edges/review

@@ -71,6 +71,10 @@ npm run dev                             # 看到 "Local: http://localhost:5173/"
 # 验收页：http://localhost:5173/debug（显示后端 /health 结果）
 ```
 
+> 知识图谱（S4-5）有两种触发方式：
+> - 界面：老师/管理员登录 → 知识库页「图谱关系」tab → 「重新构建」（走 ARQ，需 ③ 在跑）
+> - 命令行（不进队列，适合调试）：`cd backend` 后 `python scripts\build_graph.py --subject 7 [--relations prerequisite] [--limit 5] [--dry-run]`
+
 > `uvicorn` / `arq` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
 > 普通 PowerShell 先跑 `.venv\Scripts\Activate.ps1` 再用。
 > 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）；

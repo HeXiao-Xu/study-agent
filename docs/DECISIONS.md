@@ -646,3 +646,18 @@
 - 决策 6（真机调参四次，全部留存证据在 `.sdd/s4-4/progress.md`）：生成 `max_tokens` 2000→**3500**（解答题常需 1700~2500，2000 处被截断成非法 JSON）；复算 1200→1800→**2600**；生成 `analysis_md` 上限 1500→**2000**；复算 `reasoning_md` 超 1500 字符改为**截断不判失败**（展示字段，判死会白跑整题）。另加 `ai/gen/json_repair.py::loads_lenient_json` 三档兜底修 LaTeX 反斜杠（`\sqrt` 非法转义、`\frac` 变被吃成换页符）。
 - 决策 7（测试与契约）：后端基线 999 → **1082 passed, 1 warning**；前端 187/35 → **194 passed / 35 files**。`API.md` §6 补两个接口 + 变式题说明、§7 说明通用「凭空出题」仍未实现；`SCHEMA.md` §5.4 补 `similar_questions_json` v1 结构。
 - 已知限制：复算与生成若**犯了同一个错**，比对仍会通过（m=44 变式2 题面自相矛盾、两侧都算成 -1）；解析长度、模板腔调仍由模型决定；不生成图形题/需要画图的题；一次固定 3 道不可指定；已入库的变式题与普通 AI 题一样没有审核流；浏览器级 E2E 未做（无 Playwright，§2.1 不擅自加依赖）。
+
+## D-048 知识图谱关系构建与人工校验（S4-5）
+
+- 背景：`knowledge_edges` 只有表结构没有数据；S4-6 的图谱可视化与「按前置推荐」都要求先有关系。spec/plan 见 `docs/spec/s4-5-knowledge-graph.md`、`docs/plan/s4-5-knowledge-graph.md`。
+- 决策 1（新增三列 + 状态机）：`knowledge_edges` 加 `review_status`（`pending/approved/rejected`，默认 `pending`）、`reviewed_by`（FK `users.id`，`ON DELETE SET NULL`）、`reviewed_at`；CHECK `ck_knowledge_edges_reviewed` 保证「非 pending 必须有 reviewed_at」。**AI 推断的边一律先进 `pending`**，人工通过才算数；`contains` 结构边由系统自动 `approved`（`reviewed_by` 留空）。迁移把历史行回填为 `approved`，避免上线瞬间整图变待校验。
+- 决策 2（四类关系的生成方式）：`contains` 纯结构（父子，节点数 − 1，零成本）；`prerequisite` 走「向量召回 top-8 候选 + 每节点一次 LLM 判定（≤2 条、confidence ≥0.5、必须在候选内）」；`related`/`confusable` 走「余弦分档 + 批量 LLM 复核（每批 8 对）」。分档阈值：related `cos ∈ [0.75, 0.90)` 且不同父；confusable `cos ≥ 0.90` 或同父 `cos ≥ 0.75`；一对只进一个桶，confusable 优先。**阈值是拍出来的**（108 个知识点的样本），换 embedding 模型需重标定。
+- 决策 3（候选排除规则，验收后补）：前置候选排除「自身 / 父子 / 同名节点」；related/confusable 候选排除「祖先-后代」。理由：不同章节的同名节点余弦≈1 但只可能是易混；上下级关系已由 `contains` 表达，再挂相关/易混只是噪音——真机 234 条待校验边里 34 条是这类章→子节边。
+- 决策 4（幂等与墓碑）：已 `approved` 的边重跑时跳过（**永不降级**）；已 `rejected` 的边当墓碑跳过、不复活（本卡不做恢复入口）；`pending` 只刷新 `weight`；缺失才插入。前置方向守卫：已落库的反向对 + **本轮已计划的反向对**都要拦（后一条是验收补的，否则同轮 A→B、B→A 会同时落库）。
+- 决策 5（成本与超时）：单次构建最多 **180 次 LLM 调用**（`MAX_CALLS`），用尽即停并标 `truncated=true`，任务仍算 `succeeded`。真机实测 108 知识点走完 144 次、~490 s，因此 `task_job_timeout_seconds` 默认 **300 → 1800**（ARQ 0.28 不支持按任务设超时，只能全局调）。
+- 决策 6（审核与事务）：5 条接口全部 `require_role("admin","teacher")`；`/graph/edges/review` 必须注册在 `/graph/edges/{edge_id}/review` 之前。**审核用例自带 commit**——路由的 `get_db` 只 close 不 commit，验收时踩过「接口返回 updated=156、重新查询全是 pending」的静默丢数据。
+- 决策 7（分页稳定性，验收后补）：`created_at` 在同一次构建里完全相同，只按它排序会让「同一行跨页重复 + 另一行漏掉」（实测 234 行里 19 行重复）。列表排序一律追加 `id` 兜底。
+- 决策 8（人工校验口径）：任务卡要求 ≥30 条人工校验，本次做 **200 条**（157 通过 / 43 驳回），全部由**开发者逐条判定**，驳回逐条给理由（`review_rubric.py` / `decisions_reasons.json`）。**明确不是真实教师校验**，`reviewed_by` 指向验收账号（`user.id=60`），PROGRESS 与证据文档都标注「开发者自查」。
+- 决策 9（已知随机性）：配对复核走 LLM，同 subject 重复构建会带来新增候选（本次重跑 pending 29 → 50，边数 336 → 357）。产品口径因此定为「**构建 = 补充候选，审核 = 人来定稿**」，不是一次构建就定稿。
+- 测试与契约：后端基线 1082 → **1142 passed, 1 warning**；前端 194/35 → **204 passed / 36 files**；`API.md` 新增 §4.5 五条接口、`SCHEMA.md` 补三列 + `llm_call_logs.scene` 加 `graph`。
+- 已知限制：关系语义靠 LLM，方向错与关系类型错都出现过（43 条驳回里 21 条是前置类）；阈值未按学科标定；`rejected` 无恢复 UI；图谱可视化与「按前置推荐」归 S4-6；浏览器级 E2E 未做（无 Playwright，§2.1 不擅自加依赖）。
