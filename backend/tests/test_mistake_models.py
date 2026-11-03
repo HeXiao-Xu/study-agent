@@ -34,3 +34,36 @@ def test_mistake_analysis_unique_and_cascade():
     assert fk.ondelete == "CASCADE"
     names = {c.name for c in MistakeAnalysis.__table__.constraints}
     assert "uq_mistake_analyses_mistake_id" in names
+
+
+def test_mistake_analysis_columns_declared():
+    from decimal import Decimal
+
+    from sqlalchemy import CheckConstraint, Numeric
+    from sqlalchemy.dialects.postgresql import ARRAY
+
+    from app.models.mistake_analysis import MistakeAnalysis
+
+    columns = {c.name for c in MistakeAnalysis.__table__.columns}
+    assert {"secondary_causes", "confidence"} <= columns
+
+    checks = {
+        c.name
+        for c in MistakeAnalysis.__table__.constraints
+        if isinstance(c, CheckConstraint)
+    }
+    assert "ck_mistake_analyses_secondary_causes" in checks
+    assert "ck_mistake_analyses_confidence" in checks
+
+    secondary = MistakeAnalysis.__table__.c.secondary_causes
+    assert isinstance(secondary.type, ARRAY)
+    assert secondary.nullable is True
+
+    confidence = MistakeAnalysis.__table__.c.confidence
+    assert isinstance(confidence.type, Numeric)
+    assert (confidence.type.precision, confidence.type.scale) == (3, 2)
+    assert confidence.nullable is True
+
+    # 置信度用 Decimal 承载（AGENTS §9.2：不用 float 存分数）
+    assert isinstance(MistakeAnalysis.__annotations__["confidence"], object)
+    assert Decimal("0.82") == Decimal("0.82")

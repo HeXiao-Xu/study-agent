@@ -501,12 +501,12 @@
 - 行为：同一事务删除 `question_kps` 关联；`mistakes` 表存在时先查引用（S4-2 建表后自动生效，S4-1 阶段用 `has_table` 守卫跳过）
 - 错误：`403/40300`；`404/40400`；`409/40900`「题目已被错题本引用，不能删除、合并或拆分」
 
-## 6. 错题本（S4-2 定稿）
+## 6. 错题本（S4-2 定稿，S4-3 增诊断）
 
 > 错题是**学生私有数据**：所有接口只作用于当前登录用户，他人记录与不存在统一 `404/40400`，不泄露存在性。
-> 枚举：`status` = `待订正` / `已订正` / `已掌握`；`cause_type` = `概念不清` / `计算失误` / `审题偏差` / `方法不当` / `知识遗忘` / `时间不足` / `unknown`（TEXT + CHECK，常量见 `MistakeStatus` / `CauseType`，SCHEMA §10）。
+> 枚举：`status` = `待订正` / `已订正` / `已掌握`；`cause_type` / `secondary_causes` = `概念不清` / `计算失误` / `审题偏差` / `方法不当` / `知识遗忘` / `时间不足` / `unknown`（TEXT + CHECK，常量见 `MistakeStatus` / `CauseType`，SCHEMA §10）。
 > 同一 `(user_id, question_id)` 只保留一条错题：重复录入**不返回 409**，而是复用既有行并重置 `status=待订正`、`correct_streak=0`（`last_review_at` 不动），响应仍是 **201**、`created=false`。
-> `mistake_analyses` 本卡只建表不写入：`cause_type` 与 `analysis` 在 S4-3 上线前恒为空。
+> `mistake_analyses` 由 S4-3 写入：录入后异步诊断（`mistake.analyze`），也可用 `POST /{id}/analyze` 手动重跑；一道错题至多一条诊断（重跑覆盖同一行）。
 > 路由声明顺序：`/photo`、`/stats` 必须先于 `/{mistake_id}`（否则会被路径参数吞掉，与 §5.5 `/questions/import` 同款坑）。
 
 ### POST /api/v1/mistakes/photo
@@ -634,7 +634,10 @@
 - 类型：同步
 - 出参：`Envelope[MistakeDetail]`
 - `MistakeDetail` = `MistakeSummary` + `stem_md` / `options`（`[{key,text}]`，非选择题为 `null`）/ `my_answer_md` / `correct_answer_md` / `image_url`（`/api/v1/files/{file_id}/image`，需 Bearer；前端经 `http.ts` 取 blob 再转 objectURL）/ `analysis`
-- `analysis`：`{cause_type, error_step, explanation_md, review_advice_md, kp_ids, created_at}`；S4-3 前恒为 `null`
+- `analysis`：`{cause_type, secondary_causes, error_step, explanation_md, review_advice_md, kp_ids, confidence, model, prompt_version, created_at}`；未诊断（或诊断失败且从未成功过）时恒为 `null`
+  - `cause_type="unknown"`：学生没有作答（或识别不出），只讲题不推断错因，此时 `secondary_causes=[]`、`error_step=null`
+  - `confidence`：LLM 自评 0.00–1.00（库里 `NUMERIC(3,2)`，出参转 `number`），前端在 `< 0.5` 时提示「把握较低」
+  - `created_at`：**最近一次**诊断落库时间（重跑覆盖会刷新）
 - 错误：`404/40400`「错题不存在」；`401/40100`
 
 ### PATCH /api/v1/mistakes/{mistake_id}
@@ -656,6 +659,23 @@
   - 三种情况都刷新 `last_review_at`；已掌握后继续答对，`correct_streak` 继续递增（不封顶）。
 - 出参：`Envelope[MistakeDetail]`（返回更新后的整行，前端直接刷新徽标）
 - 错误：`404/40400`；`422/42200` 缺 `correct`；`401/40100`
+
+### POST /api/v1/mistakes/{mistake_id}/analyze
+- 权限：登录用户（仅本人；他人与不存在统一 `404/40400`）
+- 类型：异步（**202**，用 §3.5 的 `GET /api/v1/tasks/{task_id}` 轮询，不新增任务查询接口）
+- 入参：query `force`（bool，默认 `true`；`force=false` 表示已有诊断就别再花一次 LLM 调用）
+- 行为：先校验错题归属，再建 `mistake.analyze` 任务；`force=false` 且已有诊断时任务立即 `succeeded` 且 `result.skipped=true`（前端据此提示「已有诊断」，不需要为它单独写分支）
+- 任务结果 `result`（`succeeded` 后）：
+
+```json
+{"mistake_id": 12, "cause_type": "概念不清", "secondary_causes": ["计算失误"],
+ "confidence": 0.82, "retrieval_hits": 2}
+```
+
+  跳过时：`{"mistake_id": 12, "skipped": true}`
+- 出参：**202** `Envelope[TaskOut]`
+- 错误：`404/40400`「错题不存在」；`422/42200` `force` 非布尔；`500/50000`「任务队列不可用」（任务已落库为 `failed`）；`401/40100`
+- 备注：录入错题时（`POST /mistakes` 与拍照识别成功后）会自动 best-effort 入队同一任务，已有诊断则跳过；入队失败只记日志，不影响录入本身
 
 ### DELETE /api/v1/mistakes/{mistake_id}
 - 权限：登录用户（仅本人）

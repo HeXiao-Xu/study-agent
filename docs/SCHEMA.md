@@ -298,19 +298,23 @@ erDiagram
 | mistake_id | BIGINT | 否 | — | 错题（ER 为 1:1） | `uq_mistake_analyses_mistake_id`；FK `fk_mistake_analyses_mistake_id` → `mistakes.id` **ON DELETE CASCADE** ✅ |
 | kp_ids | BIGINT[] | 是 | — | 定位到的知识点 | `ix_mistake_analyses_kp_ids` **GIN** ✅ |
 | cause_type | TEXT | 否 | — | 主错因，§10.8 | `ck_mistake_analyses_cause_type` ✅ |
+| secondary_causes | TEXT[] | 是 | — | 次错因，至多 2 个，元素属于 `CauseType` 值集（S4-3） | `ck_mistake_analyses_secondary_causes` ✅ |
 | error_step | TEXT | 是 | — | 第一处出错步骤（引用学生原文） | — |
 | explanation_md | TEXT | 是 | — | 正确解法（分步骤 LaTeX） | — |
-| similar_questions_json | JSONB | 是 | — | 2–3 道变式题（S4-3 返回） | — |
+| similar_questions_json | JSONB | 是 | — | 2–3 道变式题（S4-4 写入；S4-3 保持 NULL） | — |
 | review_advice_md | TEXT | 是 | — | 复习建议（前置知识 + 笔记关联） | — |
+| confidence | NUMERIC(3,2) | 是 | — | LLM 自评置信度 0.00–1.00（S4-3） | `ck_mistake_analyses_confidence` ✅ |
 | model | TEXT | 否 | — | 诊断所用模型 | — |
-| prompt_version | TEXT | 否 | — | Prompt 版本（prompt_templates 引用） | — |
-| created_at | TIMESTAMPTZ | 否 | `now()` | 诊断时间 | — |
+| prompt_version | TEXT | 否 | — | Prompt 版本（本卡为 `mistake_analyze_v1`） | — |
+| created_at | TIMESTAMPTZ | 否 | `now()` | **最近一次诊断**落库时间（重跑覆盖时刷新） | — |
 
 **约束与索引（实测 DDL）**
 
 - 主键：`mistake_analyses_pkey`。
 - 唯一约束：`uq_mistake_analyses_mistake_id` = `UNIQUE(mistake_id)`（一道错题至多一条诊断）。
 - 检查约束：`ck_mistake_analyses_cause_type`：`cause_type IN ('概念不清', '计算失误', '审题偏差', '方法不当', '知识遗忘', '时间不足', 'unknown')`。
+- 检查约束（S4-3，迁移 `0011_s4_3`）：`ck_mistake_analyses_secondary_causes`：`secondary_causes IS NULL OR secondary_causes <@ ARRAY['概念不清','计算失误','审题偏差','方法不当','知识遗忘','时间不足','unknown']::text[]`。
+- 检查约束（S4-3，迁移 `0011_s4_3`）：`ck_mistake_analyses_confidence`：`confidence IS NULL OR (confidence >= 0 AND confidence <= 1)`。
 - 索引：`ix_mistake_analyses_kp_ids` = **GIN** `(kp_ids)`，支撑列表 `kp_ids @>` 的 `EXISTS` 筛选。
 - 外键：`fk_mistake_analyses_mistake_id` → `mistakes.id`，**ON DELETE CASCADE**；删除错题时诊断行由数据库自动清理，`mistake_service.delete_mistake` 仍在同一事务内**显式先删诊断再删错题**（不依赖级联的实现细节）；`test_delete_mistake_removes_analysis_too` 断言诊断删除语句确实执行、删除顺序为「诊断 → 错题」、`commits == 1`。
 
