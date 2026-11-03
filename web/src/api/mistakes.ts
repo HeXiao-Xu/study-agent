@@ -127,6 +127,16 @@ export async function reviewMistake(id: number, correct: boolean): Promise<Mista
   return resp.data.data
 }
 
+/** 触发错因诊断（异步）；返回 202 的任务，用 `api/tasks.ts::getTask` 轮询。 */
+export async function analyzeMistake(id: number, force = true): Promise<TaskOut> {
+  const resp = await http.post<ApiEnvelope<TaskOut>>(
+    `${API_PREFIX}/mistakes/${id}/analyze`,
+    null,
+    { params: { force } },
+  )
+  return resp.data.data
+}
+
 export async function deleteMistake(id: number): Promise<void> {
   await http.delete(`${API_PREFIX}/mistakes/${id}`)
 }

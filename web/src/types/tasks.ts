@@ -1,5 +1,5 @@
-/** S2-7 任务类型 + S4-1 切题任务结果 + S4-2 错题识别任务结果。 */
-import type { MistakeRecognizeResult } from '@/types/mistakes'
+/** S2-7 任务类型 + S4-1 切题 / S4-2 识别 / S4-3 诊断任务结果。 */
+import type { MistakeAnalyzeResult, MistakeRecognizeResult } from '@/types/mistakes'
 
 export type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
@@ -31,7 +31,7 @@ export interface ExtractTaskResult {
 export interface TaskDetail extends TaskOut {
   attempts: number
   payload: Record<string, unknown>
-  result: ExtractTaskResult | MistakeRecognizeResult | null
+  result: ExtractTaskResult | MistakeRecognizeResult | MistakeAnalyzeResult | null
   error: string | null
   started_at: string | null
   finished_at: string | null

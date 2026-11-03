@@ -15,11 +15,19 @@ import { MdPreview } from 'md-editor-v3'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { getImageBlob } from '@/api/files'
 import { listSubjects } from '@/api/kp'
-import { deleteMistake, getMistake, reviewMistake, updateMistake } from '@/api/mistakes'
+import {
+  analyzeMistake,
+  deleteMistake,
+  getMistake,
+  reviewMistake,
+  updateMistake,
+} from '@/api/mistakes'
+import { getTask } from '@/api/tasks'
 import type { SubjectOut } from '@/types/kp'
 import {
   MISTAKE_CAUSE_LABELS,
   type MistakeAnalysis,
+  type MistakeAnalyzeResult as MistakeAnalysisResultView,
   type MistakeDetail,
   type MistakeStatus,
 } from '@/types/mistakes'
@@ -200,6 +208,76 @@ async function remove(): Promise<void> {
   }
 }
 
+/** 诊断轮询：任务在 4 秒间隔下轮询，成功/失败/卸载都要停表，避免孤儿定时器。 */
+const analyzing = ref(false)
+const analyzeError = ref('')
+const analyzeTaskId = ref<number | null>(null)
+const analyzeSeconds = ref(0)
+let analyzeTimer: ReturnType<typeof setInterval> | null = null
+
+const lowConfidence = computed(() => {
+  const value = analysis.value?.confidence
+  return value !== null && value !== undefined && value < 0.5
+})
+
+function stopAnalyzePolling(): void {
+  if (analyzeTimer !== null) {
+    clearInterval(analyzeTimer)
+    analyzeTimer = null
+  }
+}
+
+function resetAnalyzeState(): void {
+  stopAnalyzePolling()
+  analyzeSeconds.value = 0
+  analyzeTaskId.value = null
+}
+
+async function pollAnalyze(): Promise<void> {
+  const taskId = analyzeTaskId.value
+  if (taskId === null || !analyzing.value) return
+  try {
+    const task = await getTask(taskId)
+    // 卸载或重跑后迟到的响应：既不能刷新详情，也不能把 analyzing 改回 false
+    if (!analyzing.value) return
+    if (task.status === 'succeeded') {
+      const result = task.result as MistakeAnalysisResultView | null
+      resetAnalyzeState()
+      analyzing.value = false
+      await load()
+      if (result?.skipped) ElMessage.info('已有诊断，未重复调用')
+      return
+    }
+    if (task.status === 'failed') {
+      analyzeError.value = task.error || '诊断失败，可重试'
+      resetAnalyzeState()
+      analyzing.value = false
+    }
+  } catch {
+    // http.ts 已弹错；这里只停轮询，避免无限重试把后端打满
+    resetAnalyzeState()
+    analyzing.value = false
+  }
+}
+
+async function startAnalyze(): Promise<void> {
+  if (analyzing.value || detail.value === null) return
+  analyzeError.value = ''
+  analyzing.value = true
+  try {
+    const task = await analyzeMistake(detail.value.id, true)
+    analyzeTaskId.value = task.id
+    analyzeSeconds.value = 0
+    analyzeTimer = setInterval(() => {
+      analyzeSeconds.value += 4
+      void pollAnalyze()
+    }, 4000)
+  } catch {
+    analyzing.value = false
+    analyzeError.value = '发起诊断失败，请稍后重试'
+  }
+}
+
 onMounted(() => {
   void load()
   void loadSubjects()
@@ -218,6 +296,9 @@ onBeforeUnmount(() => {
   disposed = true
   imageSeq += 1
   releaseImage()
+  // analyzing 先落 false：迟到的轮询响应会据此丢弃，不再回写已卸载的组件
+  analyzing.value = false
+  resetAnalyzeState()
 })
 </script>
 
@@ -349,45 +430,94 @@ onBeforeUnmount(() => {
 
       <el-card shadow="never" class="card" data-testid="analysis">
         <template #header>
-          <span>AI 错因诊断</span>
+          <div class="section-head">
+            <span>AI 错因诊断</span>
+            <el-button
+              v-if="analysis"
+              size="small"
+              data-testid="rerun-analysis"
+              :loading="analyzing"
+              :disabled="analyzing"
+              @click="startAnalyze"
+            >
+              重新诊断
+            </el-button>
+          </div>
         </template>
-        <el-empty
-          v-if="!analysis"
-          description="AI 错因诊断将在 S4-3 上线"
-          data-testid="analysis-placeholder"
+
+        <el-alert
+          v-if="analyzeError"
+          type="error"
+          :title="analyzeError"
+          :closable="false"
+          show-icon
         />
-        <div v-else class="analysis">
-          <p class="analysis-row">
-            <strong>错因</strong>
-            <span>{{ MISTAKE_CAUSE_LABELS[analysis.cause_type] }}</span>
+
+        <div v-if="analyzing" class="analyzing" data-testid="analyzing">
+          <span class="spinner" aria-hidden="true" />
+          诊断中…已等待 {{ analyzeSeconds }} 秒
+        </div>
+
+        <template v-else-if="analysis">
+          <div class="cause-row">
+            <el-tag :type="analysis.cause_type === 'unknown' ? 'info' : 'warning'" size="small">
+              {{ MISTAKE_CAUSE_LABELS[analysis.cause_type] }}
+            </el-tag>
+            <el-tag
+              v-for="cause in analysis.secondary_causes"
+              :key="cause"
+              size="small"
+              type="info"
+              effect="plain"
+            >
+              {{ cause }}
+            </el-tag>
+            <span v-if="analysis.confidence !== null" class="confidence">
+              置信度 {{ Math.round(analysis.confidence * 100) }}%
+            </span>
+          </div>
+          <el-alert
+            v-if="lowConfidence"
+            type="warning"
+            title="诊断把握较低，建议人工确认"
+            :closable="false"
+            show-icon
+          />
+          <p v-if="analysis.cause_type === 'unknown'" class="hint">
+            未提供作答，仅讲解题目，不推断错因。
           </p>
-          <p v-if="analysis.error_step" class="analysis-row">
-            <strong>出错步骤</strong>
-            <span>{{ analysis.error_step }}</span>
-          </p>
-          <template v-if="analysis.explanation_md">
-            <p class="field-label">错因说明</p>
-            <MdPreview
-              :model-value="analysis.explanation_md"
-              :no-mermaid="true"
-              preview-theme="github"
-            />
+          <template v-else>
+            <p class="field-label">第一处错误</p>
+            <p class="error-step">{{ analysis.error_step || '未定位到明确的错误步骤' }}</p>
           </template>
-          <template v-if="analysis.review_advice_md">
-            <p class="field-label">复习建议</p>
-            <MdPreview
-              :model-value="analysis.review_advice_md"
-              :no-mermaid="true"
-              preview-theme="github"
-            />
-          </template>
+          <p class="field-label">正确解法</p>
+          <MdPreview
+            :model-value="analysis.explanation_md || '（无）'"
+            :no-mermaid="true"
+            preview-theme="github"
+          />
+          <p class="field-label">复习建议</p>
+          <MdPreview
+            :model-value="analysis.review_advice_md || '（无）'"
+            :no-mermaid="true"
+            preview-theme="github"
+          />
           <template v-if="similarQuestions.length">
             <p class="field-label">相似题</p>
             <ul class="similar-list">
               <li v-for="(item, index) in similarQuestions" :key="index">{{ item }}</li>
             </ul>
           </template>
-        </div>
+          <p class="hint">
+            诊断模型：{{ analysis.model }} · Prompt {{ analysis.prompt_version }}
+          </p>
+        </template>
+
+        <el-empty v-else description="尚未诊断">
+          <el-button type="primary" data-testid="start-analysis" @click="startAnalyze">
+            立即诊断
+          </el-button>
+        </el-empty>
       </el-card>
     </template>
   </div>
@@ -496,5 +626,60 @@ onBeforeUnmount(() => {
 .similar-list {
   padding-left: 20px;
   margin: 8px 0 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cause-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.confidence {
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+}
+
+.error-step {
+  padding: 8px 12px;
+  margin: 4px 0 12px;
+  white-space: pre-wrap;
+  background: var(--app-surface-muted, var(--app-surface));
+  border-left: 3px solid var(--el-color-warning);
+}
+
+.hint {
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+}
+
+.analyzing {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--app-text-secondary);
+}
+
+/* 不引 @element-plus/icons-vue：一个转圈不值得多一个依赖（AGENTS §2.1） */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--app-border);
+  border-top-color: var(--el-color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

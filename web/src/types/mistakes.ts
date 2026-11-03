@@ -57,13 +57,17 @@ export interface MistakeOption {
   text: string
 }
 
-/** MistakeAnalysisOut */
+/** MistakeAnalysisOut（S4-3 起含次因、置信度与模型溯源） */
 export interface MistakeAnalysis {
   cause_type: MistakeCauseType
+  secondary_causes: MistakeCauseType[]
   error_step: string | null
   explanation_md: string | null
   review_advice_md: string | null
   kp_ids: number[] | null
+  confidence: number | null
+  model: string
+  prompt_version: string
   created_at: string
 }
 
@@ -118,6 +122,21 @@ export interface MistakeRecognizeResult {
   used_answer_source: 'student' | 'vision' | 'none'
   warnings: string[]
   elapsed_ms: number
+  /** S4-3：识别成功后是否已入队诊断（best-effort，队列故障时为 false）。 */
+  analysis_enqueued?: boolean
+}
+
+/**
+ * `mistake.analyze` 任务结果（backend/app/tasks/analyze_mistake.py 的 return）。
+ * `force=false` 且已有诊断时是 `{mistake_id, skipped: true}`，其余字段都可缺省。
+ */
+export interface MistakeAnalyzeResult {
+  mistake_id: number
+  cause_type?: MistakeCauseType
+  secondary_causes?: MistakeCauseType[]
+  confidence?: number | null
+  retrieval_hits?: number
+  skipped?: boolean
 }
 
 /** MistakeCreateIn */
