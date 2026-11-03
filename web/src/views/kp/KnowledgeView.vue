@@ -3,13 +3,19 @@ import { computed, onMounted, ref } from 'vue'
 
 import { listSubjects } from '@/api/kp'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { useAuthStore } from '@/stores/auth'
 import type { SubjectOut } from '@/types/kp'
+import GraphReview from './GraphReview.vue'
 import PendingAlign from './PendingAlign.vue'
 import Tree from './Tree.vue'
 
+const auth = useAuthStore()
+
 const subjects = ref<SubjectOut[]>([])
 const selectedSubject = ref('')
-const activeTab = ref<'tree' | 'pending'>('tree')
+const activeTab = ref<'tree' | 'pending' | 'graph'>('tree')
+// 图谱审核只对老师/管理员开放，与后端 require_role 保持一致
+const canReviewGraph = computed(() => ['admin', 'teacher'].includes(auth.user?.role ?? ''))
 const loading = ref(false)
 const error = ref('')
 
@@ -39,7 +45,7 @@ onMounted(loadSubjects)
   <div class="knowledge-page">
     <PageHeader
       title="知识库"
-      description="浏览知识点树，处理笔记自动对齐产生的待确认候选。"
+      description="浏览知识点树，处理笔记自动对齐与图谱关系推断产生的待确认候选。"
     />
 
     <div v-if="error" class="knowledge-error" role="alert">
@@ -81,6 +87,10 @@ onMounted(loadSubjects)
 
       <el-tab-pane label="待确认对齐" name="pending">
         <PendingAlign v-if="activeTab === 'pending'" />
+      </el-tab-pane>
+
+      <el-tab-pane v-if="canReviewGraph" label="图谱关系" name="graph">
+        <GraphReview v-if="activeTab === 'graph' && selected" :subject-id="selected.id" />
       </el-tab-pane>
     </el-tabs>
   </div>
