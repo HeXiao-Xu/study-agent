@@ -1,4 +1,4 @@
-/** S4-2 错题详情页 + S4-3 诊断区：渲染、复习刷新、诊断轮询、图片鉴权与作答保存。 */
+/** S4-2 错题详情页 + S4-3 诊断区 + S4-4 变式训练：渲染、复习刷新、轮询、入库。 */
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,14 +7,16 @@ import MistakeDetailView from '@/views/mistakes/MistakeDetailView.vue'
 import { getImageBlob } from '@/api/files'
 import { listSubjects } from '@/api/kp'
 import {
+  acceptVariant,
   analyzeMistake,
   deleteMistake,
+  generateVariants,
   getMistake,
   reviewMistake,
   updateMistake,
 } from '@/api/mistakes'
 import { getTask } from '@/api/tasks'
-import type { MistakeAnalysis, MistakeDetail } from '@/types/mistakes'
+import type { MistakeAnalysis, MistakeDetail, MistakeVariant } from '@/types/mistakes'
 import type { TaskDetail } from '@/types/tasks'
 
 vi.mock('@/api/mistakes', () => ({
@@ -23,6 +25,8 @@ vi.mock('@/api/mistakes', () => ({
   reviewMistake: vi.fn(),
   deleteMistake: vi.fn(),
   analyzeMistake: vi.fn(),
+  generateVariants: vi.fn(),
+  acceptVariant: vi.fn(),
 }))
 vi.mock('@/api/tasks', () => ({ getTask: vi.fn() }))
 vi.mock('@/api/files', () => ({ getImageBlob: vi.fn() }))
@@ -88,6 +92,23 @@ function analyzed(overrides: Partial<MistakeAnalysis> = {}): MistakeAnalysis {
     model: 'qwen-plus',
     prompt_version: 'mistake_analyze_v2',
     created_at: '2026-11-03T00:00:00Z',
+    similar_questions: null,
+    variants_stats: null,
+    ...overrides,
+  }
+}
+
+function variant(overrides: Partial<MistakeVariant> = {}): MistakeVariant {
+  return {
+    variant_id: 'abc12345',
+    stem_md: '等差数列 $a_1=1$，公差 $d=2$，求 $a_7$。',
+    options: null,
+    answer_md: '$13$',
+    analysis_md: '用 $a_n=a_1+(n-1)d$ 得 13。',
+    qtype: '解答',
+    difficulty: 3,
+    self_check: 'passed',
+    accepted_question_id: null,
     ...overrides,
   }
 }
@@ -150,6 +171,13 @@ beforeEach(() => {
     created_at: '2026-11-03T00:00:00Z',
   })
   vi.mocked(getTask).mockResolvedValue(task())
+  vi.mocked(generateVariants).mockResolvedValue({
+    id: 88,
+    name: 'mistake.variants',
+    status: 'pending',
+    created_at: '2026-11-03T00:00:00Z',
+  })
+  vi.mocked(acceptVariant).mockResolvedValue({ question_id: 128, created: true })
 })
 
 describe('MistakeDetailView', () => {
@@ -395,5 +423,148 @@ describe('MistakeDetailView', () => {
     expect(wrapper.get('[data-testid="detail-error"]').text()).toContain('错题不存在或无权访问')
     await wrapper.get('[data-testid="detail-back"]').trigger('click')
     expect(routerMocks.push).toHaveBeenCalledWith('/mistakes')
+  })
+  // ---- S4-4 变式训练 ----
+  it('有诊断但无变式题时显示生成按钮', async () => {
+    vi.mocked(getMistake).mockResolvedValue(detail({ analysis: analyzed() }))
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    const button = wrapper.get('[data-testid="generate-variants"]')
+    expect(button.text()).toContain('生成变式题')
+    expect(button.attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="regenerate-variants"]').exists()).toBe(false)
+  })
+
+  it('无诊断时不显示生成按钮，只提示先诊断', async () => {
+    vi.mocked(getMistake).mockResolvedValue(detail({ analysis: null }))
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="generate-variants"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('先完成错因诊断')
+  })
+
+  it('渲染变式题卡片、难度与已复算通过徽标', async () => {
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [variant()],
+          variants_stats: {
+            requested: 3,
+            passed: 1,
+            rejected: 2,
+            rounds: 2,
+            generated_at: '2026-11-03T00:00:00Z',
+          },
+        }),
+      }),
+    )
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    const card = wrapper.get('[data-testid="variant-abc12345"]')
+    expect(card.text()).toContain('已复算通过')
+    expect(card.text()).toContain('难度 3')
+    expect(card.text()).toContain('等差数列')
+    expect(wrapper.get('[data-testid="variants-rejected"]').text()).toContain('2 道未通过自检')
+    expect(wrapper.find('[data-testid="regenerate-variants"]').exists()).toBe(true)
+  })
+
+  it('已入库的变式题显示题号且不再有存入按钮', async () => {
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [variant({ accepted_question_id: 128 })],
+          variants_stats: { requested: 1, passed: 1, rejected: 0, rounds: 1, generated_at: null },
+        }),
+      }),
+    )
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="accepted-abc12345"]').text()).toContain('#128')
+    expect(wrapper.find('[data-testid="accept-variant-abc12345"]').exists()).toBe(false)
+  })
+
+  it('已生成但 0 道通过时显示空态与丢弃提示', async () => {
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [],
+          variants_stats: { requested: 3, passed: 0, rejected: 3, rounds: 3, generated_at: null },
+        }),
+      }),
+    )
+    const wrapper = makeWrapper()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('还没有变式题')
+    expect(wrapper.get('[data-testid="generate-variants"]').text()).toContain('生成变式题')
+  })
+
+  it('点击存入题库调用 acceptVariant 并刷新详情', async () => {
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [variant()],
+          variants_stats: { requested: 1, passed: 1, rejected: 0, rounds: 1, generated_at: null },
+        }),
+      }),
+    )
+    const wrapper = makeWrapper()
+    await flushPromises()
+    vi.mocked(getMistake).mockClear()
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [variant({ accepted_question_id: 128 })],
+          variants_stats: { requested: 1, passed: 1, rejected: 0, rounds: 1, generated_at: null },
+        }),
+      }),
+    )
+
+    await wrapper.get('[data-testid="accept-variant-abc12345"]').trigger('click')
+    await flushPromises()
+
+    expect(acceptVariant).toHaveBeenCalledWith(12, 'abc12345')
+    expect(getMistake).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="accepted-abc12345"]').text()).toContain('#128')
+  })
+
+  it('点击生成变式题调用 generateVariants 并进入轮询态', async () => {
+    vi.mocked(getMistake).mockResolvedValue(detail({ analysis: analyzed() }))
+    const wrapper = makeWrapper()
+    await flushPromises()
+    vi.useFakeTimers()
+
+    await wrapper.get('[data-testid="generate-variants"]').trigger('click')
+    await flushPromises()
+
+    expect(generateVariants).toHaveBeenCalledWith(12)
+    expect(wrapper.find('[data-testid="variants-loading"]').exists()).toBe(true)
+
+    vi.mocked(getMistake).mockResolvedValue(
+      detail({
+        analysis: analyzed({
+          similar_questions: [variant()],
+          variants_stats: { requested: 1, passed: 1, rejected: 0, rounds: 1, generated_at: null },
+        }),
+      }),
+    )
+    vi.mocked(getTask).mockResolvedValue(
+      task({
+        id: 88,
+        name: 'mistake.variants',
+        status: 'succeeded',
+        result: { mistake_id: 12, requested: 1, passed: 1, rejected: 0, rounds: 1, elapsed_ms: 8000 },
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(4000)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="variants-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="variant-abc12345"]').exists()).toBe(true)
+    vi.useRealTimers()
   })
 })

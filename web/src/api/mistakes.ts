@@ -13,6 +13,7 @@ import type {
   MistakeStatsParams,
   MistakeSummary,
   MistakeUpdatePayload,
+  VariantAcceptResult,
 } from '@/types/mistakes'
 import type { TaskOut } from '@/types/tasks'
 
@@ -139,4 +140,18 @@ export async function analyzeMistake(id: number, force = true): Promise<TaskOut>
 
 export async function deleteMistake(id: number): Promise<void> {
   await http.delete(`${API_PREFIX}/mistakes/${id}`)
+}
+
+/** S4-4 生成变式题（异步）；返回 202 的任务，用 `api/tasks.ts::getTask` 轮询。 */
+export async function generateVariants(id: number): Promise<TaskOut> {
+  const resp = await http.post<ApiEnvelope<TaskOut>>(`${API_PREFIX}/mistakes/${id}/variants`)
+  return resp.data.data
+}
+
+/** S4-4 把一道变式题存进题库；重复调用返回同一 question_id + created=false。 */
+export async function acceptVariant(id: number, variantId: string): Promise<VariantAcceptResult> {
+  const resp = await http.post<ApiEnvelope<VariantAcceptResult>>(
+    `${API_PREFIX}/mistakes/${id}/variants/${variantId}/accept`,
+  )
+  return resp.data.data
 }

@@ -57,7 +57,35 @@ export interface MistakeOption {
   text: string
 }
 
-/** MistakeAnalysisOut（S4-3 起含次因、置信度与模型溯源） */
+/** S4-4 变式题（MistakeVariantOut）：只有通过复算自检的题才会出现。 */
+export interface MistakeVariant {
+  variant_id: string
+  stem_md: string
+  options: MistakeOption[] | null
+  answer_md: string
+  analysis_md: string | null
+  qtype: string
+  difficulty: number
+  self_check: string
+  accepted_question_id: number | null
+}
+
+/** S4-4 本次生成的统计：rejected 只计数，被丢弃的题不下发给前端。 */
+export interface VariantsStats {
+  requested: number
+  passed: number
+  rejected: number
+  rounds: number
+  generated_at: string | null
+}
+
+/** VariantAcceptOut：created=false 表示已入库或题库已有同题。 */
+export interface VariantAcceptResult {
+  question_id: number
+  created: boolean
+}
+
+/** MistakeAnalysisOut（S4-3 起含次因、置信度与模型溯源；S4-4 起含变式题） */
 export interface MistakeAnalysis {
   cause_type: MistakeCauseType
   secondary_causes: MistakeCauseType[]
@@ -69,6 +97,9 @@ export interface MistakeAnalysis {
   model: string
   prompt_version: string
   created_at: string
+  /** 未生成过是 null；已生成但 0 道通过时是空数组（配合 variants_stats 区分）。 */
+  similar_questions: MistakeVariant[] | null
+  variants_stats: VariantsStats | null
 }
 
 /** MistakeSummaryOut */
@@ -137,6 +168,16 @@ export interface MistakeAnalyzeResult {
   confidence?: number | null
   retrieval_hits?: number
   skipped?: boolean
+}
+
+/** `mistake.variants` 任务结果（backend/app/services/question_gen_service.py 的 return）。 */
+export interface MistakeVariantsResult {
+  mistake_id: number
+  requested: number
+  passed: number
+  rejected: number
+  rounds: number
+  elapsed_ms: number
 }
 
 /** MistakeCreateIn */

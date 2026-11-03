@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * S4-2 错题详情页：题干/选项/作答/复习操作 + S4-3 诊断占位。
+ * S4-2 错题详情页：题干/选项/作答/复习操作 + S4-3 诊断 + S4-4 变式训练。
  *
  * 缩略图不能直接 `<img :src="detail.image_url">`：后端 `/api/v1/files/{id}/image`
  * 要求 `Authorization: Bearer`，而 `<img>` 发起的请求无法携带自定义头，必然 401。
@@ -16,8 +16,10 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { getImageBlob } from '@/api/files'
 import { listSubjects } from '@/api/kp'
 import {
+  acceptVariant,
   analyzeMistake,
   deleteMistake,
+  generateVariants,
   getMistake,
   reviewMistake,
   updateMistake,
@@ -30,15 +32,11 @@ import {
   type MistakeAnalyzeResult as MistakeAnalysisResultView,
   type MistakeDetail,
   type MistakeStatus,
+  type MistakeVariant,
 } from '@/types/mistakes'
 
 import 'md-editor-v3/lib/preview.css'
 import 'katex/dist/katex.min.css'
-
-/** S4-3 才会下发的相似题字段；共享类型尚未包含，这里按可选字段兼容。 */
-interface MistakeAnalysisView extends MistakeAnalysis {
-  similar_questions_json?: unknown
-}
 
 /** image_url 形如 `/api/v1/files/{file_id}/image`，鉴权取图需要其中的 file_id。 */
 const IMAGE_PATH_RE = /\/files\/(\d+)\/image/
@@ -60,16 +58,12 @@ const imageLoading = ref(false)
 let disposed = false
 let imageSeq = 0
 
-const analysis = computed<MistakeAnalysisView | null>(() =>
-  detail.value?.analysis ? (detail.value.analysis as MistakeAnalysisView) : null,
-)
+const analysis = computed<MistakeAnalysis | null>(() => detail.value?.analysis ?? null)
 
-/** 相似题在 S4-3 回来前兜底为空；对象项按 JSON 文本展示。 */
-const similarQuestions = computed<string[]>(() => {
-  const raw = analysis.value?.similar_questions_json
-  if (!Array.isArray(raw)) return []
-  return raw.map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
-})
+/** S4-4 变式题：未生成过是 null，生成后即使 0 道通过也是空数组。 */
+const variants = computed<MistakeVariant[]>(() => analysis.value?.similar_questions ?? [])
+const variantsStats = computed(() => analysis.value?.variants_stats ?? null)
+const hasGenerated = computed(() => analysis.value?.similar_questions !== null)
 
 const subjectName = computed(() => {
   const id = detail.value?.subject_id
@@ -278,6 +272,88 @@ async function startAnalyze(): Promise<void> {
   }
 }
 
+/** 变式生成轮询：与诊断同款 4 秒间隔，成功/失败/卸载都要停表。 */
+const generating = ref(false)
+const generateError = ref('')
+const generateTaskId = ref<number | null>(null)
+const generateSeconds = ref(0)
+const accepting = ref<string | null>(null)
+let generateTimer: ReturnType<typeof setInterval> | null = null
+
+const canGenerate = computed(() => analysis.value !== null && !generating.value)
+
+function stopGeneratePolling(): void {
+  if (generateTimer !== null) {
+    clearInterval(generateTimer)
+    generateTimer = null
+  }
+}
+
+function resetGenerateState(): void {
+  stopGeneratePolling()
+  generateSeconds.value = 0
+  generateTaskId.value = null
+}
+
+async function pollGenerate(): Promise<void> {
+  const taskId = generateTaskId.value
+  if (taskId === null || !generating.value) return
+  try {
+    const task = await getTask(taskId)
+    // 卸载或重跑后迟到的响应：既不能刷新详情，也不能把 generating 改回 false
+    if (!generating.value) return
+    if (task.status === 'succeeded') {
+      resetGenerateState()
+      generating.value = false
+      await load()
+      return
+    }
+    if (task.status === 'failed') {
+      generateError.value = task.error || '生成失败，可重试'
+      resetGenerateState()
+      generating.value = false
+    }
+  } catch {
+    // http.ts 已弹错；这里只停轮询，避免无限重试把后端打满
+    resetGenerateState()
+    generating.value = false
+  }
+}
+
+async function startVariants(): Promise<void> {
+  if (generating.value || detail.value === null) return
+  generateError.value = ''
+  generating.value = true
+  try {
+    const task = await generateVariants(detail.value.id)
+    generateTaskId.value = task.id
+    generateSeconds.value = 0
+    generateTimer = setInterval(() => {
+      generateSeconds.value += 4
+      void pollGenerate()
+    }, 4000)
+  } catch {
+    generating.value = false
+    generateError.value = '发起生成失败，请稍后重试'
+  }
+}
+
+async function acceptOne(variant: MistakeVariant): Promise<void> {
+  if (accepting.value !== null || detail.value === null) return
+  accepting.value = variant.variant_id
+  try {
+    const result = await acceptVariant(detail.value.id, variant.variant_id)
+    ElMessage.success(
+      result.created ? `已存入题库 #${result.question_id}` : `题库已有这道题 #${result.question_id}`,
+    )
+    await load()
+  } catch {
+    // http.ts 已统一提示
+  } finally {
+    accepting.value = null
+  }
+}
+
 onMounted(() => {
   void load()
   void loadSubjects()
@@ -295,6 +371,7 @@ watch(
 onBeforeUnmount(() => {
   disposed = true
   imageSeq += 1
+  stopGeneratePolling()
   releaseImage()
   // analyzing 先落 false：迟到的轮询响应会据此丢弃，不再回写已卸载的组件
   analyzing.value = false
@@ -502,12 +579,6 @@ onBeforeUnmount(() => {
             :no-mermaid="true"
             preview-theme="github"
           />
-          <template v-if="similarQuestions.length">
-            <p class="field-label">相似题</p>
-            <ul class="similar-list">
-              <li v-for="(item, index) in similarQuestions" :key="index">{{ item }}</li>
-            </ul>
-          </template>
           <p class="hint">
             诊断模型：{{ analysis.model }} · Prompt {{ analysis.prompt_version }}
           </p>
@@ -518,6 +589,108 @@ onBeforeUnmount(() => {
             立即诊断
           </el-button>
         </el-empty>
+      </el-card>
+
+      <el-card shadow="never" class="card" data-testid="variants">
+        <template #header>
+          <div class="section-head">
+            <span>变式训练</span>
+            <el-button
+              v-if="analysis && hasGenerated"
+              size="small"
+              data-testid="regenerate-variants"
+              :loading="generating"
+              :disabled="generating"
+              @click="startVariants"
+            >
+              重新生成
+            </el-button>
+          </div>
+        </template>
+
+        <el-alert
+          v-if="generateError"
+          type="error"
+          :title="generateError"
+          :closable="false"
+          show-icon
+        />
+
+        <div v-if="generating" class="analyzing" data-testid="variants-loading">
+          <span class="spinner" aria-hidden="true" />
+          生成并自检中…已等待 {{ generateSeconds }} 秒
+        </div>
+
+        <template v-else-if="variants.length">
+          <el-text
+            v-if="variantsStats && variantsStats.rejected > 0"
+            size="small"
+            data-testid="variants-rejected"
+          >
+            本次有 {{ variantsStats.rejected }} 道未通过自检，已丢弃
+          </el-text>
+          <div
+            v-for="(variant, index) in variants"
+            :key="variant.variant_id"
+            class="variant-card"
+            :data-testid="`variant-${variant.variant_id}`"
+          >
+            <div class="cause-row">
+              <el-tag size="small" type="info" effect="plain">第 {{ index + 1 }} 题</el-tag>
+              <el-tag size="small" effect="plain">{{ variant.qtype }}</el-tag>
+              <el-tag size="small" type="success" effect="plain">难度 {{ variant.difficulty }}</el-tag>
+              <el-tag size="small" type="success">已复算通过</el-tag>
+              <span class="variant-spacer" />
+              <el-button
+                v-if="variant.accepted_question_id === null"
+                size="small"
+                type="primary"
+                :data-testid="`accept-variant-${variant.variant_id}`"
+                :loading="accepting === variant.variant_id"
+                :disabled="accepting !== null"
+                @click="acceptOne(variant)"
+              >
+                存入题库
+              </el-button>
+              <el-tag
+                v-else
+                size="small"
+                type="info"
+                :data-testid="`accepted-${variant.variant_id}`"
+              >
+                已入库 #{{ variant.accepted_question_id }}
+              </el-tag>
+            </div>
+            <MdPreview :model-value="variant.stem_md" :no-mermaid="true" preview-theme="github" />
+            <el-collapse>
+              <el-collapse-item title="查看答案与解析" :name="`answer-${variant.variant_id}`">
+                <p class="field-label">答案</p>
+                <MdPreview :model-value="variant.answer_md" :no-mermaid="true" preview-theme="github" />
+                <template v-if="variant.analysis_md">
+                  <p class="field-label">解析</p>
+                  <MdPreview
+                    :model-value="variant.analysis_md"
+                    :no-mermaid="true"
+                    preview-theme="github"
+                  />
+                </template>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+        </template>
+
+        <el-empty v-else-if="analysis" description="还没有变式题">
+          <el-button
+            type="primary"
+            data-testid="generate-variants"
+            :disabled="!canGenerate"
+            @click="startVariants"
+          >
+            生成变式题
+          </el-button>
+        </el-empty>
+
+        <el-empty v-else description="先完成错因诊断，再生成变式题" />
       </el-card>
     </template>
   </div>
@@ -623,11 +796,6 @@ onBeforeUnmount(() => {
   margin: 8px 0;
 }
 
-.similar-list {
-  padding-left: 20px;
-  margin: 8px 0 0;
-}
-
 .section-head {
   display: flex;
   align-items: center;
@@ -658,6 +826,15 @@ onBeforeUnmount(() => {
 .hint {
   color: var(--app-text-tertiary);
   font-size: 12px;
+}
+
+.variant-card {
+  padding: 12px 0;
+  border-top: 1px solid var(--app-border);
+}
+
+.variant-spacer {
+  flex: 1;
 }
 
 .analyzing {
