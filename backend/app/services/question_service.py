@@ -59,6 +59,7 @@ ALIGN_MAX_LINKS = 3
 ALIGN_NOTE_TITLE = "试题"
 MANUAL_WEIGHT = Decimal("1.000000")
 MAX_STEM_CHARS = 2000
+AI_VARIANT_TAG = "AI变式"
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +391,53 @@ def create_extracted_question(
         ),
     )
     return question, False
+
+
+def create_generated_question(
+    session: Session,
+    *,
+    subject_id: int,
+    stem_md: str,
+    options_json: list[dict] | None,
+    answer_md: str,
+    analysis_md: str | None,
+    qtype: str,
+    difficulty: int,
+    links: list[tuple[int, Decimal]],
+    created_by: int | None,
+    embedder: EmbeddingClient | None = None,
+) -> tuple[Question, bool]:
+    """AI 变式题入库的唯一入口：origin/verified/tag 在这里写死，调用方不能改。
+
+    判重走同一套两道闸：题库里已有同题就复用（created=False），
+    这样用户重复点「存入题库」不会造出第二道一样的题（spec D-10）。
+    """
+    client = embedder or get_embedding_client()
+    vec = client.encode([embedding_text(stem_md)])[0]
+    duplicate = check_duplicate(
+        session, subject_id=subject_id, stem_hash=compute_stem_hash(stem_md), vec=vec
+    )
+    if duplicate is not None:
+        return duplicate, False
+    question = _persist_question(
+        session,
+        subject_id=subject_id,
+        origin=QuestionOrigin.AI.value,
+        source_file_id=None,
+        stem_md=stem_md,
+        options_json=options_json,
+        answer_md=answer_md,
+        analysis_md=analysis_md,
+        qtype=qtype,
+        difficulty=difficulty,
+        tags=[AI_VARIANT_TAG],
+        verified=False,
+        embedding=vec,
+        created_by=created_by,
+        links=links,
+    )
+    _commit(session)
+    return question, True
 
 
 def _load_question(session: Session, question_id: int) -> Question:

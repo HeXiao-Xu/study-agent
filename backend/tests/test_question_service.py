@@ -660,3 +660,69 @@ def test_kp_ref_out_serializes_weight_as_float() -> None:
     ref = KpRefOut(kp_id=1, kp_name="函数的单调性", kp_code="kp.1", weight=Decimal("0.930000"))
     assert isinstance(ref.weight, float)
     assert ref.model_dump(mode="json")["weight"] == 0.93
+
+
+def test_create_generated_question_marks_ai_and_unverified() -> None:
+    session = FakeSession(scalar_results=[None, None])
+
+    question, created = question_service.create_generated_question(
+        session,
+        subject_id=7,
+        stem_md="已知等差数列 $a_1=1$，公差 $d=2$，求 $a_7$。",
+        options_json=None,
+        answer_md="$13$",
+        analysis_md="用通项公式得 13。",
+        qtype="解答",
+        difficulty=2,
+        links=[(12, Decimal("1.000000"))],
+        created_by=5,
+        embedder=FakeEmbedder(),
+    )
+
+    assert created is True
+    assert question.origin == "ai"
+    assert question.verified is False
+    assert question.tags == ["AI变式"]
+    assert question.embedding is not None
+    assert question.created_by == 5
+    assert session.commits == 1
+    links = [item for item in session.added if isinstance(item, QuestionKp)]
+    assert [(link.kp_id, link.weight) for link in links] == [(12, Decimal("1.000000"))]
+
+
+def test_create_generated_question_returns_existing_on_duplicate() -> None:
+    session = FakeSession(scalar_results=[None, None])
+    first, created_first = question_service.create_generated_question(
+        session,
+        subject_id=7,
+        stem_md="求 $2+2$ 的值。",
+        options_json=None,
+        answer_md="$4$",
+        analysis_md="直接相加。",
+        qtype="解答",
+        difficulty=1,
+        links=[],
+        created_by=5,
+        embedder=FakeEmbedder(),
+    )
+    # 第二道同题：哈希闸先命中，直接复用
+    session.scalar_results = [first]
+
+    second, created_second = question_service.create_generated_question(
+        session,
+        subject_id=7,
+        stem_md="求 $2+2$ 的值。",
+        options_json=None,
+        answer_md="$4$",
+        analysis_md="直接相加。",
+        qtype="解答",
+        difficulty=1,
+        links=[],
+        created_by=5,
+        embedder=FakeEmbedder(),
+    )
+
+    assert created_first is True
+    assert created_second is False
+    assert second.id == first.id
+    assert session.commits == 1
