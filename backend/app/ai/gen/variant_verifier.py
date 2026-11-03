@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, model_validator, ValidationError
 
-from app.ai.json_utils import loads_json_object
+from app.ai.gen.json_repair import loads_lenient_json
 from app.ai.llm import LLMClient, LLMMessage, get_llm_client
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,8 @@ MAX_RETRIES = 2
 STEM_LIMIT = 2000
 ANSWER_LIMIT = 500
 TEMPERATURE = 0.2
+# 真机验收：对数不等式类题目的推理会写满上限，1200/1800 都被截断成非法 JSON，故留 2600
+MAX_TOKENS = 2600
 
 _ENV = Environment(
     loader=FileSystemLoader(str(Path(__file__).resolve().parent.parent / "prompts")),
@@ -43,9 +45,19 @@ class VerifyContext:
     options: list[tuple[str, str]] = field(default_factory=list)
 
 
+REASONING_LIMIT = 1500
+
+
 class _VerifyOut(BaseModel):
     answer_md: str = Field(min_length=1, max_length=ANSWER_LIMIT)
-    reasoning_md: str | None = Field(default=None, max_length=1500)
+    reasoning_md: str | None = None
+
+    @model_validator(mode="after")
+    def _trim_reasoning(self) -> "_VerifyOut":
+        # reasoning 只用于展示、不参与比对：超长就截断，不能因为写多了把整道题判死
+        if self.reasoning_md is not None and len(self.reasoning_md) > REASONING_LIMIT:
+            self.reasoning_md = self.reasoning_md[:REASONING_LIMIT]
+        return self
 
 
 def render_verify_prompt(context: VerifyContext) -> str:
@@ -71,9 +83,9 @@ def verify_answer(
     attempts = 0
     for attempt in range(max_retries + 1):
         attempts = attempt + 1
-        response = client.chat(messages, temperature=TEMPERATURE, max_tokens=1200, scene=SCENE)
+        response = client.chat(messages, temperature=TEMPERATURE, max_tokens=MAX_TOKENS, scene=SCENE)
         try:
-            parsed = _VerifyOut.model_validate(loads_json_object(response.text))
+            parsed = _VerifyOut.model_validate(loads_lenient_json(response.text))
             return parsed.answer_md.strip()
         except (ValidationError, ValueError) as exc:
             last_error = exc

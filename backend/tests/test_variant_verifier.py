@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.ai.gen.variant_verifier import (
+    MAX_TOKENS,
     VerifyContext,
     VariantVerificationError,
     render_verify_prompt,
@@ -17,7 +18,14 @@ class FakeClient:
         self.calls: list[dict] = []
 
     def chat(self, messages, *, temperature=0.0, max_tokens=None, scene=""):
-        self.calls.append({"messages": messages, "scene": scene, "temperature": temperature})
+        self.calls.append(
+            {
+                "messages": messages,
+                "scene": scene,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+        )
 
         class _Resp:
             text = self.payloads.pop(0)
@@ -59,3 +67,23 @@ def test_verify_answer_raises_after_retries():
 
     with pytest.raises(VariantVerificationError):
         verify_answer(_ctx(), llm_client=client, max_retries=2)
+
+
+def test_verify_answer_uses_roomy_token_budget():
+    """真机验收：对数不等式类题目的推理会写满上限（1200/1800 都被截断），故留 2600。"""
+    client = FakeClient(['{"answer_md": "$a>1$", "reasoning_md": "略。"}'])
+
+    verify_answer(_ctx(), llm_client=client)
+
+    assert client.calls[0]["max_tokens"] == MAX_TOKENS == 2600
+
+
+def test_verify_answer_truncates_overlong_reasoning_instead_of_failing():
+    """reasoning 只展示、不参与比对：写超长要截断，不能把整道题判死（真机验收教训）。"""
+    long_reasoning = "推理" * 1200
+    client = FakeClient(['{"answer_md": "$a>1$", "reasoning_md": "' + long_reasoning + '"}'])
+
+    answer = verify_answer(_ctx(), llm_client=client)
+
+    assert answer == "$a>1$"
+    assert len(client.payloads) == 0  # 没有触发重试

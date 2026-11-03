@@ -6,6 +6,7 @@ import pytest
 from app.ai.gen.variant_generator import (
     GenerationContext,
     GeneratedVariant,
+    MAX_TOKENS,
     VariantGenerationError,
     generate_variants,
     render_prompt,
@@ -18,7 +19,14 @@ class FakeClient:
         self.calls: list[dict] = []
 
     def chat(self, messages, *, temperature=0.0, max_tokens=None, scene=""):
-        self.calls.append({"messages": messages, "scene": scene, "temperature": temperature})
+        self.calls.append(
+            {
+                "messages": messages,
+                "scene": scene,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+        )
 
         class _Resp:
             text = self.payloads.pop(0)
@@ -101,3 +109,12 @@ def test_generate_variants_raises_after_retries_exhausted():
 
     with pytest.raises(VariantGenerationError):
         generate_variants(_ctx(), llm_client=client, max_retries=2)
+
+
+def test_generate_variants_uses_roomy_token_budget():
+    """真机验收：2000 会让 3 道解答题在 JSON 中途被截断，故留足 3500。"""
+    client = FakeClient([GOOD])
+
+    generate_variants(_ctx(), llm_client=client)
+
+    assert client.calls[0]["max_tokens"] == MAX_TOKENS == 3500

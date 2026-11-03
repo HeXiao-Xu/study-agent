@@ -13,7 +13,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from app.ai.json_utils import loads_json_object
+from app.ai.gen.json_repair import loads_lenient_json
 from app.ai.llm import LLMClient, LLMMessage, get_llm_client
 from app.schemas.question import OptionIn, validate_question_shape
 
@@ -24,8 +24,12 @@ PROMPT_VERSION = "question_gen_v1"
 PROMPT_FILE = "question_gen_v1.md"
 MAX_VARIANTS = 3
 MAX_RETRIES = 2
+# 真机验收：3 道解答题连解析一起输出常到 1700~2500 tokens，2000 会整批截断成非法 JSON
+MAX_TOKENS = 3500
 STEM_LIMIT = 2000
 ANSWER_LIMIT = 800
+# 真机验收：解析常写到 1500 字符以上，整批 3 道全废；放宽到 2000（Prompt 仍要求 ≤200 字）
+ANALYSIS_LIMIT = 2000
 KP_LIMIT = 3
 TEMPERATURE = 0.7
 
@@ -60,7 +64,7 @@ class GeneratedVariant(BaseModel):
     stem_md: str = Field(min_length=5, max_length=STEM_LIMIT)
     options: list[OptionIn] | None = None
     answer_md: str = Field(min_length=1, max_length=ANSWER_LIMIT)
-    analysis_md: str = Field(min_length=10, max_length=1500)
+    analysis_md: str = Field(min_length=10, max_length=ANALYSIS_LIMIT)
     qtype: str
     difficulty: int = Field(ge=1, le=5)
 
@@ -115,9 +119,11 @@ def generate_variants(
     attempts = 0
     for attempt in range(max_retries + 1):
         attempts = attempt + 1
-        response = client.chat(messages, temperature=TEMPERATURE, max_tokens=2000, scene=SCENE)
+        response = client.chat(
+            messages, temperature=TEMPERATURE, max_tokens=MAX_TOKENS, scene=SCENE
+        )
         try:
-            parsed = _ItemsOut.model_validate(loads_json_object(response.text))
+            parsed = _ItemsOut.model_validate(loads_lenient_json(response.text))
             if len(parsed.items) != context.count:
                 raise ValueError(f"生成条数不符：{len(parsed.items)} != {context.count}")
             return parsed.items
