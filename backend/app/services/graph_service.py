@@ -150,6 +150,11 @@ def _merge(session: Session, plans: Sequence[_EdgePlan], *, dry_run: bool) -> _M
                         weight=plan.weight,
                         source=EdgeSource.AI.value,
                         review_status=plan.review_status,
+                        # ck_knowledge_edges_reviewed 要求非 pending 必须有 reviewed_at；
+                        # contains 是系统自动通过的，reviewed_by 留空
+                        reviewed_at=None
+                        if plan.review_status == EdgeReviewStatus.PENDING.value
+                        else datetime.now(timezone.utc),
                     )
                 )
             continue

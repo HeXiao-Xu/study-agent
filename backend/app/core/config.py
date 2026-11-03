@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     # --- 异步任务（S2-7，ARQ Worker）---
     task_max_tries: int = 3
     task_retry_base_seconds: float = 2.0
-    task_job_timeout_seconds: int = 300
+    # 300s 对 S4-5 图谱构建不够（实测 ~145 次串行 LLM 调用需 8~12 分钟），
+    # 仍保留上限，超时即失败，避免任务无限占用 worker。
+    task_job_timeout_seconds: int = 1800
     task_result_keep_seconds: int = 3600
 
     # --- 解析（S1-1）---

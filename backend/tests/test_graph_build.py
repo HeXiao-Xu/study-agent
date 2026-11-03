@@ -102,6 +102,8 @@ def test_build_creates_contains_edges_approved():
     assert all(
         edge.review_status == EdgeReviewStatus.APPROVED.value for edge in session.added
     )
+    # ck_knowledge_edges_reviewed：非 pending 必须带 reviewed_at（真机验收抓到过漏填）
+    assert all(edge.reviewed_at is not None for edge in session.added)
 
 
 def test_build_creates_prerequisite_pending_edges():
@@ -115,6 +117,7 @@ def test_build_creates_prerequisite_pending_edges():
     assert (edge.src_kp_id, edge.dst_kp_id, edge.relation) == (1, 3, "prerequisite")
     assert edge.review_status == EdgeReviewStatus.PENDING.value
     assert float(edge.weight) == pytest.approx(0.85)
+    assert edge.reviewed_at is None
 
 
 def test_build_skips_approved_and_rejected_edges():
