@@ -66,6 +66,49 @@ describe('causeOption', () => {
     )
   })
 
+  it('六种已知错因两两不同色（哈希撞色是一次真实缺陷）', () => {
+    const real: StatsCauseCount[] = [
+      { cause_type: '概念不清', count: 11 },
+      { cause_type: '计算失误', count: 6 },
+      { cause_type: '知识遗忘', count: 5 },
+      { cause_type: '方法不当', count: 4 },
+      { cause_type: '时间不足', count: 4 },
+      { cause_type: '审题偏差', count: 3 },
+      { cause_type: 'unknown', count: 1 },
+    ]
+    const option = causeOption(real) as {
+      series: Array<{ data: Array<{ name: string; itemStyle: { color: string } }> }>
+    }
+    const colors = option.series[0].data.map((item) => item.itemStyle.color)
+    expect(new Set(colors).size).toBe(colors.length)
+    expect(colors).toHaveLength(7)
+  })
+
+  it('图例色块与扇形同色（否则图例会骗人）', () => {
+    const option = causeOption(data) as {
+      legend: { data: Array<{ name: string; itemStyle: { color: string } }> }
+      series: Array<{ data: Array<{ name: string; itemStyle: { color: string } }> }>
+    }
+    const slices = new Map(option.series[0].data.map((item) => [item.name, item.itemStyle.color]))
+    expect(option.legend.data).toHaveLength(2)
+    for (const entry of option.legend.data) {
+      expect(entry.itemStyle.color).toBe(slices.get(entry.name))
+    }
+  })
+
+  it('没见过的错因也拿到不撞色的颜色', () => {
+    const weird: StatsCauseCount[] = [
+      { cause_type: '概念不清', count: 2 },
+      { cause_type: '新错因甲', count: 1 },
+      { cause_type: '新错因乙', count: 1 },
+    ]
+    const option = causeOption(weird) as {
+      series: Array<{ data: Array<{ itemStyle: { color: string } }> }>
+    }
+    const colors = option.series[0].data.map((item) => item.itemStyle.color)
+    expect(new Set(colors).size).toBe(3)
+  })
+
   it('空数组给出空数据而不是占位假数据', () => {
     const option = causeOption([]) as { series: Array<{ data: unknown[] }> }
     expect(option.series[0].data).toEqual([])

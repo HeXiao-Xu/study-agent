@@ -14,17 +14,39 @@ import { COLOR_HIGH, COLOR_LOW, COLOR_MID, COLOR_UNRATED, masteryColor } from '@
 
 export const UNKNOWN_CAUSE_COLOR = '#9aa4b2'
 
-const CAUSE_PALETTE = ['#e5484d', '#f0b429', '#3b82f6', '#8b5cf6', '#22c55e', '#f97316']
-
 /**
- * unknown 单独灰；其余按名字哈希取固定调色板——
- * 错因类型是有限的几个中文串，用哈希而不是下标，换顺序也不会改色。
+ * 已知错因的固定配色：错因是**有限枚举**（S4-3 定义的 6 类 + unknown），
+ * 直接一一对应，别再走哈希——哈希在 6 色上必然撞车（实测 6 类压成 3 色：
+ * 概念不清/时间不足 同红、计算失误/审题偏差 同橙、知识遗忘/方法不当 同绿）。
  */
-export function causeColor(causeType: string): string {
-  if (causeType === 'unknown') return UNKNOWN_CAUSE_COLOR
-  let hash = 0
-  for (const char of causeType) hash = (hash * 31 + char.codePointAt(0)!) % 997
-  return CAUSE_PALETTE[hash % CAUSE_PALETTE.length]!
+const CAUSE_COLORS: Record<string, string> = {
+  概念不清: '#e5484d',
+  计算失误: '#f0b429',
+  知识遗忘: '#8b5cf6',
+  方法不当: '#3b82f6',
+  时间不足: '#14b8a6',
+  审题偏差: '#f97316',
+  unknown: UNKNOWN_CAUSE_COLOR,
+}
+
+/** 给「枚举之外的意外名字」备用：与上面 7 个都不撞。 */
+const EXTRA_CAUSE_COLORS = ['#ec4899', '#0ea5e9', '#84cc16', '#a855f7', '#facc15', '#64748b']
+
+export function causeColor(causeType: string, taken: string[] = []): string {
+  const fixed = CAUSE_COLORS[causeType]
+  if (fixed !== undefined) return fixed
+  const free = EXTRA_CAUSE_COLORS.find((color) => !taken.includes(color))
+  return free ?? UNKNOWN_CAUSE_COLOR
+}
+
+/** 整张饼一次性配色：保证同一张图里没有两个同色扇形。 */
+export function causeColors(data: StatsCauseCount[]): string[] {
+  const taken: string[] = []
+  return data.map((item) => {
+    const color = causeColor(item.cause_type, taken)
+    taken.push(color)
+    return color
+  })
 }
 
 /**
@@ -50,19 +72,28 @@ export function summaryCards(summary: StatsSummary): { label: string; value: num
 }
 
 export function causeOption(data: StatsCauseCount[]): Record<string, unknown> {
+  const colors = causeColors(data)
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} 条（{d}%）' },
-    legend: { bottom: 0, type: 'scroll' },
+    // 图例的色块必须与扇形同色，否则图例会骗人：显式给 legend.data 带 itemStyle
+    legend: {
+      bottom: 0,
+      type: 'scroll',
+      data: data.map((item, index) => ({
+        name: item.cause_type,
+        itemStyle: { color: colors[index] },
+      })),
+    },
     series: [
       {
         type: 'pie',
         radius: ['42%', '68%'],
         center: ['50%', '45%'],
         avoidLabelOverlap: true,
-        data: data.map((item) => ({
+        data: data.map((item, index) => ({
           name: item.cause_type,
           value: item.count,
-          itemStyle: { color: causeColor(item.cause_type) },
+          itemStyle: { color: colors[index] },
         })),
       },
     ],
