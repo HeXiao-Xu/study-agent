@@ -11,13 +11,19 @@ import type {
   GraphSnapshotNode,
 } from '@/types/graph'
 
+import { masteryColor, masteryLabel } from '@/utils/masteryColor'
+
 /** 节点数超过该值就只画焦点子图（卡片要求 >300 降级）。 */
 export const DEGRADE_THRESHOLD = 300
 
-export const COLOR_UNRATED = '#9aa4b2'
-export const COLOR_LOW = '#e5484d'
-export const COLOR_MID = '#f0b429'
-export const COLOR_HIGH = '#22c55e'
+// 掌握度四色与 hit 口径在 utils/masteryColor（S4-8 起与统计看板共用）
+export {
+  COLOR_HIGH,
+  COLOR_LOW,
+  COLOR_MID,
+  COLOR_UNRATED,
+  masteryLabel,
+} from '@/utils/masteryColor'
 
 export interface EdgeStyle {
   color: string
@@ -41,15 +47,9 @@ export interface SelectOptions {
 }
 
 /** 掌握度分档（S4-7）：<0.4 红、0.4–0.7 黄、≥0.7 绿；null = 未评估（灰）。 */
+/** 掌握度分档（S4-7）：实现见 utils/masteryColor，图谱侧继续用旧名字。 */
 export function nodeColor(mastery: number | null): string {
-  if (mastery === null) return COLOR_UNRATED
-  if (mastery < 0.4) return COLOR_LOW
-  if (mastery < 0.7) return COLOR_MID
-  return COLOR_HIGH
-}
-
-export function masteryLabel(mastery: number | null): string {
-  return mastery === null ? '未评估' : `掌握度 ${mastery.toFixed(2)}`
+  return masteryColor(mastery)
 }
 
 export function nodeSize(examWeight: number | null): number {
