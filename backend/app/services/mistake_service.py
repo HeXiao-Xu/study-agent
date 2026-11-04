@@ -43,6 +43,7 @@ from app.schemas.mistake import (
     VariantsStatsOut,
 )
 from app.services import file_service, question_service
+from app.services import mastery_service
 from app.utils.pagination import PageParams, SortParams, apply_sort
 
 if TYPE_CHECKING:
@@ -378,8 +379,12 @@ def update_mistake(
 def record_review(
     session: Session, *, user_id: int, mistake_id: int, correct: bool
 ) -> MistakeDetailOut:
-    """复习结果驱动状态机（spec §6.1）：连续答对 MASTERY_STREAK 次算掌握。"""
+    """复习结果驱动状态机（spec §6.1）：连续答对 MASTERY_STREAK 次算掌握。
+
+    S4-7 起同事务更新掌握度：答对 s=1、答错 s=0，一次复习更新该题挂的全部知识点。
+    """
     mistake = _load_owned(session, user_id=user_id, mistake_id=mistake_id)
+    now = datetime.now(timezone.utc)
     if correct:
         mistake.correct_streak += 1
         mistake.status = (
@@ -390,9 +395,33 @@ def record_review(
     else:
         mistake.correct_streak = 0
         mistake.status = MistakeStatus.TODO.value
-    mistake.last_review_at = datetime.now(timezone.utc)
+    mistake.last_review_at = now
+    _update_mastery(session, user_id=user_id, mistake=mistake, correct=correct, now=now)
     _commit(session)
     return _detail(session, mistake=mistake)
+
+
+def _update_mastery(
+    session: Session, *, user_id: int, mistake: Mistake, correct: bool, now: datetime
+) -> None:
+    """没有挂知识点的题不写掌握度（不猜）；写失败让整个复习回滚，避免状态不一致。"""
+    kp_ids = [
+        int(row[0])
+        for row in session.execute(
+            select(QuestionKp.kp_id).where(QuestionKp.question_id == mistake.question_id)
+        ).all()
+    ]
+    if not kp_ids:
+        return
+    question = session.get(Question, mistake.question_id)
+    mastery_service.record_attempts(
+        session,
+        user_id=user_id,
+        kp_ids=kp_ids,
+        s=1.0 if correct else 0.0,
+        difficulty=int(question.difficulty) if question is not None else 3,
+        now=now,
+    )
 
 
 def delete_mistake(session: Session, *, user_id: int, mistake_id: int) -> None:

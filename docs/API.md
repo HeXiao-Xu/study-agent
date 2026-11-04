@@ -327,8 +327,8 @@
 #### GET /api/v1/kp/graph/snapshot
 - 权限：任意登录用户（图谱结构非隐私数据；学生也能看）
 - 入参：`subject_id`（必填，int ≥1）
-- 出参：`Envelope[GraphSnapshotOut]`，`{"subject": {"id": 7, "name": "高中数学"}, "nodes": [{"id": 12, "name": "导数与函数的单调性", "level": 3, "parent_id": 9, "exam_weight": 0.8, "mistake_count": 2}], "edges": [{"src_kp_id": 3, "dst_kp_id": 12, "relation": "prerequisite", "weight": 0.95}], "stats": {"nodes": 108, "edges": 264, "pending_edges": 50, "by_relation": {"contains": 107, "prerequisite": 114, "related": 4, "confusable": 39}}}`
-- 备注：`edges` **只含 `review_status='approved'`**；`stats.pending_edges` 只给计数（老师视角提示待审核量），不返回 pending 边；`by_relation` 四个键恒在（无该关系时为 0）；`mistake_count` 口径 = `mistakes(user_id=当前用户) → questions → question_kps` 去重计数，老师也是本人口径
+- 出参：`Envelope[GraphSnapshotOut]`，`{"subject": {"id": 7, "name": "高中数学"}, "nodes": [{"id": 12, "name": "导数与函数的单调性", "level": 3, "parent_id": 9, "exam_weight": 0.8, "mistake_count": 2, "mastery": 0.42}], "edges": [{"src_kp_id": 3, "dst_kp_id": 12, "relation": "prerequisite", "weight": 0.95}], "stats": {"nodes": 108, "edges": 264, "pending_edges": 50, "by_relation": {"contains": 107, "prerequisite": 114, "related": 4, "confusable": 39}}}`
+- 备注：`edges` **只含 `review_status='approved'`**；`stats.pending_edges` 只给计数（老师视角提示待审核量），不返回 pending 边；`by_relation` 四个键恒在（无该关系时为 0）；`mistake_count` 口径 = `mistakes(user_id=当前用户) → questions → question_kps` 去重计数，老师也是本人口径；`mastery`（S4-7）= 当前用户在该知识点的**折算后**掌握度 `M_t`（`mastery.mastery · exp(−Δt/S)`），**无行 = `null`（未评估）**，前端据此配色；`mistake_count` 保留在详情侧栏，不再参与节点配色
 - 错误：`401/40100`、`404/40400`（学科不存在）、`422/42200`
 
 #### GET /api/v1/kp/graph/nodes/{kp_id}
@@ -342,6 +342,24 @@
 - 入参：`subject_id`（可选）
 - 出参：`Envelope[{"subject_id": 7, "nodes": 108, "edges": 152, "by_relation": {"contains": 107, "prerequisite": 30}, "by_status": {"approved": 107, "pending": 45}, "last_built_at": "..."}]`
 - 错误：`403/40300`
+
+### 掌握度（S4-7）
+
+#### POST /api/v1/kp/mastery/recompute
+- 权限：`student`（teacher/parent/admin 403/40300）
+- 类型：同步
+- 说明：按时间序回放本人全部错题的「作答事件」重建掌握度。事件来源：每条错题按状态折算 s（`待订正`=0 / `已订正`=0.5 / `已掌握`=1），事件时间取 `last_review_at`，为空则取 `created_at`；难度取 `questions.difficulty`；一条错题挂 K 个知识点就产生 K 次同类事件。**覆盖式重建**：先删本人 `mastery` 全部行，再按时间序重算；无 `question_kps` 的错题只计数不产生事件。
+- 出参：`Envelope[{"events_replayed": 44, "rows_built": 13, "skipped_no_kp": 31}]`
+- 备注：幂等（同数据跑两次结果一致）；只重建不新增事件来源
+- 错误：`401/40100`、`403/40300`、`422/42200`
+
+#### GET /api/v1/kp/mastery
+- 权限：`student`（只读本人）
+- 类型：同步
+- 入参：`subject_id`（可选，int ≥1）、`page` / `page_size`（统一分页）、`sort_by`（白名单 `mastery`｜`due_at`｜`attempts`｜`kp_id`，默认 `mastery`）/ `order`（默认 `asc`，即最薄弱优先）
+- 出参：`Envelope[PageData[MasteryOut]]`，`MasteryOut = {"kp_id": 12, "kp_name": "导数与函数的单调性", "subject_id": 7, "mastery": 0.462, "mastery_t": 0.353, "attempts": 5, "correct_cnt": 5, "stability": 37.78, "last_practice_at": "...", "due_at": "..."}`
+- 备注：`mastery` 是库存原值，`mastery_t` 是**按当前时间折算**的有效掌握度（无 `last_practice_at` 时等于 `mastery`）；**只返回有行（已评估）的知识点**，没有行代表未评估而不是 0 掌握；同 `mastery` 值多时按 `kp_id ASC` 兜底，避免翻页重复
+- 错误：`401/40100`、`403/40300`、`422/42200`
 
 ## 5. RAG 问答（论文核心）
 

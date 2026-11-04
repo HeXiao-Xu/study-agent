@@ -53,7 +53,7 @@ S4-1～S4-6 已经产出「题目 → 错题 → 错因 → 关系图谱」这�
 #### GET /api/v1/kp/mastery
 - 权限：student（只读本人）
 - 类型：同步
-- 入参：`subject_id`（可选，int ≥1）、`page`/`page_size`（统一分页）、`sort`/`order`（白名单 `mastery` / `due_at` / `attempts` / `kp_id`，默认 `mastery ASC`）
+- 入参：`subject_id`（可选，int ≥1）、`page`/`page_size`（统一分页）、`sort_by`/`order`（白名单 `mastery` / `due_at` / `attempts` / `kp_id`，默认 `mastery ASC`）
 - 出参：`Envelope[PageData[MasteryOut]]`，`MasteryOut = {kp_id, kp_name, subject_id, mastery, mastery_t, attempts, correct_cnt, stability, last_practice_at, due_at}`
 - 备注：`mastery` 是库存原值；`mastery_t` 是**按当前时间折算**的有效掌握度 `M·exp(−Δt/S)`（无 `last_practice_at` 时等于 `mastery`）；只返回有行（已评估）的知识点
 - 错误：401/40100、403/40300、422/42200

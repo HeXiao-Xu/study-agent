@@ -187,3 +187,31 @@ class GraphNodeDetailOut(BaseModel):
     confusable: list[GraphNeighborOut] = Field(default_factory=list)
     notes: list[GraphNoteBrief] = Field(default_factory=list)
     mistakes: list[GraphMistakeBrief] = Field(default_factory=list)
+
+
+class MasteryOut(BaseModel):
+    """一条掌握度；`mastery` 是库存原值，`mastery_t` 是按当前时间折算的有效值。"""
+
+    kp_id: int
+    kp_name: str
+    subject_id: int
+    mastery: float
+    mastery_t: float
+    attempts: int
+    correct_cnt: int
+    stability: float
+    last_practice_at: datetime | None = None
+    due_at: datetime | None = None
+
+
+class MasteryPage(BaseModel):
+    items: list[MasteryOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class MasteryRecomputeOut(BaseModel):
+    events_replayed: int
+    rows_built: int
+    skipped_no_kp: int
