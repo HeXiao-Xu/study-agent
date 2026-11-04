@@ -361,6 +361,48 @@
 - 备注：`mastery` 是库存原值，`mastery_t` 是**按当前时间折算**的有效掌握度（无 `last_practice_at` 时等于 `mastery`）；**只返回有行（已评估）的知识点**，没有行代表未评估而不是 0 掌握；同 `mastery` 值多时按 `kp_id ASC` 兜底，避免翻页重复
 - 错误：`401/40100`、`403/40300`、`422/42200`
 
+### 统计看板（S4-8）
+
+#### GET /api/v1/stats/overview
+- 权限：`student`（teacher/parent/admin → 403/40300；只查本人，不接受 `student_id`）
+- 类型：同步
+- 说明：本人错题看板的一次性聚合，供前端 `/stats` 页画「错因饼图 + 知识点 TOP10 柱状图 + 每日新增/累计已掌握折线」。
+- 入参：`range`（可选，`7d`｜`30d`｜`90d`，默认 `30d`；其他值 422/42200）
+- 出参：`Envelope[StatsOverviewOut]`
+
+  ```json
+  {
+    "range": {"key": "30d", "from": "2026-10-06", "to": "2026-11-04"},
+    "summary": {"total": 34, "pending": 33, "corrected": 1, "mastered": 0,
+                "analyzed": 34, "with_kp": 3, "mastery_rows": 5},
+    "by_status": [
+      {"status": "待订正", "count": 33},
+      {"status": "已订正", "count": 1},
+      {"status": "已掌握", "count": 0}
+    ],
+    "by_cause": [
+      {"cause_type": "概念不清", "count": 11},
+      {"cause_type": "计算失误", "count": 6}
+    ],
+    "top_kps": [
+      {"kp_id": 197, "kp_name": "同角三角函数基本关系", "count": 1, "mastery": 0.144}
+    ],
+    "trend": [
+      {"date": "2026-11-03", "new_mistakes": 34, "mastered": 0}
+    ]
+  }
+  ```
+
+- 口径：
+  - 窗口 = `[今天-(N-1) 天 00:00 UTC, 现在]`，按 `mistakes.created_at` 过滤；`summary` / `by_status` / `by_cause` / `top_kps` 全部同窗口，**全站 UTC**，不转本地时区；
+  - `by_status` 恒 3 行（顺序 `待订正 → 已订正 → 已掌握`，缺的补 0）；
+  - `by_cause` 只列已有诊断的错因，按 `count DESC, cause_type ASC` 稳定排序；`unknown` 照常出现；
+  - `top_kps` 最多 10 条，`count` = 去重错题数，`mastery` = 按当前时间折算的有效掌握度 `M_t`（S4-7 口径，复用 `mastery_service.mastery_values`），**无掌握度行 = `null`（未评估）**；
+  - `summary.analyzed` = 有错因诊断的错题数，`with_kp` = 挂了知识点的错题数，`mastery_rows` = 本人掌握度行数——这三个是**解释性数字**，用来解释「TOP 柱为什么只有几条」；
+  - `trend` 按天**补零**（`7d`/`30d`/`90d` 分别 7/30/90 个点）；`new_mistakes` = 当天新增错题数；`mastered` = **回算累计**：当前状态为「已掌握」且 `last_review_at` 不晚于该天的错题数，窗口开始之前就掌握的计入起点。**不是历史快照**：没有状态变更历史表，错题状态回退时历史曲线会跟着变低。
+- 错误：`401/40100`、`403/40300`、`422/42200`
+- 备注：与 `GET /api/v1/mistakes/stats` 口径可交叉核对（同窗口下 `total` 与 `by_cause` 应逐项一致），但两者定位不同——`/mistakes/stats` 是错题页的三条小统计，本接口是看板（趋势 + 掌握度 + 解释性计数）。
+
 ## 5. RAG 问答（论文核心）
 
 ### POST /api/v1/retrieval/search（S3-2）
@@ -647,6 +689,7 @@
 ```
 
 - 错误：`422/42200` 时间格式非法；`401/40100`
+- 备注：看板（趋势/掌握度/解释性计数）走 `GET /api/v1/stats/overview`（S4-8），本接口保持「错题页三条小统计」的定位不变。
 
 ### GET /api/v1/mistakes
 - 权限：登录用户（仅本人）

@@ -12,6 +12,7 @@ from app.api.v1 import (
     qa,
     questions,
     retrieval,
+    stats,
     tasks,
 )
 
@@ -24,6 +25,7 @@ api_router.include_router(kp.router)
 api_router.include_router(questions.router)
 api_router.include_router(mistakes.router)
 api_router.include_router(mastery.router)
+api_router.include_router(stats.router)
 api_router.include_router(retrieval.router)
 api_router.include_router(qa.router)
 api_router.include_router(admin.router)
