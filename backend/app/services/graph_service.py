@@ -607,27 +607,12 @@ def _mastery_map(
     kp_ids: Sequence[int],
     now: datetime | None = None,
 ) -> dict[int, float]:
-    """当前用户在这些知识点上的有效掌握度 M_t；无行不出现 → 前端显示未评估。"""
-    from app.models.mastery import Mastery
+    """当前用户在这些知识点上的有效掌握度 M_t（委托 mastery_service，避免两份折算逻辑）。"""
     from app.services import mastery_service
 
-    if not kp_ids:
-        return {}
-    moment = now or datetime.now(timezone.utc)
-    rows = session.execute(
-        select(
-            Mastery.kp_id, Mastery.mastery, Mastery.stability, Mastery.last_practice_at
-        ).where(Mastery.user_id == user_id, Mastery.kp_id.in_(list(kp_ids)))
-    ).all()
-    mastered: dict[int, float] = {}
-    for kp_id, mastery, stability, last_practice_at in rows:
-        days = 0.0
-        if last_practice_at is not None:
-            days = max(0.0, (moment - last_practice_at).total_seconds() / 86400.0)
-        mastered[int(kp_id)] = mastery_service.decayed_mastery(
-            float(mastery), float(stability), days=days
-        )
-    return mastered
+    return mastery_service.mastery_values(
+        session, user_id=user_id, kp_ids=kp_ids, now=now
+    )
 
 
 def snapshot(

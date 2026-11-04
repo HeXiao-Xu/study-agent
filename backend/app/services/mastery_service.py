@@ -317,3 +317,33 @@ def list_mastery(
             )
         )
     return MasteryPage(items=items, total=data.total, page=data.page, page_size=data.size)
+
+
+def mastery_values(
+    session: Session,
+    *,
+    user_id: int,
+    kp_ids: Sequence[int],
+    now: datetime | None = None,
+) -> dict[int, float]:
+    """批量取有效掌握度 M_t；无行的知识点不出现在结果里（= 未评估）。"""
+    from app.models.mastery import Mastery
+
+    unique_ids = sorted({int(kp_id) for kp_id in kp_ids})
+    if not unique_ids:
+        return {}
+    moment = now or datetime.now(timezone.utc)
+    rows = session.execute(
+        select(
+            Mastery.kp_id, Mastery.mastery, Mastery.stability, Mastery.last_practice_at
+        ).where(Mastery.user_id == user_id, Mastery.kp_id.in_(unique_ids))
+    ).all()
+    values: dict[int, float] = {}
+    for kp_id, mastery, stability, last_practice_at in rows:
+        days = 0.0
+        if last_practice_at is not None:
+            days = max(0.0, (moment - last_practice_at).total_seconds() / 86400.0)
+        values[int(kp_id)] = decayed_mastery(
+            float(mastery), float(stability), days=days
+        )
+    return values
