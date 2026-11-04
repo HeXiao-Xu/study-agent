@@ -51,6 +51,7 @@ function node(id: number, name: string, extra: Record<string, unknown> = {}) {
     parent_id: 2,
     exam_weight: 0.5,
     mistake_count: 0,
+    mastery: 0.5,
     ...extra,
   }
 }
@@ -59,8 +60,8 @@ function snapshot(overrides: Partial<GraphSnapshot> = {}): GraphSnapshot {
   return {
     subject: { id: 7, name: '高中数学' },
     nodes: [
-      { id: 1, name: '高中数学', level: 1, parent_id: null, exam_weight: 1, mistake_count: 0 },
-      { id: 2, name: '函数', level: 2, parent_id: 1, exam_weight: 1, mistake_count: 0 },
+      { id: 1, name: '高中数学', level: 1, parent_id: null, exam_weight: 1, mistake_count: 0, mastery: null },
+      { id: 2, name: '函数', level: 2, parent_id: 1, exam_weight: 1, mistake_count: 0, mastery: 0.42 },
       node(3, '单调性'),
       node(4, '导数与函数的单调性'),
     ],

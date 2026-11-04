@@ -7,6 +7,8 @@ export interface GraphSnapshotNode {
   parent_id: number | null
   exam_weight: number | null
   mistake_count: number
+  /** S4-7：折算后的有效掌握度 M_t；null = 未评估 */
+  mastery: number | null
 }
 
 export interface GraphSnapshotEdge {

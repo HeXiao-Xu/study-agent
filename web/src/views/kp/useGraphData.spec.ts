@@ -9,6 +9,7 @@ import {
   chapterOf,
   chapterOptions,
   matchNodes,
+  masteryLabel,
   nodeColor,
   nodeSize,
   pickFocusNode,
@@ -27,6 +28,7 @@ function node(
     parent_id: opts.parent_id ?? 1,
     exam_weight: opts.exam_weight ?? 0.5,
     mistake_count: opts.mistake_count ?? 0,
+    mastery: opts.mastery ?? null,
   }
 }
 
@@ -48,12 +50,19 @@ function snapshot(nodes: GraphSnapshotNode[], edges: GraphSnapshotEdge[]): Graph
 }
 
 describe('nodeColor', () => {
-  it('按错题数分三档', () => {
-    expect(nodeColor(0)).toBe('#9aa4b2')
-    expect(nodeColor(1)).toBe('#f0b429')
-    expect(nodeColor(2)).toBe('#f0b429')
-    expect(nodeColor(3)).toBe('#e5484d')
-    expect(nodeColor(99)).toBe('#e5484d')
+  it('按掌握度分档，未评估为灰', () => {
+    expect(nodeColor(null)).toBe('#9aa4b2')
+    expect(nodeColor(0)).toBe('#e5484d')
+    expect(nodeColor(0.39)).toBe('#e5484d')
+    expect(nodeColor(0.4)).toBe('#f0b429')
+    expect(nodeColor(0.69)).toBe('#f0b429')
+    expect(nodeColor(0.7)).toBe('#22c55e')
+    expect(nodeColor(1)).toBe('#22c55e')
+  })
+
+  it('masteryLabel 给出可读文案', () => {
+    expect(masteryLabel(null)).toBe('未评估')
+    expect(masteryLabel(0.42)).toBe('掌握度 0.42')
   })
 })
 
@@ -189,7 +198,7 @@ describe('matchNodes', () => {
 })
 
 describe('buildOption', () => {
-  const nodes = [node(3, '单调性', { exam_weight: 1, mistake_count: 3 })]
+  const nodes = [node(3, '单调性', { exam_weight: 1, mastery: 0.2 })]
   const edges = [edge(3, 5), edge(3, 5, 'confusable')]
 
   it('节点带 symbolSize/颜色，边带箭头与样式', () => {
@@ -201,6 +210,7 @@ describe('buildOption', () => {
       id: '3',
       name: '单调性',
       symbolSize: 30,
+      mastery: 0.2,
       itemStyle: { color: '#e5484d' },
     })
     const prerequisite = series.links[0] as { symbol: string[]; lineStyle: { color: string } }

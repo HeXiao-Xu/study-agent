@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
   <div class="graph-page">
     <PageHeader
       title="图谱"
-      description="力导向知识图谱：节点大小=考纲权重，颜色=我的错题密度（临时指标，S4-7 换真实掌握度）。"
+      description="力导向知识图谱：节点大小=考纲权重，颜色=我的掌握度（灰=未评估，红<0.4，黄 0.4–0.7，绿≥0.7）。"
     />
 
     <div class="graph-toolbar">

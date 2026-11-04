@@ -600,7 +600,43 @@ def _mistake_counts(
     return {int(kp_id): int(count) for kp_id, count in rows}
 
 
-def snapshot(session: Session, *, subject_id: int, user_id: int) -> Any:
+def _mastery_map(
+    session: Session,
+    *,
+    user_id: int,
+    kp_ids: Sequence[int],
+    now: datetime | None = None,
+) -> dict[int, float]:
+    """当前用户在这些知识点上的有效掌握度 M_t；无行不出现 → 前端显示未评估。"""
+    from app.models.mastery import Mastery
+    from app.services import mastery_service
+
+    if not kp_ids:
+        return {}
+    moment = now or datetime.now(timezone.utc)
+    rows = session.execute(
+        select(
+            Mastery.kp_id, Mastery.mastery, Mastery.stability, Mastery.last_practice_at
+        ).where(Mastery.user_id == user_id, Mastery.kp_id.in_(list(kp_ids)))
+    ).all()
+    mastered: dict[int, float] = {}
+    for kp_id, mastery, stability, last_practice_at in rows:
+        days = 0.0
+        if last_practice_at is not None:
+            days = max(0.0, (moment - last_practice_at).total_seconds() / 86400.0)
+        mastered[int(kp_id)] = mastery_service.decayed_mastery(
+            float(mastery), float(stability), days=days
+        )
+    return mastered
+
+
+def snapshot(
+    session: Session,
+    *,
+    subject_id: int,
+    user_id: int,
+    now: datetime | None = None,
+) -> Any:
     """一次给全图：节点 + 已审核边 + 统计（S4-6，只读）。"""
     from app.models.subject import Subject
     from app.schemas.kp import (
@@ -617,6 +653,7 @@ def snapshot(session: Session, *, subject_id: int, user_id: int) -> Any:
     nodes = _load_nodes(session, subject_id)
     node_ids = [node.id for node in nodes]
     counts = _mistake_counts(session, user_id=user_id, kp_ids=node_ids)
+    mastered = _mastery_map(session, user_id=user_id, kp_ids=node_ids, now=now)
     edges = (
         list(
             session.scalars(
@@ -657,6 +694,7 @@ def snapshot(session: Session, *, subject_id: int, user_id: int) -> Any:
                     float(node.exam_weight) if node.exam_weight is not None else None
                 ),
                 mistake_count=counts.get(node.id, 0),
+                mastery=mastered.get(node.id),
             )
             for node in nodes
         ],

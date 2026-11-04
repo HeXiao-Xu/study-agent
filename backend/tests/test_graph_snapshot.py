@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -66,9 +66,11 @@ class FakeSnapshotSession:
         self.nodes = nodes
         self.edges = edges
         self.mistake_rows = mistake_rows or []
+        self.mastery_rows: list[tuple[int, object, object, datetime | None]] = []
         self.pending = pending
         self.committed = 0
         self.edge_sql = ""
+        self.mastery_sql = ""
 
     def get(self, model, pk):  # noqa: ANN001, ANN201
         return self.subject if model is Subject else None
@@ -85,7 +87,14 @@ class FakeSnapshotSession:
         return iter(self.nodes)
 
     def execute(self, statement):  # noqa: ANN001, ANN201
-        rows = self.mistake_rows
+        sql = str(statement)
+        if "mastery" in sql:
+            self.mastery_sql = str(
+                statement.compile(compile_kwargs={"literal_binds": True})
+            )
+            rows = self.mastery_rows
+        else:
+            rows = self.mistake_rows
 
         class _Rows:
             def all(self):
@@ -143,6 +152,26 @@ def test_snapshot_fills_mistake_count_by_kp() -> None:
     out = graph_service.snapshot(session, subject_id=7, user_id=50)
     counts = {node.id: node.mistake_count for node in out.nodes}
     assert counts == {1: 0, 2: 3}
+
+
+def test_snapshot_attaches_decayed_mastery() -> None:
+    session = _session()
+    session.mastery_rows = [
+        (2, Decimal("0.800"), Decimal("10.00"), NOW - timedelta(days=10))
+    ]
+    out = graph_service.snapshot(session, subject_id=7, user_id=50, now=NOW)
+    by_id = {node.id: node for node in out.nodes}
+    assert by_id[2].mastery == pytest.approx(0.294)  # 0.8·exp(−10/10)
+    assert by_id[1].mastery is None  # 没有行 = 未评估
+
+
+def test_snapshot_ignores_other_users_mastery() -> None:
+    session = _session()
+    session.mastery_rows = []
+    out = graph_service.snapshot(session, subject_id=7, user_id=50, now=NOW)
+    assert all(node.mastery is None for node in out.nodes)
+    assert "mastery.user_id = 50" in session.mastery_sql
+    assert "mastery.kp_id IN (1, 2)" in session.mastery_sql
 
 
 def test_snapshot_unknown_subject_raises_not_found() -> None:

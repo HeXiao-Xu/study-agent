@@ -121,6 +121,8 @@ class GraphSnapshotNode(BaseModel):
     parent_id: int | None = None
     exam_weight: float | None = None
     mistake_count: int = 0
+    # S4-7：折算后的有效掌握度 M_t；无行（未评估）为 None，前端显示灰色
+    mastery: float | None = None
 
 
 class GraphSnapshotEdge(BaseModel):

@@ -14,9 +14,10 @@ import type {
 /** 节点数超过该值就只画焦点子图（卡片要求 >300 降级）。 */
 export const DEGRADE_THRESHOLD = 300
 
-export const COLOR_MISTAKE_NONE = '#9aa4b2'
-export const COLOR_MISTAKE_FEW = '#f0b429'
-export const COLOR_MISTAKE_MANY = '#e5484d'
+export const COLOR_UNRATED = '#9aa4b2'
+export const COLOR_LOW = '#e5484d'
+export const COLOR_MID = '#f0b429'
+export const COLOR_HIGH = '#22c55e'
 
 export interface EdgeStyle {
   color: string
@@ -39,11 +40,16 @@ export interface SelectOptions {
   threshold?: number
 }
 
-/** 错题密度只作临时热力（真实掌握度是 S4-7）。 */
-export function nodeColor(mistakeCount: number): string {
-  if (mistakeCount <= 0) return COLOR_MISTAKE_NONE
-  if (mistakeCount <= 2) return COLOR_MISTAKE_FEW
-  return COLOR_MISTAKE_MANY
+/** 掌握度分档（S4-7）：<0.4 红、0.4–0.7 黄、≥0.7 绿；null = 未评估（灰）。 */
+export function nodeColor(mastery: number | null): string {
+  if (mastery === null) return COLOR_UNRATED
+  if (mastery < 0.4) return COLOR_LOW
+  if (mastery < 0.7) return COLOR_MID
+  return COLOR_HIGH
+}
+
+export function masteryLabel(mastery: number | null): string {
+  return mastery === null ? '未评估' : `掌握度 ${mastery.toFixed(2)}`
 }
 
 export function nodeSize(examWeight: number | null): number {
@@ -156,8 +162,13 @@ export function buildOption(
     animationDuration: 200,
     tooltip: {
       confine: true,
-      formatter: (params: { dataType?: string; data?: { name?: string } }) =>
-        params.dataType === 'node' ? (params.data?.name ?? '') : '',
+      formatter: (params: {
+        dataType?: string
+        data?: { name?: string; mastery?: number | null }
+      }) =>
+        params.dataType === 'node'
+          ? `${params.data?.name ?? ''}\n${masteryLabel(params.data?.mastery ?? null)}`
+          : '',
     },
     series: [
       {
@@ -176,7 +187,8 @@ export function buildOption(
           name: node.name,
           value: node.exam_weight ?? 0,
           symbolSize: nodeSize(node.exam_weight),
-          itemStyle: { color: nodeColor(node.mistake_count) },
+          itemStyle: { color: nodeColor(node.mastery) },
+          mastery: node.mastery,
           selected: selectedId === node.id,
         })),
         links: edges.map((edge) => {
