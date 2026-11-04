@@ -678,6 +678,159 @@ def snapshot(session: Session, *, subject_id: int, user_id: int) -> Any:
     )
 
 
+PATH_GUARD = 10
+
+
+def _names_by_id(session: Session, kp_ids: Any) -> dict[int, str]:
+    """一次 IN 批查名称，避免逐个 get（禁止 N+1）。"""
+    if not kp_ids:
+        return {}
+    rows = session.execute(
+        select(KnowledgePoint.id, KnowledgePoint.name).where(
+            KnowledgePoint.id.in_(list(kp_ids))
+        )
+    ).all()
+    return {int(kp_id): name for kp_id, name in rows}
+
+
+def _ancestor_path(session: Session, node: KnowledgePoint) -> list[str]:
+    """根 → 本节点的名称链（守卫 10 层，防脏数据成环）。"""
+    names = [node.name]
+    current = node
+    guard = 0
+    while current.parent_id is not None and guard < PATH_GUARD:
+        parent = session.get(KnowledgePoint, current.parent_id)
+        if parent is None:
+            break
+        names.append(parent.name)
+        current = parent
+        guard += 1
+    names.reverse()
+    return names
+
+
+def _approved_neighbors(
+    session: Session, kp_id: int
+) -> dict[str, list[tuple[int, float | None]]]:
+    """该节点参与的四类 approved 边，按 relation 分组返回 (对端 id, weight)。"""
+    edges = list(
+        session.scalars(
+            select(KnowledgeEdge).where(
+                KnowledgeEdge.review_status == EdgeReviewStatus.APPROVED,
+                KnowledgeEdge.relation != EdgeRelation.CONTAINS.value,
+                or_(
+                    KnowledgeEdge.src_kp_id == kp_id,
+                    KnowledgeEdge.dst_kp_id == kp_id,
+                ),
+            )
+        )
+    )
+    grouped: dict[str, list[tuple[int, float | None]]] = {
+        EdgeRelation.PREREQUISITE.value: [],
+        EdgeRelation.RELATED.value: [],
+        EdgeRelation.CONFUSABLE.value: [],
+    }
+    success: list[tuple[int, float | None]] = []
+    for edge in edges:
+        weight = float(edge.weight) if edge.weight is not None else None
+        other = edge.dst_kp_id if edge.src_kp_id == kp_id else edge.src_kp_id
+        if edge.relation == EdgeRelation.PREREQUISITE.value:
+            if edge.dst_kp_id == kp_id:
+                grouped[EdgeRelation.PREREQUISITE.value].append((other, weight))
+            else:
+                success.append((other, weight))
+        else:
+            grouped.setdefault(edge.relation, []).append((other, weight))
+    grouped["successors"] = success
+    return grouped
+
+
+def node_detail(session: Session, *, kp_id: int, user_id: int) -> Any:
+    """节点详情：面包屑 + 四类 approved 邻居 + 本人笔记与错题（S4-6，只读）。"""
+    from app.models.mistake import Mistake
+    from app.models.note import Note
+    from app.models.note_kp import NoteKp
+    from app.models.question import Question
+    from app.models.question_kp import QuestionKp
+    from app.schemas.kp import (
+        GraphMistakeBrief,
+        GraphNeighborOut,
+        GraphNodeDetailOut,
+        GraphNoteBrief,
+    )
+
+    node = session.get(KnowledgePoint, kp_id)
+    if node is None:
+        raise NotFoundError("知识点不存在")
+    grouped = _approved_neighbors(session, kp_id)
+    other_ids = {other_id for pairs in grouped.values() for other_id, _ in pairs}
+    names = _names_by_id(session, other_ids)
+
+    def neighbors(key: str) -> list[Any]:
+        return [
+            GraphNeighborOut(
+                kp_id=other_id,
+                name=names.get(other_id, f"#{other_id}"),
+                weight=weight,
+            )
+            for other_id, weight in grouped.get(key, [])
+        ]
+
+    notes = session.execute(
+        select(Note.id, Note.title, Note.updated_at)
+        .join(NoteKp, NoteKp.note_id == Note.id)
+        .where(NoteKp.kp_id == kp_id, NoteKp.confirmed.is_(True))
+        .where(Note.user_id == user_id, Note.deleted_at.is_(None))
+        .order_by(Note.updated_at.desc())
+        .limit(20)
+    ).all()
+    mistakes = session.execute(
+        select(
+            Mistake.id,
+            Mistake.question_id,
+            Mistake.status,
+            Mistake.created_at,
+            Question.stem_md,
+        )
+        .join(Question, Question.id == Mistake.question_id)
+        .join(QuestionKp, QuestionKp.question_id == Question.id)
+        .where(QuestionKp.kp_id == kp_id, Mistake.user_id == user_id)
+        .order_by(Mistake.created_at.desc())
+        .limit(20)
+    ).all()
+    return GraphNodeDetailOut(
+        id=node.id,
+        name=node.name,
+        level=node.level,
+        parent_id=node.parent_id,
+        subject_id=node.subject_id,
+        path=_ancestor_path(session, node),
+        description=node.description,
+        exam_weight=(
+            float(node.exam_weight) if node.exam_weight is not None else None
+        ),
+        mistake_count=len(mistakes),
+        prerequisites=neighbors(EdgeRelation.PREREQUISITE.value),
+        successors=neighbors("successors"),
+        related=neighbors(EdgeRelation.RELATED.value),
+        confusable=neighbors(EdgeRelation.CONFUSABLE.value),
+        notes=[
+            GraphNoteBrief(id=row[0], title=row[1], updated_at=row[2])
+            for row in notes
+        ],
+        mistakes=[
+            GraphMistakeBrief(
+                id=row[0],
+                question_id=row[1],
+                status=row[2],
+                created_at=row[3],
+                stem=(row[4] or "")[:60],
+            )
+            for row in mistakes
+        ],
+    )
+
+
 def enqueue_build(
     session: Session,
     *,

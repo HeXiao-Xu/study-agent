@@ -18,6 +18,7 @@ from app.schemas.kp import (
     GraphBuildIn,
     GraphEdgeOut,
     GraphEdgePage,
+    GraphNodeDetailOut,
     GraphSnapshotOut,
     GraphStatsOut,
     KpCreate,
@@ -282,6 +283,24 @@ def graph_snapshot(
         trace_id=get_trace_id(),
         data=graph_service.snapshot(
             session, subject_id=subject_id, user_id=current_user.id
+        ),
+    )
+
+
+@router.get(
+    "/graph/nodes/{kp_id}",
+    response_model=Envelope[GraphNodeDetailOut],
+    summary="知识点图谱详情",
+)
+def graph_node_detail(
+    kp_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[GraphNodeDetailOut]:
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=graph_service.node_detail(
+            session, kp_id=kp_id, user_id=current_user.id
         ),
     )
 
