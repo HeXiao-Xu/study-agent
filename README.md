@@ -88,6 +88,13 @@ npm run dev                             # 看到 "Local: http://localhost:5173/"
 > - 公式与模拟：`backend\scripts\mastery_sim.py` 打印 7 天作答表格 + 参数敏感性扫描，可直接用于答辩
 > - 口径：公式是「参考 SM-2 / FSRS 的工程化简化」，参数是工程取值不是拟合结果
 
+> 统计看板（S4-8）：左侧导航「09 统计」或直接开 `http://localhost:5173/stats`（仅学生账号）。
+> - 三档窗口：近 7 / 30 / 90 天（UTC 分桶），一次请求拿全部数据：`GET /api/v1/stats/overview?range=30d`
+> - 图：错因分布（饼，`unknown` 灰）+ 知识点 TOP10（横条，柱子颜色=掌握度四档）+ 每日新增/累计已掌握（折线）
+> - 现有真实数据长这样：34 条错题、7 类错因、**只有 3 条错题挂了知识点 → 柱图只有 5 根、每根都是 1**，趋势只有一个非零点，`已掌握` 全 0——这是数据形态，不是画错了；柱图下会写「其余 N 条错题没有关联知识点」
+> - 「累计已掌握」是**回算**（按当前状态 + `last_review_at` 反推），不是历史快照；错题状态回退时历史曲线会跟着变低
+> - 看板与错题页的 `/mistakes/stats` 口径可交叉核对（同窗口下 total / by_cause / top_kps 应一致）
+
 > `uvicorn` / `arq` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
 > 普通 PowerShell 先跑 `.venv\Scripts\Activate.ps1` 再用。
 > 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）；

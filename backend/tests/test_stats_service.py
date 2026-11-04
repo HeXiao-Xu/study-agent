@@ -172,6 +172,9 @@ def test_overview_every_statement_filters_user() -> None:
         for stmt in session.statements
     )
     assert "mistakes.user_id = 50" in compiled
+    # date_trunc 的单位必须是字面量，否则 PG 无法把 SELECT 与 GROUP BY 认成同一表达式
+    assert "date_trunc('day', mistakes.created_at)" in compiled
+    assert "date_trunc('day', mistakes.last_review_at)" in compiled
     assert "mastery.user_id = 50" in compiled
     assert "mistakes.created_at >=" in compiled
 

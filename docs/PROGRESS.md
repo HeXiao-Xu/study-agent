@@ -5,8 +5,8 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；阶段 4（错题与知识图谱，M3）进行中，S4-1～S4-7 已完成（tag `m0-env-ready` / `m0-rag-validated`）
-- 最近完成：S4-7 掌握度模型与更新服务（`mastery` 表 + 迁移 `0013_s4_7`；方案 §6.6 公式落成纯函数内核；错题复习同事务更新掌握度；`POST /kp/mastery/recompute` 回放重建 + `GET /kp/mastery` 本人列表；图谱配色从错题密度换成真实掌握度）；后端 **1186 passed, 1 warning**，前端 **226 passed / 39 files**，`npm run build` 退出 0（实测）
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）
+- 最近完成：S4-8 错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
 - 关键口径（S4-4）：只手动触发、一次固定 3 道；三分工（生成 → 只给题干的独立复算 → 纯函数比对），**不设第三个 LLM 判官**；最多 2 轮 / 12 次调用；结果写 `similar_questions_json`（v1、覆盖式、无迁移）；**不自动入库**，逐题 accept 才建题（`origin=ai`、`verified=false`、`tags=["AI变式"]`）；生成彻底失败 → 任务 `failed` 且旧 JSON 不动（D-047）
 - 关键口径（S4-5）：`contains` 结构边（107 条，自动 `approved`）+ `prerequisite`（向量 top-8 候选 + 每节点一次 LLM，≤2 条）+ `related`/`confusable`（余弦分档 + 批量复核）；**AI 边一律 `pending`**，`rejected` 当墓碑不复活、`approved` 永不降级；单次构建 ≤180 次调用、超时 1800 s；候选排除同名/祖先-后代对，前置还拦反向对（D-048）
@@ -15,8 +15,10 @@
 - 关键口径（S4-6）：对外只出 `approved` 边（pending 只给计数给老师看）；`contains` 107 条树边**默认不画**（会把力导向拉成放射状），工具栏可开；节点大小 = 考纲权重 `8+22*w`，颜色 = **当前用户**错题密度（0 灰 / 1–2 黄 / ≥3 红，临时指标，S4-7 换真实掌握度）；节点 >300 降级为「焦点 + 一跳邻居」子图并给「显示全部」；力导向布局不固定、不记位置（D-049）
 - 关键口径（S4-7）：公式照方案 §6.6（`K0=0.35`、`K_eff=K0/difficulty`、`M ← clamp(M+K_eff(s−M),0,1)`、`S×1.8/×0.5` 限 1–60、`M_t=M·e^(−Δt/S)`、`interval=clamp(round(S·M_t),1,30)`），参数是**工程取值不是拟合结果**；`s∈{0,0.5,1}`，半对 `S` 不变且不计入 `correct_cnt`；**懒创建**——无行 = 未评估（不是 0 掌握），初始 `M=0`；更新只挂 `POST /mistakes/{id}/review`（答对 1 / 答错 0，一次复习更新该题全部 `question_kps`），手动 PATCH 状态不算作答；`recompute` 按 `last_review_at or created_at` 时间序回放（待订正 0 / 已订正 0.5 / 已掌握 1）、**覆盖式重建**、幂等；图谱节点 `mastery` 给折算后 `M_t`（无行 `null` → 灰色），前端四档 `<0.4 红`/`0.4–0.7 黄`/`≥0.7 绿`（D-050）
 - 验收（S4-7，真机）：学生 50 共 34 条错题、3 条挂知识点（5 个 KP），`recompute` → `events_replayed=5 / rows_built=5 / skipped_no_kp=31`，跑两次一致；全 `待订正` 回放得 `M=0 / S=1.0 / interval=1 天`；复习 61 号（d=2）答对 → KP197 `M 0→0.175`、`S=1.8`，再答错 → `0.144`、`S=1.0`；复习 47 号（d=1）一次扇出 3 个 KP 各 `0.35`；快照 108 节点中 5 个有值、103 个 `null`（108 节点/264 边/287 ms）；教师/未登录分别 403/401。详见 `.sdd/s4-7/acceptance-evidence.md`
+- 关键口径（S4-8）：看板**新开** `GET /api/v1/stats/overview`（`range=7d|30d|90d`，默认 30d，仅 student 仅本人），不动 S4-2 的 `/mistakes/stats`（错题页继续用那三条小统计）；窗口按 `mistakes.created_at` 落在 `[今天-N+1 天 00:00 UTC, 现在]`，四块同窗口；`by_status` 恒 3 行补 0、`by_cause` 按 `count DESC, cause_type ASC`、`top_kps` 最多 10 条带折算 `M_t`（无行 `null`）；`trend` 按天补零，`mastered` 是**回算累计**（当前状态=已掌握 且 `last_review_at` 不晚于当天，窗口前的计入起点，不是历史快照，状态回退会让历史曲线变低）；`analyzed`/`with_kp`/`mastery_rows` 是解释性数字（解释 TOP 柱为什么少）；前端图表逻辑全在 `views/stats/useStatsCharts.ts` 纯函数里，掌握度四色提炼到 `web/src/utils/masteryColor.ts`（与图谱共用）（D-051）
+- 验收（S4-8，真机 + 真浏览器）：学生 50 → `34/33/1/0/34/3/5`，`by_cause` 7 类合计 34，`top_kps` 5 条各 1（`mastery` 0.347/0.000/0.347/0.141/0.347），`trend` 30 点只有 11-03（34）非零；与 `/mistakes/stats` 的 total/by_status/by_cause/top_kps 逐项一致；7d/90d 分别 7/90 点；教师 403、`range=abc` 422、无 token 401；Chrome headless（CDP，未加依赖）实测三块画布 521×260/521×260/1088×260 均有像素、切 7d/90d 后窗口与折线随动（趋势画布非空像素 20133→46536→16879）；空账号（`s43_edge_other`）显示「窗口内没有错题」且 canvas 数 0。验收中抓到并修掉两个真机缺陷：`date_trunc` 参数化触发 PG `GroupingError`（改 `literal_column("'day'")` + 编译期断言）、切窗口后骨架屏重建 DOM 导致画布清零（改为每次加载后重绑 ECharts 实例 + 回归用例）。详见 `.sdd/s4-8/acceptance-evidence.md`
 - 模拟（S4-7，`scripts/mastery_sim.py`）：7 天对/错/对/对/错/对/对 → `M 0.117→0.427`、`S 3.60→9.47`、间隔 `1→4 天`；敏感性 3×3（K0 0.25/0.35/0.45 × 倍率 1.5/1.8/2.1）连对 5 次后 `M` 只随 K0 变、间隔随倍率单调变长
-- 下一步：S4-8 掌握度看板与报告（`GET /reports/mastery?range=30d`）；复习清单/优先级（含「按前置推荐」）归 S5-5；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：阶段 5 组卷与复习计划（S5-1 起）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -74,7 +76,7 @@
 - [x] S4-5 知识图谱关系构建 + 人工校验
 - [x] S4-6 图谱可视化前端
 - [x] S4-7 掌握度模型 + 更新服务 ★
-- [ ] S4-8 错题统计看板
+- [x] S4-8 错题统计看板
 
 ### 阶段 5：练习与复习（M4）
 - [ ] S5-1 组卷算法 + 单测 ★

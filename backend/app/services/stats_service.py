@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import Date, func, select
+from sqlalchemy import Date, func, literal_column, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import InvalidParamError
@@ -66,7 +66,12 @@ def fill_days(
 
 
 def _day(column: Any) -> Any:
-    return func.date_trunc("day", column).cast(Date)
+    """按天分桶。
+
+    `date_trunc` 的 'day' 必须走字面量：写成 Python 字符串会被编译成绑定参数，
+    PG 认不出 SELECT 与 GROUP BY 里是同一个表达式（实测 GroupingError）。
+    """
+    return func.date_trunc(literal_column("'day'"), column).cast(Date)
 
 
 def overview(

@@ -56,9 +56,9 @@ describe('MainLayout', () => {
     localStorage.clear()
   })
 
-  it('renders seven nav items', async () => {
+  it('renders nine nav items', async () => {
     const { wrapper } = await mountLayout()
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(8)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(9)
   })
 
   it('marks current route as aria-current', async () => {

@@ -100,6 +100,12 @@ const router = createRouter({
           meta: { title: '错题详情', nav: 'mistakes' },
         },
         {
+          path: 'stats',
+          name: 'stats',
+          component: () => import('@/views/stats/Stats.vue'),
+          meta: { title: '统计', nav: 'stats', roles: ['student'] },
+        },
+        {
           path: 'plan',
           name: 'plan',
           component: () => import('@/views/ComingSoonView.vue'),

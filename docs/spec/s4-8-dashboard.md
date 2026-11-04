@@ -193,7 +193,7 @@ class StatsOverviewOut(BaseModel): range/summary/by_status/by_cause/top_kps/tren
 | `analyzed` | 34 |
 | `with_kp` | 3 |
 | `mastery_rows` | 5 |
-| `by_cause` | 概念不清 11 / 计算失误 6 / 知识遗忘 5 / 时间不足 4 / 方法不当 4 / 审题偏差 3 / unknown 1（和 34 条诊断对得上） |
+| `by_cause` | 概念不清 11 / 计算失误 6 / 知识遗忘 5 / **方法不当 4 / 时间不足 4**（并列按 `cause_type` 升序兜底）/ 审题偏差 3 / unknown 1，合计 34（和诊断数对得上） |
 | `top_kps` | **5 条**：KP 120 数列 / 128 集合的基本运算 / 160 等差数列 / 197 同角三角函数基本关系 / 204 通项公式与性质，每条 `count=1`、`mastery` 见 S4-7 实测（上限 10 不触发） |
 | `trend` | 30 个点，只有 `2026-11-03` 非零（34），`mastered` 全 0 |
 

@@ -36,7 +36,7 @@ export function summaryCards(summary: StatsSummary): { label: string; value: num
   ]
 }
 
-export function causeOption(data: StatsCauseCount[]): unknown {
+export function causeOption(data: StatsCauseCount[]): Record<string, unknown> {
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} 条（{d}%）' },
     legend: { bottom: 0, type: 'scroll' },
@@ -56,7 +56,7 @@ export function causeOption(data: StatsCauseCount[]): unknown {
   }
 }
 
-export function topKpOption(data: StatsTopKp[]): unknown {
+export function topKpOption(data: StatsTopKp[]): Record<string, unknown> {
   return {
     grid: { left: 8, right: 72, top: 8, bottom: 8, containLabel: true },
     tooltip: {
@@ -98,7 +98,7 @@ export function hasMastered(data: StatsTrendPoint[]): boolean {
   return data.some((point) => point.mastered > 0)
 }
 
-export function trendOption(data: StatsTrendPoint[]): unknown {
+export function trendOption(data: StatsTrendPoint[]): Record<string, unknown> {
   const series: Array<Record<string, unknown>> = [
     {
       name: '新增错题',

@@ -690,3 +690,17 @@
 - 决策 9（只读接口先给本人）：`GET /kp/mastery` 仅 `student` 且仅本人，支持 `subject_id`/分页/白名单排序（默认 `mastery ASC` 最薄弱优先，`sort_by=mastery` 同值多时按 `kp_id` 兜底）；老师/家长看学生掌握度留给 S4-8 的权限设计。
 - 测试与契约：后端 1159 → **1186 passed, 1 warning**；前端 225 → **226 passed / 39 files**；`npm run build` 退出 0；`alembic heads` = `0013_s4_7`。`API.md` §4.6 新增两条接口 + §4.5 快照补 `mastery`；`SCHEMA.md` §6.3 补三处口径（精度、初始 M=0、懒创建）。
 - 已知限制：浏览器内配色观感/tooltip 未截图（无 Playwright）；当前只有错题复习一个更新入口，S5-4 试卷作答、S5-5 清单完成需另接 `record_attempts`；真实账号里 34 条错题只有 3 条挂了知识点，所以演示时"掌握度有值"的知识点很少——这是知识对齐覆盖率问题，不是掌握度模型的问题。
+
+## D-051 错题统计看板（S4-8）
+
+- 决策 1（新开接口，不复用 `/mistakes/stats`）：看板走 `GET /api/v1/stats/overview`（`api/v1/stats.py`），S4-2 的三条小统计原样保留。理由：`/mistakes/stats` 的定位是「错题页顶部三个数组」，加趋势/掌握度/解释性计数会让它变胖，错题页还要为拿不到的字段买单；两者口径写在一起可交叉核对（实测同窗口下 total 33/1/0、by_cause 7 类、top_kps 5 条逐项一致）。代价是两条接口都要维护「窗口 → 统计」的相似 SQL，接受。
+- 决策 2（`mastered` 是回算累计，不是历史快照）：`trend[].mastered` = 「当前状态=已掌握 且 `last_review_at` 不晚于该天」的错题数，窗口开始前的计入累计起点。理由：没有状态变更历史表，S5-4 的 `answers` 表还没建；硬造一张"事件历史表"超出本卡范围。代价：错题状态回退时历史曲线会跟着变低，API.md 与页面上都要写明。**这不是精确的历史序列，答辩时不能说「每天掌握多少」**。
+- 决策 3（窗口与分桶一律 UTC）：窗口 `[今天-N+1 天 00:00 UTC, 现在]`，`date_trunc('day', …)` 依赖连接时区（全站 UTC）。理由：与全站存储/输出口径一致；代价是中国用户看到的"今天"差 8 小时，凌晨 0–8 点新增的错题会落到前一天——已写进 spec §8 已知限制。
+- 决策 4（`range` 只给三档）：`7d|30d|90d`，默认 `30d`，非法值由 FastAPI `Literal` 拦成 422/42200，service 层再兜一层 `InvalidParamError`。理由：三档覆盖「近期订正/月度复盘/学期趋势」，自定义区间等真有需求再加，否则要处理任意窗口的补零与性能。
+- 决策 5（TOP 柱少且等高，如实呈现）：真实数据里 34 条错题只有 3 条挂知识点（5 个 KP），所以柱图是 5 根、每根 `count=1`。看板不补假数据，而是返回 `summary.with_kp` 并在柱图下提示「其余 31 条错题没有关联知识点」。理由：§6 禁止编数据；这个数字同时是最有力的「知识对齐覆盖率低」证据。要改善得回看 S4-1 的对齐链路，不是改看板。
+- 决策 6（掌握度四色提炼到 `utils/masteryColor.ts`）：S4-7 的四档配色原本写在 `views/kp/useGraphData.ts`，看板要第二份。提炼成 `web/src/utils/masteryColor.ts` 的 `masteryColor()` / `masteryLabel()`，图谱侧 `nodeColor` 改为委托（导出名保留）。理由：同一套口径两处硬编码必然漂移；图谱 13 条用例在委托后仍全绿。
+- 决策 7（图表逻辑抽纯函数）：与 S4-6 同理，`views/stats/useStatsCharts.ts` 承接「数据 → option」（补零、`unknown` 灰、掌握度分档、`mastered` 全 0 不画线），页面只留请求/切档/`setOption`。jsdom 没有 canvas，只有纯函数能直接断言。
+- 决策 8（骨架屏重建 DOM 后必须重绑实例）：真机实测「切窗口 → `canvas 数量: 0`」——`v-if="loading"` 把图表容器整棵重建，旧 ECharts 实例绑在已销毁节点上，`setOption` 无效。改为 `syncCharts()`：每次加载（`loading=false` 之后 + `nextTick`）按当前节点重绑，同一节点复用、不同则 `dispose` + `init`。mock 的 `init` 也补上 `getDom`，否则测不出这个行为。
+- 决策 9（老师/家长视角仍未做）：D-050 决策 9 写过「老师/家长看学生掌握度留给 S4-8 的权限设计」，本卡任务卡与学生本人看板为先，**没有兑现**这条交叉引用；`/stats/overview` 明确只服务 `student` 本人。要支持教师视角需另开卡（涉及 `require_student_access`、班级/绑定关系与聚合口径），不在本卡偷偷加。
+- 测试与契约：后端 1186 → **1201 passed, 1 warning**；前端 226/39 → **244 passed / 41 files**；`npm run build` 退出 0；`alembic heads` 仍 `0013_s4_7`（无迁移）。`API.md` 新增「统计看板（S4-8）」并给 `/mistakes/stats` 加交叉引用备注；`SCHEMA.md` 无变更。
+- 已知限制：趋势只有 1 个非零点、`mastered` 全 0（真实数据形态）；`mastery` 只有 5 个知识点有值，看板能看到的掌握度样本很少；移动端窄屏未做响应式；老师/家长视角未做。
