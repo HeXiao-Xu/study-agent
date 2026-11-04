@@ -18,10 +18,13 @@ import type { StatsOverview, StatsRange } from '@/types/stats'
 import {
   causeOption,
   hasMastered,
+  masteryLegendItems,
   summaryCards,
   topKpOption,
   trendOption,
 } from './useStatsCharts'
+
+const legend = masteryLegendItems()
 
 echarts.use([
   PieChart,
@@ -185,6 +188,12 @@ onBeforeUnmount(() => {
 
           <section class="stats-panel">
             <h3>知识点 TOP10</h3>
+            <ul v-if="!topKpEmpty" class="stats-legend" data-testid="top-kp-legend">
+              <li v-for="item in legend" :key="item.label">
+                <i class="stats-legend__dot" :style="{ background: item.color }" />
+                {{ item.label }}
+              </li>
+            </ul>
             <p v-if="topKpEmpty" class="stats-panel__empty">还没有错题挂上知识点</p>
             <div ref="topKpCanvas" class="stats-canvas" data-testid="top-kp-chart" />
             <p v-if="missingKp > 0" class="stats-panel__empty">
@@ -263,6 +272,29 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: #344054;
 }
+.stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #667085;
+}
+
+.stats-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stats-legend__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
 .stats-panel__empty {
   margin: 8px 0 0;
   font-size: 12px;

@@ -10,7 +10,7 @@ import type {
   StatsTopKp,
   StatsTrendPoint,
 } from '@/types/stats'
-import { masteryColor } from '@/utils/masteryColor'
+import { COLOR_HIGH, COLOR_LOW, COLOR_MID, COLOR_UNRATED, masteryColor } from '@/utils/masteryColor'
 
 export const UNKNOWN_CAUSE_COLOR = '#9aa4b2'
 
@@ -25,6 +25,19 @@ export function causeColor(causeType: string): string {
   let hash = 0
   for (const char of causeType) hash = (hash * 31 + char.codePointAt(0)!) % 997
   return CAUSE_PALETTE[hash % CAUSE_PALETTE.length]!
+}
+
+/**
+ * TOP10 柱色的图例：柱色是掌握度四档，光看 tooltip 数字看不出颜色含义，页面上必须有固定图例。
+ * 顺序按「从薄弱到熟练，最后未评估」，与 masteryColor 的分档口径一致（共用 utils/masteryColor）。
+ */
+export function masteryLegendItems(): Array<{ label: string; color: string }> {
+  return [
+    { label: '<0.4', color: COLOR_LOW },
+    { label: '0.4–0.7', color: COLOR_MID },
+    { label: '≥0.7', color: COLOR_HIGH },
+    { label: '未评估', color: COLOR_UNRATED },
+  ]
 }
 
 export function summaryCards(summary: StatsSummary): { label: string; value: number }[] {

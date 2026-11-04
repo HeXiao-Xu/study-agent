@@ -81,6 +81,17 @@ describe('Stats 页面', () => {
     expect(api.fetchStatsOverview).toHaveBeenCalledWith('30d')
   })
 
+  it('TOP10 卡片给掌握度四档颜色图例', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const legend = wrapper.get('[data-testid="top-kp-legend"]')
+    expect(legend.text()).toContain('<0.4')
+    expect(legend.text()).toContain('0.4–0.7')
+    expect(legend.text()).toContain('≥0.7')
+    expect(legend.text()).toContain('未评估')
+    expect(legend.findAll('li')).toHaveLength(4)
+  })
+
   it('三块画布都初始化并渲染', async () => {
     const wrapper = mountPage()
     await flushPromises()

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
+import { masteryColor } from '@/utils/masteryColor'
 import type { StatsCauseCount, StatsSummary, StatsTopKp, StatsTrendPoint } from '@/types/stats'
 
 import {
   UNKNOWN_CAUSE_COLOR,
   causeOption,
   hasMastered,
+  masteryLegendItems,
   summaryCards,
   topKpOption,
   trendOption,
@@ -131,5 +133,24 @@ describe('trendOption', () => {
   it('空数组不崩', () => {
     const option = trendOption([]) as { xAxis: { data: string[] } }
     expect(option.xAxis.data).toEqual([])
+  })
+})
+
+describe('masteryLegendItems', () => {
+  it('四档颜色图例：薄弱/一般/熟练/未评估', () => {
+    expect(masteryLegendItems()).toEqual([
+      { label: '<0.4', color: '#e5484d' },
+      { label: '0.4–0.7', color: '#f0b429' },
+      { label: '≥0.7', color: '#22c55e' },
+      { label: '未评估', color: '#9aa4b2' },
+    ])
+  })
+
+  it('颜色与 masteryColor 的分档一致', () => {
+    const byLabel = new Map(masteryLegendItems().map((item) => [item.label, item.color]))
+    expect(byLabel.get('<0.4')).toBe(masteryColor(0.39))
+    expect(byLabel.get('0.4–0.7')).toBe(masteryColor(0.4))
+    expect(byLabel.get('≥0.7')).toBe(masteryColor(0.7))
+    expect(byLabel.get('未评估')).toBe(masteryColor(null))
   })
 })
