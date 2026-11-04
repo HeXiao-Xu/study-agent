@@ -18,6 +18,7 @@ from app.schemas.kp import (
     GraphBuildIn,
     GraphEdgeOut,
     GraphEdgePage,
+    GraphSnapshotOut,
     GraphStatsOut,
     KpCreate,
     KpNodeOut,
@@ -267,6 +268,22 @@ def review_graph_edge(
         session, edge_id=edge_id, approve=payload.approve, reviewer=current_user
     )
     return Envelope(trace_id=get_trace_id(), data=graph_service.edge_out(session, edge))
+
+
+@router.get(
+    "/graph/snapshot", response_model=Envelope[GraphSnapshotOut], summary="图谱快照"
+)
+def graph_snapshot(
+    subject_id: int = Query(..., ge=1, description="学科 id"),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db),
+) -> Envelope[GraphSnapshotOut]:
+    return Envelope(
+        trace_id=get_trace_id(),
+        data=graph_service.snapshot(
+            session, subject_id=subject_id, user_id=current_user.id
+        ),
+    )
 
 
 @router.get(

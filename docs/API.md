@@ -324,6 +324,19 @@
 - 出参：`Envelope[{"updated": 2, "skipped": 1}]`（不存在的 id 计入 `skipped`）
 - 错误：`403/40300`、`422/42200`（空数组/超过 200 条）
 
+#### GET /api/v1/kp/graph/snapshot
+- 权限：任意登录用户（图谱结构非隐私数据；学生也能看）
+- 入参：`subject_id`（必填，int ≥1）
+- 出参：`Envelope[GraphSnapshotOut]`，`{"subject": {"id": 7, "name": "高中数学"}, "nodes": [{"id": 12, "name": "导数与函数的单调性", "level": 3, "parent_id": 9, "exam_weight": 0.8, "mistake_count": 2}], "edges": [{"src_kp_id": 3, "dst_kp_id": 12, "relation": "prerequisite", "weight": 0.95}], "stats": {"nodes": 108, "edges": 264, "pending_edges": 50, "by_relation": {"contains": 107, "prerequisite": 114, "related": 4, "confusable": 39}}}`
+- 备注：`edges` **只含 `review_status='approved'`**；`stats.pending_edges` 只给计数（老师视角提示待审核量），不返回 pending 边；`by_relation` 四个键恒在（无该关系时为 0）；`mistake_count` 口径 = `mistakes(user_id=当前用户) → questions → question_kps` 去重计数，老师也是本人口径
+- 错误：`401/40100`、`404/40400`（学科不存在）、`422/42200`
+
+#### GET /api/v1/kp/graph/nodes/{kp_id}
+- 权限：任意登录用户
+- 出参：`Envelope[GraphNodeDetailOut]`，字段见 `docs/spec/s4-6-graph-view.md` §3.1（含 `path` 面包屑、四类 approved 邻居、本人笔记与错题）
+- 备注：`notes` 只取 `note_kps.confirmed=true` + `notes.deleted_at IS NULL` + 本人，最多 20 条；`mistakes` 按 `created_at DESC` 最多 20 条，`stem` 为题干前 60 字；四类邻居都只取 approved，`contains` 不出现在侧栏（父链由 `path` 表达）
+- 错误：`401/40100`、`404/40400`（知识点不存在）、`422/42200`
+
 #### GET /api/v1/kp/graph/stats
 - 权限：admin / teacher
 - 入参：`subject_id`（可选）

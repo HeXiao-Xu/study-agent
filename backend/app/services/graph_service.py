@@ -27,7 +27,7 @@ from app.ai.graph.candidates import (
     prereq_candidates,
 )
 from app.ai.llm import LLMClient
-from app.core.exceptions import InvalidParamError
+from app.core.exceptions import InvalidParamError, NotFoundError
 from app.models.enums import EdgeRelation, EdgeReviewStatus, EdgeSource
 from app.models.knowledge_edge import KnowledgeEdge
 from app.models.knowledge_point import KnowledgePoint
@@ -578,6 +578,103 @@ def list_edges(
         total=data.total,
         page=data.page,
         page_size=data.size,
+    )
+
+
+def _mistake_counts(
+    session: Session, *, user_id: int, kp_ids: Sequence[int]
+) -> dict[int, int]:
+    """当前用户在每个知识点下的错题数（去重题目，不看 status）。"""
+    from app.models.mistake import Mistake
+    from app.models.question_kp import QuestionKp
+
+    if not kp_ids:
+        return {}
+    rows = session.execute(
+        select(QuestionKp.kp_id, func.count(func.distinct(Mistake.id)))
+        .join(Mistake, Mistake.question_id == QuestionKp.question_id)
+        .where(Mistake.user_id == user_id)
+        .where(QuestionKp.kp_id.in_(list(kp_ids)))
+        .group_by(QuestionKp.kp_id)
+    ).all()
+    return {int(kp_id): int(count) for kp_id, count in rows}
+
+
+def snapshot(session: Session, *, subject_id: int, user_id: int) -> Any:
+    """一次给全图：节点 + 已审核边 + 统计（S4-6，只读）。"""
+    from app.models.subject import Subject
+    from app.schemas.kp import (
+        GraphSnapshotEdge,
+        GraphSnapshotNode,
+        GraphSnapshotOut,
+        GraphSnapshotStats,
+        GraphSubjectBrief,
+    )
+
+    subject = session.get(Subject, subject_id)
+    if subject is None:
+        raise NotFoundError("学科不存在")
+    nodes = _load_nodes(session, subject_id)
+    node_ids = [node.id for node in nodes]
+    counts = _mistake_counts(session, user_id=user_id, kp_ids=node_ids)
+    edges = (
+        list(
+            session.scalars(
+                select(KnowledgeEdge)
+                .where(KnowledgeEdge.review_status == EdgeReviewStatus.APPROVED)
+                .where(KnowledgeEdge.src_kp_id.in_(node_ids))
+                .order_by(KnowledgeEdge.id)
+            )
+        )
+        if node_ids
+        else []
+    )
+    pending = (
+        int(
+            session.scalar(
+                select(func.count())
+                .select_from(KnowledgeEdge)
+                .where(KnowledgeEdge.review_status == EdgeReviewStatus.PENDING)
+                .where(KnowledgeEdge.src_kp_id.in_(node_ids))
+            )
+            or 0
+        )
+        if node_ids
+        else 0
+    )
+    by_relation: dict[str, int] = {relation: 0 for relation in RELATIONS}
+    for edge in edges:
+        by_relation[edge.relation] = by_relation.get(edge.relation, 0) + 1
+    return GraphSnapshotOut(
+        subject=GraphSubjectBrief(id=subject.id, name=subject.name),
+        nodes=[
+            GraphSnapshotNode(
+                id=node.id,
+                name=node.name,
+                level=node.level,
+                parent_id=node.parent_id,
+                exam_weight=(
+                    float(node.exam_weight) if node.exam_weight is not None else None
+                ),
+                mistake_count=counts.get(node.id, 0),
+            )
+            for node in nodes
+        ],
+        edges=[
+            GraphSnapshotEdge(
+                src_kp_id=edge.src_kp_id,
+                dst_kp_id=edge.dst_kp_id,
+                relation=edge.relation,
+                weight=float(edge.weight) if edge.weight is not None else None,
+            )
+            for edge in edges
+        ],
+        stats=GraphSnapshotStats(
+            nodes=len(nodes),
+            edges=len(edges),
+            pending_edges=pending,
+            by_relation=by_relation,
+        ),
     )
 
 

@@ -110,3 +110,80 @@ class EdgeReviewBatchIn(BaseModel):
 class EdgeReviewBatchOut(BaseModel):
     updated: int
     skipped: int
+
+
+class GraphSnapshotNode(BaseModel):
+    """快照节点：只给事实，颜色/大小由前端算（S4-6）。"""
+
+    id: int
+    name: str
+    level: int
+    parent_id: int | None = None
+    exam_weight: float | None = None
+    mistake_count: int = 0
+
+
+class GraphSnapshotEdge(BaseModel):
+    """快照边：只含 approved（S4-6）。"""
+
+    src_kp_id: int
+    dst_kp_id: int
+    relation: str
+    weight: float | None = None
+
+
+class GraphSnapshotStats(BaseModel):
+    nodes: int
+    edges: int
+    pending_edges: int
+    by_relation: dict[str, int]
+
+
+class GraphSubjectBrief(BaseModel):
+    id: int
+    name: str
+
+
+class GraphSnapshotOut(BaseModel):
+    subject: GraphSubjectBrief
+    nodes: list[GraphSnapshotNode]
+    edges: list[GraphSnapshotEdge]
+    stats: GraphSnapshotStats
+
+
+class GraphNeighborOut(BaseModel):
+    kp_id: int
+    name: str
+    weight: float | None = None
+
+
+class GraphNoteBrief(BaseModel):
+    id: int
+    title: str
+    updated_at: datetime
+
+
+class GraphMistakeBrief(BaseModel):
+    id: int
+    question_id: int
+    status: str
+    created_at: datetime
+    stem: str
+
+
+class GraphNodeDetailOut(BaseModel):
+    id: int
+    name: str
+    level: int
+    parent_id: int | None = None
+    subject_id: int
+    path: list[str]
+    description: str | None = None
+    exam_weight: float | None = None
+    mistake_count: int = 0
+    prerequisites: list[GraphNeighborOut] = Field(default_factory=list)
+    successors: list[GraphNeighborOut] = Field(default_factory=list)
+    related: list[GraphNeighborOut] = Field(default_factory=list)
+    confusable: list[GraphNeighborOut] = Field(default_factory=list)
+    notes: list[GraphNoteBrief] = Field(default_factory=list)
+    mistakes: list[GraphMistakeBrief] = Field(default_factory=list)
