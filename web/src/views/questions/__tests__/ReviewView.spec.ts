@@ -126,6 +126,14 @@ describe('ReviewView', () => {
     expect(wrapper.text()).toContain('题目 #1')
   })
 
+  it('列表题干把 $…$ 渲染成公式而不是裸露源码', async () => {
+    const wrapper = makeWrapper()
+    await flushPromises()
+    const row = wrapper.find('[data-test="row-1"]')
+    expect(row.find('.katex').exists()).toBe(true)
+    expect(row.text()).not.toContain('$')
+  })
+
   it('saves stem edits through PATCH', async () => {
     const wrapper = makeWrapper()
     await flushPromises()

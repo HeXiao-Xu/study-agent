@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { createMistake } from '@/api/mistakes'
+import MathText from '@/components/common/MathText.vue'
 import { listQuestions } from '@/api/questions'
 import type { QuestionSummary, QuestionType } from '@/types/questions'
 
@@ -121,8 +122,8 @@ async function confirmPick(): Promise<void> {
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column label="题干" min-width="320">
         <template #default="{ row }">
-          <span class="pick-stem">
-            {{ row.stem_md.slice(0, 60) }}<span v-if="row.stem_md.length > 60">…</span>
+          <span class="pick-stem" :title="row.stem_md">
+            <MathText :text="row.stem_md" />
           </span>
         </template>
       </el-table-column>
@@ -180,10 +181,10 @@ async function confirmPick(): Promise<void> {
 }
 
 .pick-stem {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .pick-pager {

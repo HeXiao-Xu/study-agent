@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { deleteMistake, reviewMistake } from '@/api/mistakes'
 import EmptyState from '@/components/common/EmptyState.vue'
+import MathText from '@/components/common/MathText.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import {
   MISTAKE_CAUSE_LABELS,
@@ -255,8 +256,11 @@ onMounted(() => {
     >
       <el-table-column label="题干摘录" min-width="280">
         <template #default="{ row }">
-          <el-tooltip :content="row.stem_excerpt" placement="top" :show-after="300">
-            <span class="stem-excerpt">{{ row.stem_excerpt }}</span>
+          <el-tooltip placement="top" :show-after="300">
+            <template #content>
+              <MathText :text="row.stem_excerpt" />
+            </template>
+            <span class="stem-excerpt"><MathText :text="row.stem_excerpt" /></span>
           </el-tooltip>
         </template>
       </el-table-column>
@@ -433,10 +437,10 @@ onMounted(() => {
 }
 
 .stem-excerpt {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .kp-tag {

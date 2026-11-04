@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MdPreview } from 'md-editor-v3'
+import MathText from '@/components/common/MathText.vue'
 
 import PageHeader from '@/components/common/PageHeader.vue'
 import {
@@ -293,9 +294,10 @@ onMounted(() => {
               <span
                 :data-test="`row-${row.id}`"
                 class="review-view__stem"
+                :title="row.stem_md"
                 @click="openQuestion(row.id)"
               >
-                {{ row.stem_md.slice(0, 40) }}<span v-if="row.stem_md.length > 40">…</span>
+                <MathText :text="row.stem_md" />
               </span>
             </template>
           </el-table-column>
@@ -439,6 +441,10 @@ onMounted(() => {
 }
 
 .review-view__stem {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: var(--el-color-primary);
   cursor: pointer;
 }

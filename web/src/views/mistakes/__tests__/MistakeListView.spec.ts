@@ -41,7 +41,7 @@ function summary(overrides: Partial<MistakeSummary> = {}): MistakeSummary {
     question_id: 65,
     status: '待订正',
     correct_streak: 0,
-    stem_excerpt: '已知函数 f(x)=x^2-4x+3',
+    stem_excerpt: '已知函数 $f(x)=x^2-4x+3$',
     subject_id: 7,
     qtype: '解答',
     difficulty: 2,
@@ -57,7 +57,7 @@ function summary(overrides: Partial<MistakeSummary> = {}): MistakeSummary {
 function detail(): MistakeDetail {
   return {
     ...summary(),
-    stem_md: '已知函数 f(x)=x^2-4x+3',
+    stem_md: '已知函数 $f(x)=x^2-4x+3$',
     options: null,
     my_answer_md: null,
     correct_answer_md: null,
@@ -157,6 +157,9 @@ describe('MistakeListView', () => {
 
     expect(wrapper.text()).toContain('已知函数')
     expect(wrapper.text()).toContain('函数的单调性')
+    // 题干里的 $…$ 必须渲染成公式，不能把 LaTeX 源码直接怼给用户看
+    expect(wrapper.find('.stem-excerpt .katex').exists()).toBe(true)
+    expect(wrapper.find('.stem-excerpt').text()).not.toContain('$')
     expect(wrapper.get('[data-testid="stat-total"]').text()).toContain('2')
     expect(wrapper.get('[data-testid="stat-待订正"]').text()).toContain('1')
     expect(wrapper.get('[data-testid="stat-已掌握"]').text()).toContain('1')

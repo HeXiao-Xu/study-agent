@@ -704,3 +704,12 @@
 - 决策 9（老师/家长视角仍未做）：D-050 决策 9 写过「老师/家长看学生掌握度留给 S4-8 的权限设计」，本卡任务卡与学生本人看板为先，**没有兑现**这条交叉引用；`/stats/overview` 明确只服务 `student` 本人。要支持教师视角需另开卡（涉及 `require_student_access`、班级/绑定关系与聚合口径），不在本卡偷偷加。
 - 测试与契约：后端 1186 → **1201 passed, 1 warning**；前端 226/39 → **244 passed / 41 files**；`npm run build` 退出 0；`alembic heads` 仍 `0013_s4_7`（无迁移）。`API.md` 新增「统计看板（S4-8）」并给 `/mistakes/stats` 加交叉引用备注；`SCHEMA.md` 无变更。
 - 已知限制：趋势只有 1 个非零点、`mastered` 全 0（真实数据形态）；`mastery` 只有 5 个知识点有值，看板能看到的掌握度样本很少；移动端窄屏未做响应式；老师/家长视角未做。
+
+## D-052 列表里的公式渲染（S4-1/S4-2 小修）
+
+- 决策 1（KaTeX 行内渲染，不用 MdPreview）：题干/摘录列表里把 `$…$`、`$$…$$` 直接渲染成公式，新组件 `web/src/components/common/MathText.vue` + 纯函数 `web/src/utils/mathText.ts`。不用现成的 `MdPreview`（md-editor-v3）：它是整块预览组件，20 行列表各挂一个太重，还会带回一整块编辑器样式；列表只需要行内公式。
+- 决策 2（非公式片段必须转义）：题干来自用户上传/LLM，`v-html` 之前先 `escapeHtml`（`& < > " '` 五个字符），KaTeX 走 `throwOnError:false`、`trust:false`、`output:'html'`。写坏的公式（未闭合、非法命令）退化成转义后的原文，不抛到页面、不白屏。
+- 决策 3（列表不做 JS 截断，交给 CSS）：原来 `stem_md.slice(0, 40)` 按字符切会把公式切成半条，KaTeX 无从渲染。改为整段渲染 + `-webkit-line-clamp: 2` 折行截断，完整题干放 `title`/tooltip（tooltip 里同样渲染，不露 `$`）。
+- 决策 4（错题选题弹窗一起改）：同一症状共三处（`ReviewView` 题库列表、`MistakeListView` 错题列表、`MistakePickDialog` 选题弹窗），同一个组件的三行改动，一次改完；不顺手改其它模块。
+- 测试与契约：新增 `utils/mathText.spec.ts`（8 条）与 `components/common/MathText.spec.ts`（6 条），并在题库/错题列表用例里各加一条「列表里必须出现 `.katex` 且文本不含 `$`」的回归断言；前端 244 → **258 passed / 43 files**，`npm run build` 退出 0；后端无改动。
+- 已知限制：只处理 `$`/`$$` 两种定界符，不支持 `\(…\)`/`\[…\]`（当前题库与错题数据全是 `$` 风格）；行内公式多行折行时断行位置由浏览器决定，不做公式内断行控制；移动端窄屏仍未验证。
