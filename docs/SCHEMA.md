@@ -131,6 +131,7 @@ erDiagram
 > S2-1 新增 `ck_knowledge_edges_not_self`（src_kp_id <> dst_kp_id）；relation / source 以 CHECK 约束落库。
 
 > S4-5 新增 `ck_knowledge_edges_review_status`（待校验/通过/驳回）与 `ck_knowledge_edges_reviewed`（`pending` 时 `reviewed_at` 必须为空，非 `pending` 时非空；`reviewed_by` 允许空以支持脚本批量通过）。迁移 `0012_s4_5` 把历史行回填为 `approved`；`contains` 派生边一律直接 `approved`；`rejected` 行作为墓碑保留，重跑不会复活。
+> S4-6 读取口径：图谱接口只读、不加列。`GET /kp/graph/snapshot` 只返回 `review_status='approved'` 的边（`pending` 仅以 `stats.pending_edges` 计数暴露给老师），节点配色暂用「当前用户错题数」作热力（**不是**掌握度，S4-7 换真实掌握度，见 D-049）。
 
 ## 4. 笔记与文件
 

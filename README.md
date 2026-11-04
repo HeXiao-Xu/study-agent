@@ -75,6 +75,12 @@ npm run dev                             # 看到 "Local: http://localhost:5173/"
 > - 界面：老师/管理员登录 → 知识库页「图谱关系」tab → 「重新构建」（走 ARQ，需 ③ 在跑）
 > - 命令行（不进队列，适合调试）：`cd backend` 后 `python scripts\build_graph.py --subject 7 [--relations prerequisite] [--limit 5] [--dry-run]`
 
+> 知识图谱可视化（S4-6）：左侧导航「08 图谱」或直接开 `http://localhost:5173/graph`。
+> - 节点大小 = 考纲权重；节点颜色 = **当前账号**的错题密度（0 灰 / 1–2 黄 / ≥3 红，临时指标，S4-7 换真实掌握度）——老师验收账号通常没错题，整片灰是正常的，想看到热力请用有错题的学生账号
+> - 「结构（章→节）」默认不勾：107 条树边会把力导向拉成放射状；勾上才看得到章节树
+> - 老/管理员账号在右上角能看到「还有 N 条待校验」，点击跳知识库页审核
+> - 节点 >300 会自动降级为「焦点 + 一跳邻居」子图（当前 108 个知识点不触发）
+
 > `uvicorn` / `arq` / `python` 都来自 `.venv`：PyCharm 终端会自动激活（行首有 `(.venv)` 前缀）；
 > 普通 PowerShell 先跑 `.venv\Scripts\Activate.ps1` 再用。
 > 弹性开关：只改前端样式可不起后端；只做不连库的后端活可不起 Docker（/health 不连库）；
