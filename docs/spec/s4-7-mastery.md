@@ -191,10 +191,10 @@ if kp_ids:
 
 ## 7. 验收口径（真机）
 
-1. `POST /kp/mastery/recompute`（学生 50）：`events_replayed=44`、`rows_built=13`、`skipped_no_kp=31`；再跑一次结果完全一致（幂等）
-2. `GET /kp/mastery`：13 行、`mastery` 全 0、`mastery_t` 全 0、`due_at` 比 `last_practice_at` 晚 1 天（`interval=clamp(round(2×0),1,30)=1`）
-3. 用学生 50 对一条 `difficulty=3` 的错题 `POST /mistakes/{id}/review {"correct": true}`：`GET /kp/mastery` 里对应知识点从 **0 → 0.117**，`attempts=1`、`correct_cnt=1`、`stability=3.60`、`due_at` 比 `last_practice_at` 晚 1 天
-4. 再答错一次：`mastery 0.117 → 0.103`、`stability → 1.80`
+1. `POST /kp/mastery/recompute`（学生 50）：`events_replayed=5`、`rows_built=5`、`skipped_no_kp=31`（该账号 34 条错题，3 条挂知识点共 5 个 KP）；再跑一次结果完全一致（幂等）
+2. `GET /kp/mastery`：5 行、`mastery` 全 0、`mastery_t` 全 0、`due_at` 比 `last_practice_at` 晚 1 天（`interval=clamp(round(1×0),1,30)=1`）
+3. 用学生 50 对一条 `difficulty=2` 的错题（该账号实际难度只有 1/1/2）`POST /mistakes/{id}/review {"correct": true}`：`GET /kp/mastery` 里对应知识点从 **0 → 0.175**，`attempts+1`、`correct_cnt=1`、`stability=1.80`、`due_at` 比 `last_practice_at` 晚 1 天
+4. 再答错一次：`mastery 0.175 → 0.144`、`stability 1.80 → 1.00`
 5. 图谱页面：节点颜色按掌握度分档，未评估灰色；tooltip 显示掌握度
 6. `scripts/mastery_sim.py`：7 天连续作答表格（每天一条）打印正常；敏感性扫描 3×3 表格输出
 
