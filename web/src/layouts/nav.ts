@@ -13,4 +13,5 @@ export const NAV_ITEMS: NavItem[] = [
   { index: '05', label: '智能问答', name: 'qa', path: '/qa' },
   { index: '06', label: '错题本', name: 'mistakes', path: '/mistakes' },
   { index: '07', label: '复习计划', name: 'plan', path: '/plan' },
+  { index: '08', label: '图谱', name: 'graph', path: '/graph' },
 ]

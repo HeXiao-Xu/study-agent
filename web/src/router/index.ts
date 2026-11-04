@@ -58,6 +58,12 @@ const router = createRouter({
           meta: { title: '知识库', nav: 'knowledge' },
         },
         {
+          path: 'graph',
+          name: 'graph',
+          component: () => import('@/views/kp/Graph.vue'),
+          meta: { title: '图谱', nav: 'graph' },
+        },
+        {
           path: 'questions',
           name: 'questions',
           component: () => import('@/views/questions/ReviewView.vue'),
