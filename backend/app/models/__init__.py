@@ -6,6 +6,7 @@ from app.models.file import File
 from app.models.knowledge_edge import KnowledgeEdge
 from app.models.knowledge_point import KnowledgePoint
 from app.models.llm_call_log import LLMCallLog
+from app.models.mastery import Mastery
 from app.models.message import Message
 from app.models.message_citation import MessageCitation
 from app.models.mistake import Mistake
@@ -28,6 +29,7 @@ __all__ = [
     "KnowledgeEdge",
     "KnowledgePoint",
     "LLMCallLog",
+    "Mastery",
     "Message",
     "MessageCitation",
     "Mistake",
