@@ -34,7 +34,7 @@ S4-1～S4-7 把「题目 → 错题 → 错因 → 知识图谱 → 掌握度」
 
 | 层 | 内容 |
 |---|---|
-| 后端 | `services/stats_service.py`（5 条 SQL 聚合 + 补零）、`api/v1/stats.py`、`schemas/stats.py` |
+| 后端 | `services/stats_service.py`（9 条单行/分组聚合 + 补零）、`api/v1/stats.py`、`schemas/stats.py` |
 | 契约 | API.md 新增 `GET /api/v1/stats/overview` |
 | 前端 | `/stats` 页（仅 student）、`api/stats.ts`、`types/stats.ts`、`views/stats/useStatsCharts.ts`（纯函数）、`views/stats/Stats.vue`、路由与导航 |
 | 数据 | 无新表、无迁移 |
@@ -93,13 +93,15 @@ def fill_days(rows: Mapping[date, int], dates: Sequence[date]) -> list[tuple[dat
 def overview(session, *, user_id: int, range_key: str = DEFAULT_RANGE, now: datetime | None = None) -> StatsOverviewOut
 ```
 
-SQL 固定 5 条（全部 `GROUP BY`，Python 只做补零与 DTO 组装）：
+聚合语句固定 9 条（全部 `GROUP BY` 或单行计数，Python 只做补零与 DTO 组装；先写 5 条，实测按天累计需要额外分组后补到 9——见 `.sdd/s4-8/progress.md`）：
 
 1. `mistakes` 按 `status` 分组 + 总数
 2. 两条 `scalar` 计数：`select count(distinct MistakeAnalysis.mistake_id)`（有诊断）与 `select count(distinct Mistake.id).join(QuestionKp)`（挂 KP）——都是单行聚合，不是逐条查询
 3. `mistake_analyses ⋈ mistakes` 按 `cause_type` 分组
 4. `question_kps ⋈ mistakes ⋈ knowledge_points` 按 `kp_id` 分组、`limit 10`
-5. `mistakes` 按 `date_trunc('day', created_at)` 分组（新增）+ `mistakes` 按 `date_trunc('day', last_review_at)` 分组且 `status='已掌握'`（回算）
+5. `mistakes` 按 `date_trunc('day', created_at)` 分组（窗口内新增）
+6. `mistakes` 按 `date_trunc('day', last_review_at)` 分组且 `status='已掌握'`（**不限窗口**，用于把窗口前的已掌握数算进累计起点）
+7. `select count(*)`（`mastery`，`mastery_rows`）
 
 第 4 条之后用一次 `mastery` IN 批查拿 `M_t`（复用 `mastery_service.decayed_mastery`），**不在循环里查库**。
 
