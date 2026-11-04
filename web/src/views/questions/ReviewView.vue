@@ -146,6 +146,12 @@ async function openQuestion(id: number): Promise<void> {
   })
 }
 
+/** 归属判定只用于列表徽标：他人的题能看能引用，但只有创建者（或老师/管理员）能改。 */
+function isMine(row: { created_by: number | null }): boolean {
+  const user = auth.user
+  return !!user && row.created_by === user.id
+}
+
 /** 后端收到 kp_ids 会整体重建链接并把 weight 写成 MANUAL_WEIGHT=1.0，未改选时必须省略该字段。 */
 function kpIdsChanged(current: number[], next: number[]): boolean {
   const left = [...current].sort((a, b) => a - b)
@@ -286,18 +292,34 @@ onMounted(() => {
           @selection-change="onSelectionChange"
         >
           <el-table-column type="selection" width="42" />
-          <el-table-column prop="id" label="ID" width="64" />
           <el-table-column prop="qtype" label="题型" width="72" />
           <el-table-column prop="difficulty" label="难度" width="64" />
           <el-table-column label="题干" min-width="220">
             <template #default="{ row }">
-              <span
-                :data-test="`row-${row.id}`"
-                class="review-view__stem"
-                :title="row.stem_md"
-                @click="openQuestion(row.id)"
-              >
-                <MathText :text="row.stem_md" />
+              <span class="review-view__stem-cell">
+                <el-tag
+                  v-if="isMine(row)"
+                  size="small"
+                  effect="plain"
+                  :data-test="`owner-${row.id}`"
+                  class="review-view__owner"
+                >我的</el-tag>
+                <el-tag
+                  v-else
+                  size="small"
+                  effect="plain"
+                  type="info"
+                  :data-test="`owner-${row.id}`"
+                  class="review-view__owner"
+                >他人</el-tag>
+                <span
+                  :data-test="`row-${row.id}`"
+                  class="review-view__stem"
+                  :title="row.stem_md"
+                  @click="openQuestion(row.id)"
+                >
+                  <MathText :text="row.stem_md" />
+                </span>
               </span>
             </template>
           </el-table-column>
@@ -313,7 +335,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="来源" width="80">
+          <el-table-column label="答案来源" width="88">
             <template #default="{ row }">
               <el-tag :type="row.verified ? 'success' : 'warning'" size="small">
                 {{ row.verified ? '卷面' : 'AI/无' }}
@@ -438,6 +460,17 @@ onMounted(() => {
 
 .review-view__alert {
   margin-bottom: 12px;
+}
+
+.review-view__stem-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.review-view__owner {
+  flex: none;
+  margin-top: 1px;
 }
 
 .review-view__stem {

@@ -168,6 +168,30 @@ describe('ReviewView', () => {
     expect(wrapper.find('.md').text()).toContain('$f(x)=x^2$')
   })
 
+  it('列表不再显示 ID 列，题干前用徽标区分我的/他人', async () => {
+    vi.mocked(listQuestions).mockResolvedValue({
+      items: [
+        { ...SUMMARY, id: 1, created_by: 1 },
+        { ...SUMMARY, id: 2, created_by: 99, stem_md: '第二题 $g(x)=x+1$。' },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 20,
+    })
+    const wrapper = makeWrapper()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('ID')
+    expect(wrapper.get('[data-test="owner-1"]').text()).toBe('我的')
+    expect(wrapper.get('[data-test="owner-2"]').text()).toBe('他人')
+  })
+
+  it('答案来源列名与取值', async () => {
+    const wrapper = makeWrapper()
+    await flushPromises()
+    expect(wrapper.text()).toContain('答案来源')
+    expect(wrapper.text()).toContain('卷面')
+  })
+
   it('disables editing for other students questions', async () => {
     vi.mocked(listQuestions).mockResolvedValue({
       items: [{ ...SUMMARY, created_by: 99 }],
