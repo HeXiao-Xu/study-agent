@@ -1,18 +1,17 @@
 export interface NavItem {
-  index: string
   label: string
   name: string
   path: string
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { index: '01', label: '笔记', name: 'notes', path: '/notes' },
-  { index: '02', label: '文件', name: 'files', path: '/files' },
-  { index: '03', label: '知识库', name: 'knowledge', path: '/knowledge' },
-  { index: '04', label: '题库', name: 'questions', path: '/questions' },
-  { index: '05', label: '智能问答', name: 'qa', path: '/qa' },
-  { index: '06', label: '错题本', name: 'mistakes', path: '/mistakes' },
-  { index: '07', label: '复习计划', name: 'plan', path: '/plan' },
-  { index: '08', label: '图谱', name: 'graph', path: '/graph' },
-  { index: '09', label: '统计', name: 'stats', path: '/stats' },
+  { label: '笔记', name: 'notes', path: '/notes' },
+  { label: '文件', name: 'files', path: '/files' },
+  { label: '知识库', name: 'knowledge', path: '/knowledge' },
+  { label: '题库', name: 'questions', path: '/questions' },
+  { label: '智能问答', name: 'qa', path: '/qa' },
+  { label: '错题本', name: 'mistakes', path: '/mistakes' },
+  { label: '复习计划', name: 'plan', path: '/plan' },
+  { label: '图谱', name: 'graph', path: '/graph' },
+  { label: '统计', name: 'stats', path: '/stats' },
 ]

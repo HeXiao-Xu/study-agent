@@ -25,7 +25,6 @@ const activeNav = computed(() => route.meta.nav ?? route.name)
             :aria-current="activeNav === item.name ? 'page' : undefined"
             data-testid="nav-link"
           >
-            <span class="nav-index" aria-hidden="true">{{ item.index }}</span>
             <span>{{ item.label }}</span>
           </router-link>
         </li>
@@ -80,7 +79,6 @@ const activeNav = computed(() => route.meta.nav ?? route.name)
 
 .nav-link {
   display: flex;
-  gap: 12px;
   align-items: center;
   padding: 10px 12px;
   color: var(--app-text-secondary);
@@ -102,17 +100,6 @@ const activeNav = computed(() => route.meta.nav ?? route.name)
   font-weight: 500;
   background: var(--app-primary-soft);
   border-left-color: var(--app-primary);
-}
-
-.nav-index {
-  color: var(--app-text-tertiary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-}
-
-.nav-link.active .nav-index {
-  color: var(--app-primary);
 }
 
 .sidebar-foot {

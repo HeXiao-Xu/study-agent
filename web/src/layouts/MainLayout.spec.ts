@@ -61,6 +61,14 @@ describe('MainLayout', () => {
     expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(9)
   })
 
+  it('导航项不再显示 01/02 这类序号', async () => {
+    const { wrapper } = await mountLayout()
+    const links = wrapper.findAll('[data-testid="nav-link"]')
+    expect(links[0]!.text()).toBe('笔记')
+    expect(links[0]!.find('.nav-index').exists()).toBe(false)
+    expect(links.map((link) => link.text())).not.toContain('01')
+  })
+
   it('marks current route as aria-current', async () => {
     const { wrapper } = await mountLayout('/notes')
     const active = wrapper.find('[data-testid="nav-link"][aria-current="page"]')
