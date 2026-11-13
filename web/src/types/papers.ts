@@ -115,3 +115,71 @@ export interface PaperReplaceResult {
   item: PaperItem | null
   reason: string | null
 }
+/** S5-4 在线作答（API.md §8）。 */
+export interface PaperAnswerRow {
+  question_id: number
+  user_answer_md: string | null
+  self_rated: number | null
+  is_correct: boolean | null
+  score: number | null
+  time_spent_sec: number | null
+  saved: boolean
+}
+
+export interface PaperAnswers {
+  paper: {
+    id: number
+    title: string
+    status: PaperStatus
+    total_score: number
+  }
+  items: PaperAnswerRow[]
+  submitted: boolean
+  earned_score: number | null
+}
+
+export interface PaperAnswerPayload {
+  user_answer_md: string | null
+  time_spent_sec: number | null
+}
+
+export interface PaperSubmitItem {
+  question_id: number
+  user_answer_md: string | null
+  self_rated: number | null
+  time_spent_sec: number | null
+}
+
+export interface PaperSubmitPayload {
+  items: PaperSubmitItem[]
+}
+
+export interface MasteryDelta {
+  kp_id: number
+  kp_name: string
+  mastery_before: number | null
+  mastery_after: number | null
+  attempts_delta: number
+}
+
+export interface PaperSubmitItemResult {
+  question_id: number
+  qtype: string
+  is_correct: boolean
+  score: number
+  self_rated: number | null
+  user_answer_md: string | null
+}
+
+export interface PaperSubmitResult {
+  paper_id: number
+  score: number
+  total_score: number
+  correct_count: number
+  question_count: number
+  elapsed_sec: number
+  items: PaperSubmitItemResult[]
+  mastery: MasteryDelta[]
+  mistake_question_ids: number[]
+  missing_question_ids: number[]
+}

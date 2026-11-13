@@ -6,12 +6,22 @@ import type { PaperDetail, PaperPreview } from '@/types/papers'
 const http = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
   patch: vi.fn(),
   delete: vi.fn(),
 }))
 vi.mock('@/api/http', () => ({ default: http, API_PREFIX: '/api/v1' }))
 
-import { exportPaperPdf, generatePaper, getPaper, replacePaperItem, savePaper } from './papers'
+import {
+  exportPaperPdf,
+  generatePaper,
+  getPaper,
+  getPaperAnswers,
+  replacePaperItem,
+  savePaper,
+  savePaperAnswer,
+  submitPaper,
+} from './papers'
 
 function envelope<T>(data: T) {
   const body: ApiEnvelope<T> = { code: 0, message: 'ok', trace_id: 't', data }
@@ -21,6 +31,7 @@ function envelope<T>(data: T) {
 beforeEach(() => {
   http.get.mockReset()
   http.post.mockReset()
+  http.put.mockReset()
 })
 
 describe('papers api', () => {
@@ -89,5 +100,29 @@ describe('papers api', () => {
     const detail = await getPaper(7)
     expect(http.get).toHaveBeenCalledWith('/api/v1/papers/7')
     expect(detail.id).toBe(7)
+  })
+
+  it('loads saved answers for resume', async () => {
+    http.get.mockResolvedValue(envelope({ submitted: false, items: [] }))
+    await getPaperAnswers(8)
+    expect(http.get).toHaveBeenCalledWith('/api/v1/papers/8/answers')
+  })
+
+  it('auto-saves one answer with time spent', async () => {
+    http.put.mockResolvedValue(envelope({ question_id: 501, saved: true }))
+    await savePaperAnswer(8, 501, { user_answer_md: 'A', time_spent_sec: 12 })
+    expect(http.put).toHaveBeenCalledWith('/api/v1/papers/8/answers/501', {
+      user_answer_md: 'A',
+      time_spent_sec: 12,
+    })
+  })
+
+  it('submits the whole paper', async () => {
+    http.post.mockResolvedValue(envelope({ paper_id: 8, score: 7 }))
+    const result = await submitPaper(8, {
+      items: [{ question_id: 501, user_answer_md: 'A', self_rated: null, time_spent_sec: 12 }],
+    })
+    expect(http.post.mock.calls[0]![0]).toBe('/api/v1/papers/8/submit')
+    expect(result.score).toBe(7)
   })
 })

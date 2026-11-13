@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /** S5-2 组卷页：约束表单 → 生成预览 → 换题/删题/调序 → 保存为草稿（单页，不跳转）。 */
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import MathText from '@/components/common/MathText.vue'
@@ -11,6 +12,7 @@ import type { KpNode, SubjectOut } from '@/types/kp'
 import type { PaperConstraintPayload, PaperItem, PaperPreview, PaperQuestionType } from '@/types/papers'
 
 const QTYPES: PaperQuestionType[] = ['单选', '多选', '填空', '解答']
+const router = useRouter()
 
 const subjects = ref<SubjectOut[]>([])
 const subjectCode = ref('')
@@ -362,6 +364,14 @@ onMounted(() => {
             @click="onExport('answers')"
           >
             导出答案卷
+          </el-button>
+          <el-button
+            v-if="savedPaperId"
+            type="primary"
+            data-testid="take-button"
+            @click="router.push(`/papers/${savedPaperId}/take`)"
+          >
+            开始作答
           </el-button>
           <span v-if="savedPaperId" class="export-hint">导出的为已保存版本</span>
         </div>

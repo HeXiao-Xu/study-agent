@@ -17,6 +17,9 @@ vi.mock('@/api/papers', () => papers)
 const kpApi = vi.hoisted(() => ({ listSubjects: vi.fn(), getKpTree: vi.fn() }))
 vi.mock('@/api/kp', () => kpApi)
 
+const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('vue-router', () => ({ useRouter: () => router }))
+
 vi.mock('@/components/common/MathText.vue', () => ({
   default: { props: ['text'], template: '<span class="math-text">{{ text }}</span>' },
 }))
@@ -93,6 +96,7 @@ beforeEach(() => {
   papers.generatePaper.mockReset()
   papers.replacePaperItem.mockReset()
   papers.savePaper.mockReset()
+  router.push.mockReset()
   papers.exportPaperPdf.mockReset()
   kpApi.listSubjects.mockReset()
   kpApi.getKpTree.mockReset()
@@ -238,6 +242,18 @@ describe('Generate', () => {
         constraint: expect.objectContaining({ seed: 7 }),
       }),
     )
+  })
+
+  it('navigates to the take page after saving', async () => {
+    papers.generatePaper.mockResolvedValue(preview())
+    papers.savePaper.mockResolvedValue({ id: 7, title: '我的卷', status: '草稿' })
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '我的卷' } as never)
+    const wrapper = await mountView()
+    await generate(wrapper)
+    await wrapper.find('[data-testid="save-button"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="take-button"]').trigger('click')
+    expect(router.push).toHaveBeenCalledWith('/papers/7/take')
   })
 
   it('shows export buttons only after the paper is saved', async () => {

@@ -2,12 +2,17 @@
 import http, { API_PREFIX, type ApiEnvelope } from '@/api/http'
 import type {
   Paper,
+  PaperAnswerPayload,
+  PaperAnswerRow,
+  PaperAnswers,
   PaperDetail,
   PaperGeneratePayload,
   PaperPreview,
   PaperReplacePayload,
   PaperReplaceResult,
   PaperSavePayload,
+  PaperSubmitPayload,
+  PaperSubmitResult,
 } from '@/types/papers'
 
 export async function generatePaper(payload: PaperGeneratePayload): Promise<PaperPreview> {
@@ -44,4 +49,32 @@ export async function exportPaperPdf(
     timeout: 60_000,
   })
   return resp.data
+}
+
+export async function getPaperAnswers(id: number): Promise<PaperAnswers> {
+  const resp = await http.get<ApiEnvelope<PaperAnswers>>(`${API_PREFIX}/papers/${id}/answers`)
+  return resp.data.data
+}
+
+export async function savePaperAnswer(
+  id: number,
+  questionId: number,
+  payload: PaperAnswerPayload,
+): Promise<PaperAnswerRow> {
+  const resp = await http.put<ApiEnvelope<PaperAnswerRow>>(
+    `${API_PREFIX}/papers/${id}/answers/${questionId}`,
+    payload,
+  )
+  return resp.data.data
+}
+
+export async function submitPaper(
+  id: number,
+  payload: PaperSubmitPayload,
+): Promise<PaperSubmitResult> {
+  const resp = await http.post<ApiEnvelope<PaperSubmitResult>>(
+    `${API_PREFIX}/papers/${id}/submit`,
+    payload,
+  )
+  return resp.data.data
 }

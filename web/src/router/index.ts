@@ -82,6 +82,12 @@ const router = createRouter({
           meta: { title: '组卷', nav: 'papers', roles: ['student'] },
         },
         {
+          path: 'papers/:id/take',
+          name: 'paper-take',
+          component: () => import('@/views/papers/Take.vue'),
+          meta: { title: '在线作答', nav: 'papers', roles: ['student'] },
+        },
+        {
           path: 'qa',
           name: 'qa',
           component: () => import('@/views/qa/Chat.vue'),
