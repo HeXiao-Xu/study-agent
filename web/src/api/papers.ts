@@ -34,3 +34,14 @@ export async function getPaper(id: number): Promise<PaperDetail> {
   const resp = await http.get<ApiEnvelope<PaperDetail>>(`${API_PREFIX}/papers/${id}`)
   return resp.data.data
 }
+export async function exportPaperPdf(
+  id: number,
+  variant: 'questions' | 'answers',
+): Promise<Blob> {
+  const resp = await http.get<Blob>(`${API_PREFIX}/papers/${id}/export.pdf`, {
+    params: { variant },
+    responseType: 'blob',
+    timeout: 60_000,
+  })
+  return resp.data
+}

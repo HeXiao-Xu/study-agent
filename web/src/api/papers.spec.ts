@@ -11,7 +11,7 @@ const http = vi.hoisted(() => ({
 }))
 vi.mock('@/api/http', () => ({ default: http, API_PREFIX: '/api/v1' }))
 
-import { generatePaper, getPaper, replacePaperItem, savePaper } from './papers'
+import { exportPaperPdf, generatePaper, getPaper, replacePaperItem, savePaper } from './papers'
 
 function envelope<T>(data: T) {
   const body: ApiEnvelope<T> = { code: 0, message: 'ok', trace_id: 't', data }
@@ -68,6 +68,20 @@ describe('papers api', () => {
     const paper = await savePaper(payload)
     expect(http.post).toHaveBeenCalledWith('/api/v1/papers', payload)
     expect(paper.id).toBe(7)
+  })
+
+  it('requests the export as a blob with the chosen variant', async () => {
+    const blob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
+    http.get.mockResolvedValue({ data: blob })
+
+    const result = await exportPaperPdf(7, 'answers')
+
+    expect(http.get).toHaveBeenCalledWith('/api/v1/papers/7/export.pdf', {
+      params: { variant: 'answers' },
+      responseType: 'blob',
+      timeout: 60_000,
+    })
+    expect(result).toBe(blob)
   })
 
   it('gets a paper by id', async () => {

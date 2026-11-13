@@ -6,7 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import MathText from '@/components/common/MathText.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { getKpTree, listSubjects } from '@/api/kp'
-import { generatePaper, replacePaperItem, savePaper } from '@/api/papers'
+import { exportPaperPdf, generatePaper, replacePaperItem, savePaper } from '@/api/papers'
 import type { KpNode, SubjectOut } from '@/types/kp'
 import type { PaperConstraintPayload, PaperItem, PaperPreview, PaperQuestionType } from '@/types/papers'
 
@@ -28,6 +28,8 @@ const form = reactive({
 })
 
 const preview = ref<PaperPreview | null>(null)
+const savedPaperId = ref<number | null>(null)
+const exporting = ref<'questions' | 'answers' | null>(null)
 const generating = ref(false)
 const saving = ref(false)
 const replacingId = ref<number | null>(null)
@@ -185,9 +187,28 @@ async function onSave(): Promise<void> {
       question_ids: items.value.map((row) => row.question_id),
       duration_min: preview.value.constraint.duration_min,
     })
+    savedPaperId.value = paper.id
     ElMessage.success(`已保存试卷 #${paper.id}`)
   } finally {
     saving.value = false
+  }
+}
+
+async function onExport(variant: 'questions' | 'answers'): Promise<void> {
+  if (!savedPaperId.value) return
+  exporting.value = variant
+  try {
+    const blob = await exportPaperPdf(savedPaperId.value, variant)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `试卷-${savedPaperId.value}-${variant === 'answers' ? '答案卷' : '题干卷'}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } finally {
+    exporting.value = null
   }
 }
 
@@ -326,6 +347,23 @@ onMounted(() => {
           <el-button :disabled="!canSave" :loading="saving" data-testid="save-button" @click="onSave">
             保存为草稿
           </el-button>
+          <el-button
+            v-if="savedPaperId"
+            data-testid="export-questions"
+            :loading="exporting === 'questions'"
+            @click="onExport('questions')"
+          >
+            导出题干卷
+          </el-button>
+          <el-button
+            v-if="savedPaperId"
+            data-testid="export-answers"
+            :loading="exporting === 'answers'"
+            @click="onExport('answers')"
+          >
+            导出答案卷
+          </el-button>
+          <span v-if="savedPaperId" class="export-hint">导出的为已保存版本</span>
         </div>
       </header>
 
@@ -488,6 +526,11 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+}
+
+.export-hint {
+  font-size: 12px;
+  color: #909399;
 }
 
 .badge {

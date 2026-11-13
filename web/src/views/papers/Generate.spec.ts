@@ -10,6 +10,7 @@ const papers = vi.hoisted(() => ({
   generatePaper: vi.fn(),
   replacePaperItem: vi.fn(),
   savePaper: vi.fn(),
+  exportPaperPdf: vi.fn(),
 }))
 vi.mock('@/api/papers', () => papers)
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   papers.generatePaper.mockReset()
   papers.replacePaperItem.mockReset()
   papers.savePaper.mockReset()
+  papers.exportPaperPdf.mockReset()
   kpApi.listSubjects.mockReset()
   kpApi.getKpTree.mockReset()
   kpApi.listSubjects.mockResolvedValue([{ id: 7, name: '高中数学', code: 'math', stage: '高中' }])
@@ -236,6 +238,42 @@ describe('Generate', () => {
         constraint: expect.objectContaining({ seed: 7 }),
       }),
     )
+  })
+
+  it('shows export buttons only after the paper is saved', async () => {
+    papers.generatePaper.mockResolvedValue(preview())
+    papers.savePaper.mockResolvedValue({ id: 7, title: '我的卷', status: '草稿' })
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '我的卷' } as never)
+    const wrapper = await mountView()
+    await generate(wrapper)
+    expect(wrapper.find('[data-testid="export-questions"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="export-questions"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="export-answers"]').exists()).toBe(true)
+  })
+
+  it('downloads the saved paper as an answer PDF', async () => {
+    papers.generatePaper.mockResolvedValue(preview())
+    papers.savePaper.mockResolvedValue({ id: 7, title: '我的卷', status: '草稿' })
+    papers.exportPaperPdf.mockResolvedValue(new Blob(['%PDF-1.4']))
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '我的卷' } as never)
+    const createObjectURL = vi.fn(() => 'blob:paper')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    const wrapper = await mountView()
+    await generate(wrapper)
+    await wrapper.find('[data-testid="save-button"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="export-answers"]').trigger('click')
+    await flushPromises()
+
+    expect(papers.exportPaperPdf).toHaveBeenCalledWith(7, 'answers')
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:paper')
   })
 
   it('disables save when the paper is empty', async () => {
