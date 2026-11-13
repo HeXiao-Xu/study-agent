@@ -528,3 +528,43 @@ def test_submit_paper_locks_row_before_writes(monkeypatch):
     )
     locked = session.scalar_statements[0]
     assert "FOR UPDATE" in str(locked)
+
+
+def test_submit_paper_captures_mastery_before_updates(monkeypatch):
+    """ORM 行会被 record_attempts 原地改值，before 必须在更新前快照成 float。"""
+    items = [_item(501)]
+    paper = _paper()
+    before_row = Mastery(
+        user_id=50,
+        kp_id=117,
+        mastery=Decimal("0.200"),
+        attempts=1,
+        correct_cnt=0,
+        stability=Decimal("2.00"),
+    )
+    session = FakeSession(papers=[paper], scalars=[[before_row], [before_row]])
+    session.scalar_results = [paper]
+    monkeypatch.setattr(
+        answer_service.paper_plan_service, "get_paper", lambda *a, **k: _detail(items)
+    )
+
+    def fake_record_attempts(session, **kwargs):
+        before_row.mastery = Decimal("0.350")
+        before_row.attempts = 2
+        return [before_row]
+
+    monkeypatch.setattr(answer_service.mastery_service, "record_attempts", fake_record_attempts)
+    monkeypatch.setattr(
+        answer_service.mistake_service,
+        "record_wrong_answer",
+        lambda *a, **k: Mistake(id=1, user_id=50, question_id=501, status="待订正"),
+    )
+    out = answer_service.submit_paper(
+        session,
+        user_id=50,
+        paper_id=8,
+        items=[AnswerSubmitItemIn(question_id=501, user_answer_md="A")],
+    )
+    assert out.mastery[0].mastery_before == 0.2
+    assert out.mastery[0].mastery_after == 0.35
+    assert out.mastery[0].attempts_delta == 1

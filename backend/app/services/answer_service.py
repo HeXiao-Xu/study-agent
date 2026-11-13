@@ -301,7 +301,7 @@ def _upsert_graded_answer(
 
 def _mastery_deltas(
     *,
-    before: Mapping[int, Mastery],
+    before: Mapping[int, tuple[float, int]],
     after: Mapping[int, Mastery],
     names: Mapping[int, str],
     touched: Sequence[int],
@@ -311,15 +311,14 @@ def _mastery_deltas(
         after_row = after.get(kp_id)
         if after_row is None:
             continue
-        before_row = before.get(kp_id)
-        before_value = float(before_row.mastery) if before_row is not None else None
+        before_state = before.get(kp_id)
         deltas.append(
             MasteryDeltaOut(
                 kp_id=kp_id,
                 kp_name=names.get(kp_id) or f"知识点 #{kp_id}",
-                mastery_before=before_value,
+                mastery_before=before_state[0] if before_state else None,
                 mastery_after=float(after_row.mastery),
-                attempts_delta=after_row.attempts - (before_row.attempts if before_row else 0),
+                attempts_delta=after_row.attempts - (before_state[1] if before_state else 0),
             )
         )
     return deltas
@@ -377,9 +376,10 @@ def submit_paper(
         raise ConflictError(f"还有 {len(missing)} 道题未自评")
     graded = grade_paper(detail.items, answers)
     touched = sorted(_touched_kp_ids(graded, detail.items))
+    # record_attempts 会原地改 ORM 行；这里先快照成 (mastery, attempts)，否则 before 会被污染。
     before_rows = (
         {
-            row.kp_id: row
+            row.kp_id: (float(row.mastery), int(row.attempts))
             for row in session.scalars(
                 select(Mastery).where(Mastery.user_id == user_id, Mastery.kp_id.in_(touched))
             )
@@ -407,7 +407,7 @@ def submit_paper(
 
     mistake_ids: list[int] = []
     for question_id in _wrong_question_ids(graded, detail.items):
-        mistake = mistake_service.record_wrong_answer(
+        mistake_service.record_wrong_answer(
             session,
             user_id=user_id,
             question_id=question_id,
@@ -416,7 +416,7 @@ def submit_paper(
                 question_id
             ],
         )
-        mistake_ids.append(int(mistake.id))
+        mistake_ids.append(question_id)
 
     after_rows = (
         {
