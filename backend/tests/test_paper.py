@@ -21,6 +21,7 @@ from app.services.paper_service import (
     quality_score,
     score_parts,
     select_items,
+    plan_paper,
 )
 
 NOW = datetime(2026, 11, 13, 9, 0, tzinfo=timezone.utc)
@@ -426,3 +427,200 @@ def test_select_items_sorts_like_a_real_paper() -> None:
         for item in items
     ]
     assert keys == sorted(keys)
+
+
+def test_plan_paper_happy_path_has_no_violation() -> None:
+    plan = plan_paper(make_constraints(), many(10), mastery_by_kp={}, now=NOW)
+    assert plan.ok is True
+    assert len(plan.items) == 10
+    assert plan.total_score == 80
+    assert plan.violations == ()
+    assert plan.counts_by_qtype == {"解答": 10}
+    assert plan.counts_by_difficulty == {3: 10}
+    assert plan.counts_by_kp == {KP_A: 10}
+
+
+def test_plan_paper_reports_kp_shortage() -> None:
+    constraints = make_constraints(
+        kp_ids=(KP_A, KP_B), total_questions=10, total_score_target=80
+    )
+    candidates = many(2, start=1, kps=[(KP_A, 1.0)]) + many(
+        10, start=11, kps=[(KP_B, 1.0)]
+    )
+    plan = plan_paper(constraints, candidates, mastery_by_kp={}, now=NOW)
+    assert plan.ok is False
+    assert [violation.code for violation in plan.violations] == ["KP_SHORTAGE"]
+    assert plan.violations[0].detail == {
+        "kp_id": KP_A,
+        "need": 5,
+        "selected": 2,
+        "available": 2,
+    }
+    assert len(plan.items) == 10
+    assert plan.counts_by_kp == {KP_A: 2, KP_B: 8}
+
+
+def test_plan_paper_reports_difficulty_shortage() -> None:
+    constraints = make_constraints(
+        total_questions=10, difficulty_dist={5: 0.5, 3: 0.5}, total_score_target=80
+    )
+    plan = plan_paper(constraints, many(20, difficulty=3), mastery_by_kp={}, now=NOW)
+    assert plan.ok is False
+    assert [violation.code for violation in plan.violations] == ["DIFFICULTY_SHORTAGE"]
+    assert plan.violations[0].detail == {
+        "difficulty": 5,
+        "need": 5,
+        "selected": 0,
+        "available": 0,
+    }
+    assert len(plan.items) == 10
+    assert all(item.difficulty == 3 for item in plan.items)
+
+
+def test_plan_paper_excludes_recent_questions() -> None:
+    constraints = make_constraints(total_questions=7, total_score_target=56)
+    candidates = many(7, start=1, last_done_at=NOW - timedelta(days=15)) + many(
+        3, start=101, last_done_at=NOW - timedelta(days=3)
+    )
+    plan = plan_paper(constraints, candidates, mastery_by_kp={}, now=NOW)
+    assert plan.ok is True
+    assert [item.question_id for item in plan.items] == list(range(1, 8))
+
+
+def test_plan_paper_returns_no_candidates_plan() -> None:
+    plan = plan_paper(
+        make_constraints(), [cand(1, kps=[(999, 1.0)])], mastery_by_kp={}, now=NOW
+    )
+    assert plan.ok is False
+    assert [violation.code for violation in plan.violations] == ["NO_CANDIDATES"]
+    assert plan.violations[0].detail == {"available": 0, "excluded_recent": 0}
+    assert plan.items == ()
+    assert plan.total_score == 0
+    assert plan.counts_by_qtype == {"解答": 0}
+    assert plan.quota_by_qtype == {"解答": 10}
+
+
+def test_plan_paper_all_recent_gives_no_candidates_with_count() -> None:
+    plan = plan_paper(
+        make_constraints(),
+        many(10, last_done_at=NOW - timedelta(days=3)),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert [violation.code for violation in plan.violations] == ["NO_CANDIDATES"]
+    assert plan.violations[0].detail == {"available": 0, "excluded_recent": 10}
+
+
+def test_plan_paper_accepts_score_within_tolerance() -> None:
+    plan = plan_paper(
+        make_constraints(
+            total_questions=20,
+            qtype_ratio={"单选": 0.5, "填空": 0.2, "解答": 0.3},
+            total_score_target=94,
+        ),
+        mixed_pool(),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert plan.ok is True
+    assert plan.total_score == 94
+    assert plan.quota_by_qtype == {"单选": 10, "填空": 4, "解答": 6}
+
+
+def test_plan_paper_tunes_qtype_counts_for_score() -> None:
+    plan = plan_paper(
+        make_constraints(
+            total_questions=20,
+            qtype_ratio={"单选": 0.5, "填空": 0.2, "解答": 0.3},
+            total_score_target=100,
+        ),
+        mixed_pool(),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert plan.ok is True
+    assert plan.quota_by_qtype == {"单选": 9, "填空": 4, "解答": 7}
+    assert plan.total_score == 99
+
+
+def test_plan_paper_reports_unreachable_total_score() -> None:
+    plan = plan_paper(
+        make_constraints(
+            total_questions=20,
+            qtype_ratio={"单选": 0.5, "填空": 0.2, "解答": 0.3},
+            total_score_target=200,
+        ),
+        mixed_pool(),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert plan.ok is False
+    codes = [violation.code for violation in plan.violations]
+    assert "TOTAL_SCORE_OUT_OF_TOLERANCE" in codes
+    assert plan.total_score == 94
+    violation = next(
+        item for item in plan.violations if item.code == "TOTAL_SCORE_OUT_OF_TOLERANCE"
+    )
+    assert violation.detail["target"] == 200
+    assert violation.detail["achieved"] == 94
+
+
+def test_plan_paper_surfaces_rounding_warning() -> None:
+    plan = plan_paper(
+        make_constraints(
+            total_questions=9,
+            qtype_ratio={"单选": 0.01, "解答": 0.99},
+            difficulty_dist={3: 1.0},
+            total_score_target=72,
+        ),
+        mixed_pool(),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert plan.ok is True
+    assert plan.warnings == ("题型「单选」按配比取整为 0 题",)
+    assert plan.counts_by_qtype == {"单选": 0, "解答": 9}
+
+
+def test_plan_paper_steers_difficulty_by_mastery() -> None:
+    constraints = make_constraints(
+        kp_ids=(KP_A, KP_B),
+        total_questions=2,
+        qtype_ratio={"解答": 1.0},
+        difficulty_dist={2: 0.5, 5: 0.5},
+        total_score_target=16,
+    )
+    candidates = [
+        cand(1, difficulty=2, kps=[(KP_A, 1.0)]),
+        cand(2, difficulty=5, kps=[(KP_A, 1.0)]),
+        cand(3, difficulty=2, kps=[(KP_B, 1.0)]),
+        cand(4, difficulty=5, kps=[(KP_B, 1.0)]),
+    ]
+    plan = plan_paper(
+        constraints, candidates, mastery_by_kp={KP_A: 0.9, KP_B: 0.1}, now=NOW
+    )
+    assert plan.ok is True
+    chosen = {item.kp_ids[0]: item.difficulty for item in plan.items}
+    assert chosen == {KP_A: 5, KP_B: 2}
+
+
+def test_plan_paper_dedupes_by_question_id_keeping_first() -> None:
+    constraints = make_constraints(
+        total_questions=2, difficulty_dist={2: 1.0}, total_score_target=16
+    )
+    plan = plan_paper(
+        constraints,
+        [cand(1, difficulty=2), cand(1, difficulty=3), cand(2, difficulty=2)],
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert plan.ok is True
+    assert [item.question_id for item in plan.items] == [1, 2]
+    assert plan.items[0].difficulty == 2
+
+
+def test_plan_paper_rejects_naive_now() -> None:
+    with pytest.raises(PaperPlanError, match="now"):
+        plan_paper(
+            make_constraints(), many(10), mastery_by_kp={}, now=datetime(2026, 11, 13, 9, 0)
+        )

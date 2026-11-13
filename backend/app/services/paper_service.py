@@ -588,3 +588,137 @@ def select_items(
         )
     )
     return tuple(items)
+
+
+def plan_paper(
+    constraints: PaperConstraints,
+    candidates: Sequence[CandidateQuestion],
+    *,
+    mastery_by_kp: Mapping[int, float] | None = None,
+    now: datetime | None = None,
+) -> PaperPlan:
+    """组卷主入口：过滤 → 配额 → 选材 → 汇总；约束不足返回 violation 而不是抛错。"""
+    moment = now or datetime.now(timezone.utc)
+    _require_aware(moment, "now")
+    moment = _as_utc(moment)
+    mastery = dict(mastery_by_kp or {})
+    pool, excluded_recent = prepare_pool(constraints, candidates, now=moment)
+    quotas = allocate_quotas(constraints, pool)
+    counts_qtype = {qtype: 0 for qtype in constraints.qtype_ratio}
+    counts_difficulty = {
+        difficulty: 0 for difficulty in sorted(constraints.difficulty_dist)
+    }
+    counts_kp = {kp_id: 0 for kp_id in constraints.kp_ids}
+    if not pool:
+        return PaperPlan(
+            ok=False,
+            items=(),
+            total_score=0,
+            target_score=constraints.total_score_target,
+            quota_by_qtype=quotas.quota_by_qtype,
+            quota_by_difficulty=quotas.quota_by_difficulty,
+            quota_by_kp=quotas.quota_by_kp,
+            counts_by_qtype=counts_qtype,
+            counts_by_difficulty=counts_difficulty,
+            counts_by_kp=counts_kp,
+            violations=(
+                Violation(
+                    code="NO_CANDIDATES",
+                    message="没有可用候选题（题库为空或全部被近期排除）",
+                    detail={"available": 0, "excluded_recent": excluded_recent},
+                ),
+            ),
+            warnings=quotas.warnings,
+            seed=constraints.seed,
+        )
+    items = select_items(constraints, pool, quotas, mastery_by_kp=mastery, now=moment)
+    available_qtype = _count_by_qtype(pool)
+    available_difficulty = _count_by_difficulty(pool)
+    available_kp = _count_by_kp(pool)
+    for item in items:
+        counts_qtype[item.qtype] = counts_qtype.get(item.qtype, 0) + 1
+        counts_difficulty[item.difficulty] = counts_difficulty.get(item.difficulty, 0) + 1
+        for kp_id in item.kp_ids:
+            counts_kp[kp_id] = counts_kp.get(kp_id, 0) + 1
+    violations: list[Violation] = []
+    for qtype in QTYPE_ORDER:
+        if qtype not in quotas.quota_by_qtype:
+            continue
+        need = quotas.quota_by_qtype[qtype]
+        selected = counts_qtype.get(qtype, 0)
+        if selected < need:
+            violations.append(
+                Violation(
+                    code="QTYPE_SHORTAGE",
+                    message=f"题型「{qtype}」题量不足：需要 {need} 道，实际 {selected} 道",
+                    detail={
+                        "qtype": qtype,
+                        "need": need,
+                        "selected": selected,
+                        "available": available_qtype.get(qtype, 0),
+                    },
+                )
+            )
+    for difficulty in sorted(quotas.quota_by_difficulty):
+        need = quotas.quota_by_difficulty[difficulty]
+        selected = counts_difficulty.get(difficulty, 0)
+        if selected < need:
+            violations.append(
+                Violation(
+                    code="DIFFICULTY_SHORTAGE",
+                    message=f"难度 {difficulty} 的题量不足：需要 {need} 道，实际 {selected} 道",
+                    detail={
+                        "difficulty": difficulty,
+                        "need": need,
+                        "selected": selected,
+                        "available": available_difficulty.get(difficulty, 0),
+                    },
+                )
+            )
+    for kp_id in constraints.kp_ids:
+        need = quotas.quota_by_kp[kp_id]
+        selected = counts_kp.get(kp_id, 0)
+        if selected < need:
+            violations.append(
+                Violation(
+                    code="KP_SHORTAGE",
+                    message=f"知识点 {kp_id} 覆盖不足：需要 {need} 道，实际 {selected} 道",
+                    detail={
+                        "kp_id": kp_id,
+                        "need": need,
+                        "selected": selected,
+                        "available": available_kp.get(kp_id, 0),
+                    },
+                )
+            )
+    if quotas.score_out_of_tolerance:
+        violations.append(
+            Violation(
+                code="TOTAL_SCORE_OUT_OF_TOLERANCE",
+                message=(
+                    f"总分 {quotas.planned_total_score} 不在目标 "
+                    f"{constraints.total_score_target}±{quotas.tolerance} 内"
+                ),
+                detail={
+                    "target": constraints.total_score_target,
+                    "achieved": quotas.planned_total_score,
+                    "tolerance": quotas.tolerance,
+                    "suggestion": "调整题型配比或分值表，或放宽容差",
+                },
+            )
+        )
+    return PaperPlan(
+        ok=not violations,
+        items=items,
+        total_score=sum(item.score for item in items),
+        target_score=constraints.total_score_target,
+        quota_by_qtype=quotas.quota_by_qtype,
+        quota_by_difficulty=quotas.quota_by_difficulty,
+        quota_by_kp=quotas.quota_by_kp,
+        counts_by_qtype=counts_qtype,
+        counts_by_difficulty=counts_difficulty,
+        counts_by_kp=counts_kp,
+        violations=tuple(violations),
+        warnings=quotas.warnings,
+        seed=constraints.seed,
+    )
