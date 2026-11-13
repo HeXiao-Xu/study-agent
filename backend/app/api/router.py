@@ -9,6 +9,7 @@ from app.api.v1 import (
     mastery,
     mistakes,
     notes,
+    papers,
     qa,
     questions,
     retrieval,
@@ -28,6 +29,7 @@ api_router.include_router(mastery.router)
 api_router.include_router(stats.router)
 api_router.include_router(retrieval.router)
 api_router.include_router(qa.router)
+api_router.include_router(papers.router)
 api_router.include_router(admin.router)
 
 __all__ = ["api_router"]
