@@ -7,12 +7,17 @@ import pytest
 
 from app.services.paper_service import (
     DEFAULT_SCORE_BY_QTYPE,
+    NEUTRAL_MASTERY,
     CandidateQuestion,
     PaperConstraints,
     PaperPlanError,
     allocate_quotas,
+    difficulty_target,
     largest_remainder,
+    novelty_score,
     prepare_pool,
+    quality_score,
+    score_parts,
 )
 
 NOW = datetime(2026, 11, 13, 9, 0, tzinfo=timezone.utc)
@@ -261,3 +266,75 @@ def test_allocate_quotas_warns_when_qtype_rounds_to_zero() -> None:
     quotas = allocate_quotas(constraints, tuple(mixed_pool()))
     assert quotas.quota_by_qtype == {"单选": 0, "解答": 10}
     assert quotas.warnings == ("题型「单选」按配比取整为 0 题",)
+
+
+def test_difficulty_target_follows_mastery_bands() -> None:
+    assert difficulty_target(None) == 3
+    assert difficulty_target(0.2) == 2
+    assert difficulty_target(0.5) == 3
+    assert difficulty_target(0.8) == 3
+    assert difficulty_target(0.81) == 5
+    assert difficulty_target(-0.5) == 2
+    assert difficulty_target(1.5) == 5
+
+
+def test_novelty_score_decays_and_clamps() -> None:
+    assert novelty_score(None, now=NOW) == 1.0
+    assert novelty_score(NOW - timedelta(days=14), now=NOW) == pytest.approx(
+        0.466667, abs=1e-6
+    )
+    assert novelty_score(NOW - timedelta(days=30), now=NOW) == 1.0
+    assert novelty_score(NOW - timedelta(days=60), now=NOW) == 1.0
+    assert novelty_score(NOW + timedelta(days=2), now=NOW) == 0.0
+
+
+@pytest.mark.parametrize(
+    "verified, origin, expected",
+    [
+        (True, "exam", 1.0),
+        (True, "textbook", 1.0),
+        (True, "upload", 0.7),
+        (False, "ai", 0.4),
+        (False, "upload", 0.5),
+    ],
+)
+def test_quality_score_tiers(verified, origin, expected) -> None:
+    assert quality_score(verified=verified, origin=origin) == expected
+
+
+def test_score_parts_weights_and_components() -> None:
+    parts = score_parts(
+        candidate=cand(1, difficulty=3),
+        constraints=make_constraints(),
+        mastery_by_kp={KP_A: 0.4},
+        now=NOW,
+    )
+    assert parts.difficulty_match == pytest.approx(0.75)
+    assert parts.mastery_match == pytest.approx(0.6)
+    assert parts.novelty == 1.0
+    assert parts.quality == 1.0
+    assert parts.total == pytest.approx(0.7925)
+
+
+def test_score_parts_strong_mastery_tolerates_harder_question() -> None:
+    parts = score_parts(
+        candidate=cand(1, difficulty=3),
+        constraints=make_constraints(),
+        mastery_by_kp={KP_A: 0.9},
+        now=NOW,
+    )
+    assert parts.difficulty_match == pytest.approx(0.5)
+    assert parts.mastery_match == pytest.approx(0.1)
+    assert parts.total == pytest.approx(0.555)
+
+
+def test_score_parts_defaults_to_neutral_mastery() -> None:
+    parts = score_parts(
+        candidate=cand(1, difficulty=3),
+        constraints=make_constraints(),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert parts.mastery_match == pytest.approx(NEUTRAL_MASTERY)
+    assert parts.difficulty_match == pytest.approx(1.0)
+    assert parts.total == pytest.approx(0.35 * 1.0 + 0.30 * 0.5 + 0.20 + 0.15)

@@ -420,3 +420,79 @@ def allocate_quotas(
         ),
         warnings=warnings,
     )
+
+
+def difficulty_target(mastery: float | None) -> int:
+    """掌握度联动（方案 §6.5）：薄弱配基础题、熟练配难题、未评估走中档。"""
+    if mastery is None:
+        return TARGET_DIFFICULTY_MIDDLE
+    value = min(1.0, max(0.0, float(mastery)))
+    if value < MASTERY_LOW:
+        return TARGET_DIFFICULTY_LOW
+    if value > MASTERY_HIGH:
+        return TARGET_DIFFICULTY_HIGH
+    return TARGET_DIFFICULTY_MIDDLE
+
+
+def novelty_score(last_done_at: datetime | None, *, now: datetime) -> float:
+    """30 天内做过的时间越近越不新颖；近期窗内的题在 prepare_pool 已被硬排除。"""
+    if last_done_at is None:
+        return 1.0
+    _require_aware(now, "now")
+    days = (_as_utc(now) - _as_utc(last_done_at)).total_seconds() / 86400.0
+    return round(min(1.0, max(0.0, days / NOVELTY_WINDOW_DAYS)), SCORE_PRECISION)
+
+
+def quality_score(*, verified: bool, origin: str) -> float:
+    """答案可信度分档：真题/课本 > 其他已核对 > 未核对 > AI 未核对。"""
+    if verified:
+        return 1.0 if origin in TRUSTED_ORIGINS else 0.7
+    return 0.4 if origin == "ai" else 0.5
+
+
+def _candidate_mastery(
+    candidate: CandidateQuestion, mastery_by_kp: Mapping[int, float]
+) -> float:
+    weighted = 0.0
+    weight_sum = 0.0
+    for kp_id, weight in candidate.kp_weights:
+        value = max(0.0, float(weight))
+        weighted += value * float(mastery_by_kp.get(kp_id, NEUTRAL_MASTERY))
+        weight_sum += value
+    if weight_sum <= 0:
+        return NEUTRAL_MASTERY
+    return min(1.0, max(0.0, weighted / weight_sum))
+
+
+def score_parts(
+    *,
+    candidate: CandidateQuestion,
+    constraints: PaperConstraints,
+    mastery_by_kp: Mapping[int, float],
+    now: datetime,
+) -> ScoreParts:
+    """四项加权：难度匹配 + 掌握度匹配 + 新颖度 + 质量（spec §4.4）。"""
+    mastery = _candidate_mastery(candidate, mastery_by_kp)
+    difficulty_match = round(
+        1.0
+        - abs(candidate.difficulty - difficulty_target(mastery))
+        / (DIFFICULTY_MAX - DIFFICULTY_MIN),
+        SCORE_PRECISION,
+    )
+    mastery_match = round(1.0 - mastery, SCORE_PRECISION)
+    novelty = novelty_score(candidate.last_done_at, now=now)
+    quality = quality_score(verified=candidate.verified, origin=candidate.origin)
+    total = round(
+        SCORING_WEIGHTS.difficulty * difficulty_match
+        + SCORING_WEIGHTS.mastery * mastery_match
+        + SCORING_WEIGHTS.novelty * novelty
+        + SCORING_WEIGHTS.quality * quality,
+        SCORE_PRECISION,
+    )
+    return ScoreParts(
+        difficulty_match=difficulty_match,
+        mastery_match=mastery_match,
+        novelty=novelty,
+        quality=quality,
+        total=total,
+    )
