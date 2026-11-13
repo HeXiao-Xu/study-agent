@@ -884,9 +884,11 @@
 - 出参：papers 元信息 + `constraint_json` + `items[]`（按保存顺序，`parts=null`）+ `missing_question_ids`（题目被硬删时跳过）
 
 ### GET /api/v1/papers/{id}/export.pdf
-- 权限：student
-- 类型：同步（Playwright 渲染，S5-3 实现）
-- 出参：PDF 下载
+- 权限：student（本人）；不存在 404/40400，别人的 403/40300
+- 查询参数：`variant`，`questions`（默认，题干卷）| `answers`（答案卷）；其他值 422/42200
+- 类型：同步（Playwright 渲染 A4 PDF，超时 30s；失败 500/50000；空卷 409/40900）
+- 出参：`application/pdf` 字节流（**不套 Envelope**）；`Content-Disposition` 同时给 ASCII 名 `paper-{id}-{variant}.pdf` 与 RFC 5987 中文名 `{标题}-题干卷.pdf` / `{标题}-答案卷.pdf`
+- 说明：实时渲染、不落库不缓存；题干卷单选/填空留 2 行、解答留 60mm，答案卷给题干 + 答案 + 解析；题干先 HTML 转义再由 KaTeX 渲染 `$...$`
 
 ### POST /api/v1/answers
 - 权限：student

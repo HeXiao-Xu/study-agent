@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Literal
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -20,7 +22,7 @@ from app.schemas.paper import (
     PaperReplaceOut,
     PaperSaveIn,
 )
-from app.services import paper_plan_service
+from app.services import paper_plan_service, pdf_service
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -64,6 +66,32 @@ def save_paper(
     """保存草稿：总分由服务端按题目分值重算。"""
     data = paper_plan_service.save_draft(session, payload, user_id=user.id)
     return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.get("/{paper_id}/export.pdf")
+def export_paper_pdf(
+    paper_id: int,
+    variant: Literal["questions", "answers"] = Query(default="questions"),
+    session: Session = Depends(get_db),
+    user: User = Depends(require_role("student")),
+) -> Response:
+    """导出题干卷/答案卷；实时渲染，不写库、不缓存。"""
+    content, filename = pdf_service.export_pdf(
+        session,
+        user_id=user.id,
+        paper_id=paper_id,
+        variant=variant,
+        now=datetime.now(timezone.utc),
+    )
+    disposition = (
+        f'attachment; filename="paper-{paper_id}-{variant}.pdf"; '
+        f"filename*=UTF-8''{quote(filename)}"
+    )
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.get("/{paper_id}", response_model=Envelope[PaperDetailOut])

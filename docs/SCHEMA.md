@@ -373,7 +373,9 @@ erDiagram
 
 > S5-2 落地：`total_score` 用 INTEGER 而非 NUMERIC——题分是整数（3/4/4/8），求和即整数，避免 Decimal 噪音（AGENTS §9.2）。索引 `ix_papers_user_id`；迁移 `0014_s5_2`；`question_ids` 的数组顺序就是卷面顺序。
 
-### 6.2 answers
+#> PDF 导出（S5-3）不落库、不缓存文件：每次按 `question_ids` 顺序实时渲染，缺题跳过并在 `missing_question_ids` 体现（与 `GET /papers/{id}` 一致）。
+
+## 6.2 answers
 
 | 字段 | 类型 | 可空 | 默认值 | 说明 | 索引 |
 |---|---|---|---|---|---|
