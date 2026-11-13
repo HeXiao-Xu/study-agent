@@ -9,19 +9,23 @@ from typing import Mapping, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import InvalidParamError
+from app.core.exceptions import ForbiddenError, InvalidParamError, NotFoundError
 from app.models.mistake import Mistake
+from app.models.paper import Paper
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
 from app.schemas.paper import (
     OptionOut,
     PaperConstraintIn,
     PaperConstraintOut,
+    PaperDetailOut,
     PaperGenerateIn,
     PaperItemOut,
+    PaperOut,
     PaperPreviewOut,
     PaperReplaceIn,
     PaperReplaceOut,
+    PaperSaveIn,
     PaperViolationOut,
     ScorePartsOut,
 )
@@ -403,3 +407,83 @@ def replace_item(
         parts=parts,
     )
     return PaperReplaceOut(replaced=True, item=_item_out(item, detail), reason=None)
+
+
+def save_draft(session: Session, payload: PaperSaveIn, *, user_id: int) -> PaperOut:
+    """保存草稿：总分按题目分值表重算（不信任前端），一次事务提交。"""
+    question_ids = list(payload.question_ids)
+    rows = session.execute(
+        select(Question.id, Question.qtype).where(Question.id.in_(question_ids))
+    ).all()
+    qtype_by_id = {int(question_id): str(qtype) for question_id, qtype in rows}
+    missing = [question_id for question_id in question_ids if question_id not in qtype_by_id]
+    if missing:
+        raise InvalidParamError(f"题目不存在：{missing[:10]}")
+    score_map = paper_service.DEFAULT_SCORE_BY_QTYPE
+    total_score = sum(int(score_map[qtype_by_id[question_id]]) for question_id in question_ids)
+    constraints = build_constraints(payload.constraint)
+    paper = Paper(
+        user_id=user_id,
+        title=payload.title,
+        constraint_json=normalized_constraint(constraints).model_dump(mode="json"),
+        question_ids=question_ids,
+        total_score=total_score,
+        duration_min=payload.duration_min,
+        status="草稿",
+        generated_by="manual",
+    )
+    session.add(paper)
+    session.commit()
+    session.refresh(paper)
+    return PaperOut.model_validate(paper)
+
+
+def get_paper(session: Session, *, user_id: int, paper_id: int) -> PaperDetailOut:
+    """读本人试卷：顺序按存库数组；题目被硬删则跳过并如实回报。"""
+    paper = session.get(Paper, paper_id)
+    if paper is None:
+        raise NotFoundError("试卷不存在")
+    if paper.user_id != user_id:
+        raise ForbiddenError("无权访问该试卷")
+    question_ids = [int(question_id) for question_id in paper.question_ids]
+    details = load_question_details(session, question_ids)
+    kp_map = kp_ids_by_question(
+        session, [question_id for question_id in question_ids if question_id in details]
+    )
+    score_map = paper_service.DEFAULT_SCORE_BY_QTYPE
+    items: list[PaperItemOut] = []
+    for question_id in question_ids:
+        detail = details.get(question_id)
+        if detail is None:
+            continue
+        items.append(
+            PaperItemOut(
+                question_id=detail.question_id,
+                qtype=detail.qtype,
+                difficulty=detail.difficulty,
+                score=int(score_map[detail.qtype]),
+                kp_ids=kp_map.get(detail.question_id, []),
+                parts=None,
+                subject_id=detail.subject_id,
+                stem_md=detail.stem_md,
+                options=[OptionOut(**option) for option in detail.options],
+                answer_md=detail.answer_md,
+                analysis_md=detail.analysis_md,
+                verified=detail.verified,
+                origin=detail.origin,
+            )
+        )
+    return PaperDetailOut(
+        id=paper.id,
+        title=paper.title,
+        status=paper.status,
+        total_score=paper.total_score,
+        duration_min=paper.duration_min,
+        question_ids=question_ids,
+        created_at=paper.created_at,
+        constraint_json=paper.constraint_json,
+        items=items,
+        missing_question_ids=[
+            question_id for question_id in question_ids if question_id not in details
+        ],
+    )

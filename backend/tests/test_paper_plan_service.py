@@ -7,9 +7,9 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from app.core.exceptions import InvalidParamError
+from app.core.exceptions import ForbiddenError, InvalidParamError, NotFoundError
 from app.models.paper import Paper
-from app.schemas.paper import PaperGenerateIn, PaperReplaceIn
+from app.schemas.paper import PaperGenerateIn, PaperReplaceIn, PaperSaveIn
 from app.services import paper_plan_service
 
 NOW = datetime(2026, 11, 13, 6, 0, tzinfo=timezone.utc)
@@ -247,3 +247,72 @@ def test_replace_item_returns_reason_when_pool_exhausted():
     assert result.replaced is False
     assert result.item is None
     assert result.reason == "没有可替换的候选题"
+
+
+def _stored_paper(**overrides):  # noqa: ANN003, ANN202
+    paper = Paper(
+        user_id=50,
+        title="期中卷",
+        constraint_json={"seed": 7},
+        question_ids=[501, 502],
+        total_score=11,
+        duration_min=60,
+        status="草稿",
+        generated_by="manual",
+    )
+    paper.id = 7
+    paper.created_at = NOW
+    for key, value in overrides.items():
+        setattr(paper, key, value)
+    return paper
+
+
+def test_save_draft_recomputes_total_and_forces_draft():
+    session = FakeSession(results=[[(501, "单选"), (502, "解答")]])
+    payload = PaperSaveIn(
+        title="期中卷", constraint=make_payload(total_score=11), question_ids=[501, 502]
+    )
+    saved = paper_plan_service.save_draft(session, payload, user_id=50)
+    assert saved.total_score == 11  # 3 + 8，与入参 total_score 无关
+    assert saved.status == "草稿"
+    assert session.committed == 1
+    assert session.added[0].question_ids == [501, 502]
+    assert session.added[0].user_id == 50
+
+
+def test_save_draft_rejects_missing_question_ids_and_writes_nothing():
+    session = FakeSession(results=[[(501, "单选")]])
+    payload = PaperSaveIn(title="t", constraint=make_payload(), question_ids=[501, 999])
+    with pytest.raises(InvalidParamError, match="999"):
+        paper_plan_service.save_draft(session, payload, user_id=50)
+    assert session.committed == 0
+    assert session.added == []
+
+
+def test_get_paper_returns_items_in_stored_order_and_reports_missing():
+    session = FakeSession(
+        results=[
+            [(501, 7, "单选", 2, "题干 501", [], "答案 501", None, True, "exam")],
+            [(501, 101)],
+        ],
+        paper=_stored_paper(),
+    )
+    detail = paper_plan_service.get_paper(session, user_id=50, paper_id=7)
+    assert [item.question_id for item in detail.items] == [501]
+    assert detail.missing_question_ids == [502]
+    assert detail.items[0].parts is None
+    assert detail.items[0].score == 3
+    assert detail.items[0].kp_ids == [101]
+    assert detail.constraint_json == {"seed": 7}
+
+
+def test_get_paper_forbids_other_users():
+    session = FakeSession(paper=_stored_paper())
+    with pytest.raises(ForbiddenError):
+        paper_plan_service.get_paper(session, user_id=51, paper_id=7)
+
+
+def test_get_paper_raises_not_found():
+    session = FakeSession(paper=None)
+    with pytest.raises(NotFoundError):
+        paper_plan_service.get_paper(session, user_id=50, paper_id=99)
