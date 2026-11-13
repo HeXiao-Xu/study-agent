@@ -106,8 +106,9 @@ class PdfContext:
 
 - `build_context(detail, *, variant, subject_name, now) -> PdfContext`：纯函数；空 `items` 抛 `ConflictError`；`variant` 只接受两个枚举值（路由层已校验，这里再防御一次）。
 - `render_html(context) -> str`：Jinja2 `Environment(FileSystemLoader(app/templates), autoescape=select_autoescape(["html"]))`；模板里 `{{ ... }}` 全部转义，公式原样保留 `$`；`static` 目录的 `file://` 路径用 `Path(...).as_uri()` 注入 `base_href`。
-- `render_pdf(html, *, workdir) -> bytes`：Playwright 同步 API；写临时 HTML 到 `tempfile.mkdtemp()`，`page.goto(file://...)`，`wait_for_function("window.__katexReady === true")`，`document.fonts.ready` 后 `page.pdf(format="A4", print_background=True, display_header_footer=True, margin=... , header_template=..., footer_template=...)`；`finally` 清理临时目录（best-effort，异常不吞）。
-- `export_pdf(session, *, user_id, paper_id, variant, now, renderer=render_pdf) -> tuple[bytes, str]`：读卷 → 学科名 → 建上下文 → 渲 HTML → 调 `renderer`（默认真 Playwright，测试注入 fake）→ 返回 `(pdf_bytes, filename)`；渲染异常统一 `raise PdfRenderError(...) from exc`。
+- `build_header_footer(context) -> tuple[str, str]`：纯函数，产出 Playwright 的页眉/页脚模板字符串（标题做 HTML 转义，页脚含 `.pageNumber`/`.totalPages`）。
+- `render_pdf(html_text: str, header_html: str, footer_html: str) -> bytes`：Playwright 同步 API；写临时 HTML 到 `tempfile.TemporaryDirectory()`，`page.goto(file://...)`，`wait_for_function("window.__katexReady === true")`，`page.pdf(format="A4", print_background=True, display_header_footer=True, margin=..., header_template=..., footer_template=...)`；`finally` 关闭 page、退出时清理临时目录。
+- `export_pdf(session, *, user_id, paper_id, variant, now=None, renderer: Renderer | None = None) -> tuple[bytes, str]`：读卷 → 学科名 → 建上下文 → 渲 HTML → 页眉页脚 → 调 `renderer`（`None` 时用 `render_pdf`，测试注入 fake）→ 校验 `%PDF` 魔数 → 返回 `(pdf_bytes, filename)`；渲染异常统一 `raise PdfRenderError(...) from exc`。
 - 渲染线程（关键）：Playwright 同步对象**有线程亲和性**，不能在 FastAPI 线程池的不同线程里复用同一个 browser 实例。因此模块内用 `ThreadPoolExecutor(max_workers=1)` 起**唯一一个渲染线程**，Playwright/Chromium 的启动、`page.pdf()`、关闭都在这个线程里完成；请求线程只 `future.result(timeout=40)` 等结果。这样自然串行化渲染（不需要额外 Semaphore），也不会跨线程踩坑。
 - 超时与失败：`page.pdf(timeout=30_000)` + `future.result(timeout=40)`；超时/异常把 worker 标记为 broken（丢弃并重建 executor），当前请求抛 `PdfRenderError`；chromium 启动失败同样转 `PdfRenderError`。`atexit` 里向 worker 投递关闭任务并 `shutdown(wait=False)`。
 - 不使用 async Playwright（避免与 FastAPI 事件循环线程冲突）；路由保持 `def`（同步），跑在 FastAPI 线程池。
@@ -164,12 +165,13 @@ export async function exportPaperPdf(
 4. `test_build_context_unknown_variant_raises`：防御性 422/`InvalidParamError`。
 5. `test_render_html_escapes_and_keeps_math`：题干含 `<script>` 与 `$x^2$` → HTML 里 `&lt;script&gt;` 且 `$x^2$` 原样。
 6. `test_render_html_variant_diff`：题干卷不含「答案：」，答案卷含答案与解析。
-7. `test_export_pdf_uses_injected_renderer`：fake renderer 返回 `b"%PDF-1.4"`，断言返回字节与文件名 `期中卷-题干卷.pdf`。
-8. `test_export_pdf_wraps_renderer_failure`：fake 抛 `RuntimeError` → `PdfRenderError`。
+7. `test_build_header_footer_has_page_numbers_and_escapes_title`：标题 `<期中>卷` 被转义、页脚含 `pageNumber`/`totalPages`。
+8. `test_export_pdf_uses_injected_renderer`：fake renderer 返回 `b"%PDF-1.4"`，断言返回字节、文件名 `期中卷高一-题干卷.pdf`、HTML 含题干。
+9. `test_export_pdf_wraps_renderer_failure`：fake 抛 `RuntimeError` → `PdfRenderError`。
 
 ### 后端 `tests/test_pdf_api.py`（TestClient + fake renderer）
 
-9. `test_export_requires_login_returns_401`。
+17. `test_export_requires_login_returns_401`。
 10. `test_export_forbids_other_user_returns_403`。
 11. `test_export_missing_paper_returns_404`。
 12. `test_export_empty_paper_returns_409`。
@@ -180,14 +182,14 @@ export async function exportPaperPdf(
 
 ### 前端
 
-17. `papers.spec.ts`：`exportPaperPdf` 用 `responseType: 'blob'` + `params.variant`，并 unwrap 成 Blob。
-18. `Generate.spec.ts`：保存前无导出按钮；保存成功后出现两个按钮；点「导出答案卷」调用 `exportPaperPdf(id,'answers')` 并触发下载（mock `URL.createObjectURL`）。
-19. 保留原有 11 条页面用例全绿。
+18. `papers.spec.ts`：`exportPaperPdf` 用 `responseType: 'blob'` + `params.variant`，并 unwrap 成 Blob。
+19. `Generate.spec.ts`：保存前无导出按钮；保存成功后出现两个按钮；点「导出答案卷」调用 `exportPaperPdf(id,'answers')` 并触发下载（mock `URL.createObjectURL`）。
+20. 保留原有 11 条页面用例全绿。
 
 ### 真实 PDF 验收（非 pytest，`.sdd/s5-3/`）
 
-20. 用 `pdfplumber` 抽两卷文字：断言标题、题号 1–5、至少 1 个 `$...$` 公式的渲染文本、页码「第 1 / N 页」；断言题干卷不含「答案：」、答案卷含「答案：」。
-21. 文件大小 > 20 KB、页数 ≥ 1；浏览器点按钮能下载且文件名中文正常。
+21. 用 `pdfplumber` 抽两卷文字：断言标题、题号 1–5、至少 1 个 `$...$` 公式的渲染文本、页码「第 1 / N 页」；断言题干卷不含「答案：」、答案卷含「答案：」。
+22. 文件大小 > 20 KB、页数 ≥ 1；浏览器点按钮能下载且文件名中文正常。
 
 ## 10. 验收步骤（执行时落 `.sdd/s5-3/acceptance-evidence.md`）
 
