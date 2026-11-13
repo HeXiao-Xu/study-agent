@@ -192,6 +192,61 @@ describe('Take', () => {
     expect(wrapper.find('[data-testid="mastery-delta"]').text()).toContain('0.117')
   })
 
+  it('waits for an in-flight autosave before submitting', async () => {
+    const single = item({
+      qtype: '单选',
+      score: 3,
+      answer_md: 'A',
+      options: [
+        { key: 'A', text: '选项 A' },
+        { key: 'B', text: '选项 B' },
+      ],
+    })
+    papers.getPaper.mockResolvedValue(detail([single]))
+    papers.getPaperAnswers.mockResolvedValue(
+      answers({
+        paper: { id: 8, title: '验收卷', status: '草稿', total_score: 3 },
+        items: [row({ question_id: 501 })],
+      }),
+    )
+    papers.submitPaper.mockResolvedValue(
+      submitResult({
+        score: 3,
+        total_score: 3,
+        items: [
+          {
+            question_id: 501,
+            qtype: '单选',
+            is_correct: true,
+            score: 3,
+            self_rated: 1,
+            user_answer_md: 'A',
+          },
+        ],
+        mastery: [],
+      }),
+    )
+    let resolveSave!: (value: PaperAnswerRow) => void
+    papers.savePaperAnswer.mockReturnValue(
+      new Promise<PaperAnswerRow>((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+
+    const wrapper = await mountTake()
+    await wrapper.find('[data-testid="option-A"] input').setValue(true)
+    await waitAutosave()
+    expect(papers.savePaperAnswer).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('[data-testid="submit-button"]').trigger('click')
+    await flushPromises()
+    expect(papers.submitPaper).not.toHaveBeenCalled()
+
+    resolveSave(row({ saved: true, user_answer_md: 'A' }))
+    await flushPromises()
+    expect(papers.submitPaper).toHaveBeenCalledTimes(1)
+  })
+
   it('restores a saved draft on resume', async () => {
     papers.getPaperAnswers.mockResolvedValue(
       answers({ items: [row({ user_answer_md: 'x=1', time_spent_sec: 12, saved: true })] }),

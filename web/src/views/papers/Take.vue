@@ -34,6 +34,7 @@ const answers = reactive<Record<number, LocalAnswer>>({})
 const elapsedByQuestion = reactive<Record<number, number>>({})
 const graded = reactive<Record<number, PaperAnswerRow>>({})
 const timers = new Map<number, ReturnType<typeof setTimeout>>()
+const inFlight = new Set<Promise<void>>()
 let ticker: ReturnType<typeof setInterval> | null = null
 
 const items = computed(() => detail.value?.items ?? [])
@@ -182,7 +183,14 @@ function scheduleSave(questionId: number): void {
   )
 }
 
-async function save(questionId: number): Promise<void> {
+function save(questionId: number): Promise<void> {
+  const task = doSave(questionId)
+  inFlight.add(task)
+  void task.finally(() => inFlight.delete(task))
+  return task
+}
+
+async function doSave(questionId: number): Promise<void> {
   if (!canEdit.value) return
   saveState.value = 'saving'
   try {
@@ -233,6 +241,8 @@ async function onSubmit(): Promise<void> {
   submitting.value = true
   try {
     await flushSaves()
+    // 已在路上的自动保存也要等完，避免 PUT 晚于交卷到达被 409 拒绝。
+    if (inFlight.size > 0) await Promise.all([...inFlight])
     const result = await submitPaper(paperId.value, {
       items: items.value.map((item) => ({
         question_id: item.question_id,
