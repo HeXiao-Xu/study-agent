@@ -5,8 +5,9 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）
-- 最近完成：S4-8 错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5 首卡 S5-1 组卷算法内核已交付**（纯函数，无表、无接口）
+- 最近完成：S5-1 组卷算法内核（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 五个纯函数 + 7 个数据类，不碰库）；新增 `backend/tests/test_paper.py` 62 条纯函数用例，后端 **1263 passed, 1 warning**（S4-8 基线 1201）
+- 上一完成（S4-8）：错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
 - 关键口径（S4-4）：只手动触发、一次固定 3 道；三分工（生成 → 只给题干的独立复算 → 纯函数比对），**不设第三个 LLM 判官**；最多 2 轮 / 12 次调用；结果写 `similar_questions_json`（v1、覆盖式、无迁移）；**不自动入库**，逐题 accept 才建题（`origin=ai`、`verified=false`、`tags=["AI变式"]`）；生成彻底失败 → 任务 `failed` 且旧 JSON 不动（D-047）
 - 关键口径（S4-5）：`contains` 结构边（107 条，自动 `approved`）+ `prerequisite`（向量 top-8 候选 + 每节点一次 LLM，≤2 条）+ `related`/`confusable`（余弦分档 + 批量复核）；**AI 边一律 `pending`**，`rejected` 当墓碑不复活、`approved` 永不降级；单次构建 ≤180 次调用、超时 1800 s；候选排除同名/祖先-后代对，前置还拦反向对（D-048）
@@ -17,6 +18,8 @@
 - 验收（S4-7，真机）：学生 50 共 34 条错题、3 条挂知识点（5 个 KP），`recompute` → `events_replayed=5 / rows_built=5 / skipped_no_kp=31`，跑两次一致；全 `待订正` 回放得 `M=0 / S=1.0 / interval=1 天`；复习 61 号（d=2）答对 → KP197 `M 0→0.175`、`S=1.8`，再答错 → `0.144`、`S=1.0`；复习 47 号（d=1）一次扇出 3 个 KP 各 `0.35`；快照 108 节点中 5 个有值、103 个 `null`（108 节点/264 边/287 ms）；教师/未登录分别 403/401。详见 `.sdd/s4-7/acceptance-evidence.md`
 - 关键口径（S4-8）：看板**新开** `GET /api/v1/stats/overview`（`range=7d|30d|90d`，默认 30d，仅 student 仅本人），不动 S4-2 的 `/mistakes/stats`（错题页继续用那三条小统计）；窗口按 `mistakes.created_at` 落在 `[今天-N+1 天 00:00 UTC, 现在]`，四块同窗口；`by_status` 恒 3 行补 0、`by_cause` 按 `count DESC, cause_type ASC`、`top_kps` 最多 10 条带折算 `M_t`（无行 `null`）；`trend` 按天补零，`mastered` 是**回算累计**（当前状态=已掌握 且 `last_review_at` 不晚于当天，窗口前的计入起点，不是历史快照，状态回退会让历史曲线变低）；`analyzed`/`with_kp`/`mastery_rows` 是解释性数字（解释 TOP 柱为什么少）；前端图表逻辑全在 `views/stats/useStatsCharts.ts` 纯函数里，掌握度四色提炼到 `web/src/utils/masteryColor.ts`（与图谱共用）（D-051）
 - 验收（S4-8，真机 + 真浏览器）：学生 50 → `34/33/1/0/34/3/5`，`by_cause` 7 类合计 34，`top_kps` 5 条各 1（`mastery` 0.347/0.000/0.347/0.141/0.347），`trend` 30 点只有 11-03（34）非零；与 `/mistakes/stats` 的 total/by_status/by_cause/top_kps 逐项一致；7d/90d 分别 7/90 点；教师 403、`range=abc` 422、无 token 401；Chrome headless（CDP，未加依赖）实测三块画布 521×260/521×260/1088×260 均有像素、切 7d/90d 后窗口与折线随动（趋势画布非空像素 20133→46536→16879）；空账号（`s43_edge_other`）显示「窗口内没有错题」且 canvas 数 0。验收中抓到并修掉两个真机缺陷：`date_trunc` 参数化触发 PG `GroupingError`（改 `literal_column("'day'")` + 编译期断言）、切窗口后骨架屏重建 DOM 导致画布清零（改为每次加载后重绑 ECharts 实例 + 回归用例）。详见 `.sdd/s4-8/acceptance-evidence.md`
+- 关键口径（S5-1）：题型固定分值 `{"单选":3,"多选":4,"填空":4,"解答":8}`（`questions` 无分值列），总分 = 题型计数 × 分值；容差 `max(1, ceil(target×5%))`，超差在题型计数 ±1 邻域搜索（改动量 → 偏差 → 字典序）；三份配额「原始 `quota_*`（alloc，判 shortage）+ 借位后 `target_*`（只给贪心）」分离，难度缺口借相邻难度、kp 缺口借富余最多者；掌握度 `<0.5 → d2` / `>0.8 → d5` / 其余（含未评估）`d3`，候选掌握度按 `question_kps.weight` 加权、缺行用中性 0.5；四维权重 0.35/0.30/0.20/0.15；贪心无回溯，同种子同结果且与候选输入顺序无关；violation 严格按 QTYPE → DIFFICULTY → KP → TOTAL_SCORE 顺序，题库为空早返 `NO_CANDIDATES`（D-058）
+- 验收（S5-1，真实题库 + 构造）：`check_services.py` 3/3；真实库 56 题仅 25 题挂知识点、排除 14 天内做过剩 19 题可用，6 个高频 kp 范围内只剩 9 题 → 12 组约束里 **11 组如实报 shortage**（含 d5 0/5、多选 0/2、总分 200 不可达），**1 组 `ok=True`**（kp=117 的 3 题卷 24/24）；构造「10 题全部 3 天前做过」→ `NO_CANDIDATES{excluded_recent:10}`；不变量（同参一致 / 逆序一致 / 四项 ∈ [0,1] / total = 加权和 / 排序 / kp 归属）全部实测通过。另发现贪心无回溯在第 12 组少选 1 题（穷举证明两维配额下存在 10 题可行组合，但该组 kp 配额本身不可满足，结论不变）。详见 `.sdd/s5-1/acceptance-evidence.md`
 - 模拟（S4-7，`scripts/mastery_sim.py`）：7 天对/错/对/对/错/对/对 → `M 0.117→0.427`、`S 3.60→9.47`、间隔 `1→4 天`；敏感性 3×3（K0 0.25/0.35/0.45 × 倍率 1.5/1.8/2.1）连对 5 次后 `M` 只随 K0 变、间隔随倍率单调变长
 - 小修（2026-11-05，侧栏导航）：去掉导航项前的 `01/02/…` 序号（用户要求），`layouts/nav.ts` 的 `NavItem` 删掉 `index` 字段、`SideNav.vue` 去掉序号 span 与样式；真机实测 9 项文本为「笔记 / 文件 / 知识库 / 题库 / 智能问答 / 错题本 / 复习计划 / 图谱 / 统计」，`.nav-index` 节点 0 个。前端 **267 passed / 43 files**，`npm run build` 退出 0（D-057）
 - 修复（2026-11-05，S4-8 错因饼图撞色）：6 类错因以前按「名字哈希取 6 色」分配，实测被压成 3 种颜色（概念不清/时间不足 同红、计算失误/审题偏差 同橙、知识遗忘/方法不当 同绿）；改为**按枚举一一固定配色**（概念不清红/计算失误黄/知识遗忘紫/方法不当蓝/时间不足青/审题偏差橙/unknown 灰），并让 `legend.data` 显式带 `itemStyle` 与扇形同色；真机像素采样确认 7 个扇形 7 种颜色。前端 **266 passed / 43 files**，`npm run build` 退出 0（D-056）
@@ -24,7 +27,7 @@
 - 小修（2026-11-05，S4-1 题库列表可读性）：删掉无意义的「ID」列（详情面板头部本来就有 `题目 #47`），题干列前加归属徽标——自己导入的蓝 `我的`、别人导入的灰 `他人`（真机 55 题：34 我的 / 21 他人，与 `created_by` 分布一致）；「来源」列名改为「答案来源」（它显示的是 `verified`：`卷面` / `AI/无`，原列名与含义不符）。前端 **260 passed / 43 files**，`npm run build` 退出 0（D-053）
 - 小修（2026-11-05，S4-1/S4-2 列表公式显示）：题干里的 `$…$` 以前在列表里裸露（`$\log_a 5>\log_a 7$`），现在三处列表（题库审题页、错题列表、错题选题弹窗）统一走 `components/common/MathText.vue` + `utils/mathText.ts`（KaTeX 行内渲染、非公式片段 HTML 转义、写坏的公式退化成原文、列表 CSS 两行截断不切公式）；新增 13 条纯函数/组件用例 + 2 条列表回归断言，前端 **258 passed / 43 files**，`npm run build` 退出 0（D-052）
 - 已知限制（2026-11-05 实测，决定**不修**）：43 道解答题里 34 道没挂知识点。查过原因：不是漏跑，是 LLM 判「候选里没有够像的」；考纲 108 个知识点本身缺条目（无定积分、无乘法公式），这 34 道又多是短算式题。试算「取向量最接近的一律挂上」的结果：top1 余弦中位 0.552，且 top1-top2 差距普遍 <0.02（排名不稳定），抽看 12 条约 4 对 8 错——错标签会污染掌握度/看板 TOP10/复习推荐且用户难发现，因此**保留空标签**；若以后要救，口径是「cos≥0.55 且 gap≥0.02 才自动挂 + 标 inferred + 人工快捷入口」，见 D-054
-- 下一步：阶段 5 组卷与复习计划（S5-1 起）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：S5-2 组卷 API + 预览页（落 `papers` 表、把 `violations` 原样透出、支持「换一批/降题量」）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -85,7 +88,7 @@
 - [x] S4-8 错题统计看板
 
 ### 阶段 5：练习与复习（M4）
-- [ ] S5-1 组卷算法 + 单测 ★
+- [x] S5-1 组卷算法 + 单测 ★
 - [ ] S5-2 组卷 API + 预览页
 - [ ] S5-3 PDF 导出
 - [ ] S5-4 在线作答与掌握度回写
@@ -205,8 +208,16 @@
 | 95 | 变式题的「同解不同写法」会被判不一致而丢弃（`m=3` vs `3`、`\pm4` vs `b=-4或b=4`），代价是偶尔少一道变式（S4-4） | 自动重生成补位，不影响正确性，但通过率偏低 | 需要时给 `compare.match_answers` 加「变量前缀」归一（如 `x=`、`m=` 统一剥掉）并补测试 |
 | 96 | 生成与复算可能犯同一个错，比对一致但答案错（S4-4 实测 m=44 变式2、m=48 变式1） | 自检机制无法自证数学正确，靠逐题人工确认兜底 | 若需更强保证，只能引入独立来源（教材答案库/教师审核流），成本高 |
 | 97 | 变式题一次固定 3 道、不可指定数量/题型，也不生成需要画图的题（S4-4） | 少数知识点（几何作图）出不了变式 | 需求出现时扩参数 |
+| 98 | 组卷可用池太小：真实库 56 题只有 25 题挂知识点、排除 14 天内做过剩 19 题，6 个高频 kp 范围内只有 9 题（S5-1） | 20 题标准卷在真实数据上必然 shortage；第 12 组贪心还因无回溯少选 1 题 | 先补 `question_kps` 覆盖（S4-1 导入/人工确认入口），S5-2 透出 violations 并支持换题；不引入黑盒求解器 |
 
 ## 变更日志
+
+### 2026-11-13（S5-1）
+- S5-1 完成（按 §10 全流程：spec `docs/spec/s5-1-paper-planning.md` + plan `docs/plan/s5-1-paper-planning.md`，均经用户确认）。交付：`services/paper_service.py`（`prepare_pool` / `allocate_quotas` / `score_parts` / `select_items` / `plan_paper` 五个纯函数 + `PaperConstraints` 等 7 个数据类 + `PaperPlanError`）、`tests/test_paper.py` 62 条用例。**不建表、不加接口、不加依赖、不改迁移**（spec 明示 S5-2 才落 `papers`）。
+- 拍板（D-058）：题型固定分 `3/4/4/8`（总分是题型计数的函数）；容差 ±5%（最少 1 分），超差靠题型计数 ±1 邻域搜索；`quota_*`（原始配比，判 violation）与 `target_*`（借位后，贪心用）双配额；掌握度 `<0.5 → d2 / >0.8 → d5 / 其余 → d3`，未评估按中性 0.5；贪心 + 种子、无回溯（spec §7 已知）；四类 shortage 顺序固定，题库为空早返 `NO_CANDIDATES`。
+- 测试：`pytest tests/test_paper.py -q` → **62 passed**；`pytest -q` → **1263 passed, 1 warning**（S4-8 基线 1201）。
+- 真实验收（`.sdd/s5-1/acceptance-evidence.md`，真实 PG16 + 56 题题库 + user 50）：12 组约束 11 组如实报缺口、1 组满分达标（kp=117、3 题、24/24）；构造「全部近期做过」→ `NO_CANDIDATES`；同参/逆序复现、打分区间、加权和、排序、kp 归属六项不变量实测通过。**如实记录**：真实库 19 题可用 → 20 题卷做不出来，根因是知识点覆盖（25/56 题挂 kp），不是算法；贪心第 12 组少选 1 题属已知局限。
+- 文档同步：`PROGRESS.md`、`DECISIONS.md` D-058、`AGENTS.md` §9.6 组卷锚点、`AI协作开发实施计划.md` S5-1 勾选；无接口/无表/无配置/无依赖变更。
 
 ### 2026-11-04（S4-4）
 - S4-4 完成（按 §10 全流程：spec `docs/spec/s4-4-variant-generation.md` + plan `docs/plan/s4-4-variant-generation.md`，均经用户确认）。交付：`ai/gen/{compare,variant_generator,variant_verifier,json_repair,quality}.py`（确定性比对 / 生成 / 独立复算 / JSON 兜底修复 / 质量护栏）、`ai/prompts/question_gen_v1.md` + `question_verify_v1.md`、`services/question_gen_service.py`（上下文拼装、入队、编排、自检、入库）、`tasks/generate_variants.py`（`mistake.variants`）、`api/v1/mistakes.py` 新增 `POST /{id}/variants`（202）与 `POST /{id}/variants/{variant_id}/accept`（200）、`schemas/mistake.py` DTO 扩展、`services/mistake_service.py` 读侧展平 `self_check` 并输出 `similar_questions` / `variants_stats`；前端 `MistakeDetailView.vue` 变式题区（生成/轮询/逐题入库/重新生成）+ `types`/`api` 扩展。
