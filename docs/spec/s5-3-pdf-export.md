@@ -172,13 +172,13 @@ export async function exportPaperPdf(
 ### 后端 `tests/test_pdf_api.py`（TestClient + fake renderer）
 
 10. `test_export_requires_login_returns_401`。
-10. `test_export_forbids_other_user_returns_403`。
-11. `test_export_missing_paper_returns_404`。
-12. `test_export_empty_paper_returns_409`。
-13. `test_export_questions_returns_pdf_bytes`：200、`content-type=application/pdf`、`%PDF` 开头、`Content-Disposition` 含 RFC 5987 文件名。
-14. `test_export_answers_returns_filename_with_answer_label`。
-15. `test_export_invalid_variant_returns_422`。
-16. `test_export_renderer_error_returns_500`。
+11. `test_export_forbids_other_user_returns_403`。
+12. `test_export_missing_paper_returns_404`。
+13. `test_export_empty_paper_returns_409`。
+14. `test_export_questions_returns_pdf_bytes`：200、`content-type=application/pdf`、`%PDF` 开头、`Content-Disposition` 含 RFC 5987 文件名。
+15. `test_export_answers_returns_filename_with_answer_label`。
+16. `test_export_invalid_variant_returns_422`。
+17. `test_export_renderer_error_returns_500`。
 
 ### 前端
 
