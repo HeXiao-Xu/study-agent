@@ -890,10 +890,62 @@
 - 出参：`application/pdf` 字节流（**不套 Envelope**）；`Content-Disposition` 同时给 ASCII 名 `paper-{id}-{variant}.pdf` 与 RFC 5987 中文名 `{标题}-题干卷.pdf` / `{标题}-答案卷.pdf`
 - 说明：实时渲染、不落库不缓存；题干卷单选/填空留 2 行、解答留 60mm，答案卷给题干 + 答案 + 解析；题干先 HTML 转义再由 KaTeX 渲染 `$...$`
 
-### POST /api/v1/answers
-- 权限：student
-- 类型：同步
-- 说明：提交作答 → 回写掌握度（方案 6.6；S5-4 实现，入参/出参 TODO）
+### GET /api/v1/papers/{id}/answers
+- 权限：student（本人）；不存在 404/40400，别人的 403/40300
+- 类型：同步 200；用于中断续答，`已提交` 卷也可读（只读复习）
+- 出参：
+
+  | 字段 | 类型 | 说明 |
+  |---|---|---|
+  | paper | object | `{id, title, status, total_score}` |
+  | items | array | 按卷面顺序，每题一条；未答占位 `saved=false` |
+  | items[].question_id | int | 题目 id |
+  | items[].user_answer_md | string? | 已保存作答 |
+  | items[].self_rated | number? | 已保存自评 0 / 0.5 / 1 |
+  | items[].is_correct | bool? | 交卷后才有 |
+  | items[].score | number? | 交卷后才有；半对是 `.50` 小数 |
+  | items[].time_spent_sec | int? | 已保存用时 |
+  | items[].saved | bool | 是否有 `answers` 行 |
+  | submitted | bool | `status == 已提交` |
+  | earned_score | number? | 已判分行的得分合计；未交卷为 0.0 |
+
+### PUT /api/v1/papers/{id}/answers/{question_id}
+- 权限：student（本人）；不存在 404/40400，别人的 403/40300
+- 类型：同步 200；**只写草稿、不判分**
+- 入参：`user_answer_md`（≤20000，可空表示清空）、`time_spent_sec`（0–86400，可空）
+- 行为：按 `(user_id, paper_id, question_id)` 部分唯一索引 upsert；同题反复保存只保留一行
+- 错误：试卷已提交 409/40900（`试卷已提交，不能再修改答案`）；题目不属于该试卷 404/40400
+- 出参：与 `items[]` 单行同构（`saved=true`）
+
+### POST /api/v1/papers/{id}/submit
+- 权限：student（本人）；不存在 404/40400，别人的 403/40300
+- 类型：同步 200；**判分 + 写掌握度 + 错题 + 置已提交，单事务**
+- 入参：
+
+  | 字段 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | items | array | 是 | 1–200 条，必须覆盖卷面全部题（缺题 422/42200） |
+  | items[].question_id | int | 是 | 必须属于该试卷（否则 422/42200） |
+  | items[].user_answer_md | string? | 否 | ≤20000 |
+  | items[].self_rated | number? | 条件 | 填空/解答必填，只能是 0 / 0.5 / 1（否则 422/42200） |
+  | items[].time_spent_sec | int? | 否 | 0–86400 |
+
+- 判分：单选/多选自动（字母集合比较，全半角/大小写/顺序/分隔符不敏感）；填空/解答按自评 `score = 题分 × self_rated`；`is_correct = (self_rated == 1)`。客观题落 `self_rated=1/0`。
+- 错误：已提交重复交卷 409/40900（`试卷已提交，请勿重复交卷`）；有未自评 409/40900（`还有 N 道题未自评`）。
+- 出参：
+
+  | 字段 | 类型 | 说明 |
+  |---|---|---|
+  | paper_id | int | |
+  | score / total_score | number / int | 得分 / 卷面总分 |
+  | correct_count / question_count | int | 满分题数 / 题数 |
+  | elapsed_sec | int | 各题 `time_spent_sec` 之和 |
+  | items | array | 每题 `{question_id,qtype,is_correct,score,self_rated,user_answer_md}` |
+  | mastery | array | 每 kp `{kp_id,kp_name,mastery_before,mastery_after,attempts_delta}`；无既有行时 `mastery_before=null`（未评估） |
+  | mistake_question_ids | int[] | 非满分且有作答、本次写入/复用的错题 |
+  | missing_question_ids | int[] | 卷面中被硬删的题（跳过判分） |
+
+- 备注：掌握度复用 S4-7 `record_attempts`（`K0=0.35`，`K_eff=K0/难度`）；错题复用 `(user_id, question_id)` 唯一行并重置 `待订正`、streak=0；不自动触发错因诊断（归 S4-3 手动/异步）；交卷后试卷只读，不做重做。
 
 ## 9. 复习与报告
 

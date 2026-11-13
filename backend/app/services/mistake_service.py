@@ -180,6 +180,41 @@ def _reset_reentry(mistake: Mistake, *, my_answer_md: str | None, answer: str | 
         mistake.correct_answer_md = answer
 
 
+def record_wrong_answer(
+    session: Session,
+    *,
+    user_id: int,
+    question_id: int,
+    my_answer_md: str | None,
+    correct_answer_md: str | None = None,
+) -> Mistake:
+    """交卷时把「非满分且有作答」的题写进错题本：复用并重置，只 flush 不 commit。
+
+    与 `create_from_question` 的区别：不查题、不入队错因诊断、不提交事务——
+    交卷是一个整体事务（S5-4 D-3/D-4）。
+    """
+    existing = session.scalar(
+        select(Mistake).where(
+            Mistake.user_id == user_id, Mistake.question_id == question_id
+        )
+    )
+    if existing is not None:
+        _reset_reentry(existing, my_answer_md=my_answer_md, answer=correct_answer_md)
+        session.flush()
+        return existing
+    mistake = Mistake(
+        user_id=user_id,
+        question_id=question_id,
+        my_answer_md=my_answer_md,
+        correct_answer_md=correct_answer_md,
+        status=MistakeStatus.TODO.value,
+        correct_streak=0,
+    )
+    session.add(mistake)
+    session.flush()
+    return mistake
+
+
 def _detail(session: Session, *, mistake: Mistake) -> MistakeDetailOut:
     question = session.get(Question, mistake.question_id)
     if question is None:

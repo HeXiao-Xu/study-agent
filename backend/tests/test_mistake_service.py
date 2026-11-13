@@ -474,3 +474,37 @@ def test_list_mistakes_empty_page_skips_batch_queries(monkeypatch):
     # 空页没有 id 可批查，KP 与诊断两条 IN 查询都不该发出。
     assert session.execute_statements == []
     assert session.rows_results == [[(65, "不该被查")]]
+
+
+def test_record_wrong_answer_creates_row_without_commit():
+    session = FakeSession(scalar_results=[None])
+    mistake = mistake_service.record_wrong_answer(
+        session,
+        user_id=1,
+        question_id=65,
+        my_answer_md="B",
+        correct_answer_md="A",
+    )
+    assert mistake in session.added
+    assert mistake.status == MistakeStatus.TODO.value
+    assert mistake.correct_streak == 0
+    assert mistake.my_answer_md == "B"
+    assert mistake.correct_answer_md == "A"
+    assert session.commits == 0, "交卷事务由调用方统一提交"
+
+
+def test_record_wrong_answer_reuses_and_resets_without_losing_image():
+    reviewed_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    existing = _mistake(status="已掌握", streak=3, last_review_at=reviewed_at)
+    existing.image_file_id = 9
+    session = FakeSession(scalar_results=[existing])
+    mistake = mistake_service.record_wrong_answer(
+        session, user_id=1, question_id=65, my_answer_md="C"
+    )
+    assert mistake is existing
+    assert existing.status == MistakeStatus.TODO.value
+    assert existing.correct_streak == 0
+    assert existing.my_answer_md == "C"
+    assert existing.image_file_id == 9
+    assert existing.last_review_at == reviewed_at
+    assert session.commits == 0

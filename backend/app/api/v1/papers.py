@@ -12,6 +12,13 @@ from app.api.deps import get_db
 from app.core.context import get_trace_id
 from app.core.permissions import require_role
 from app.models.user import User
+from app.schemas.answer import (
+    AnswerRowOut,
+    AnswerSaveIn,
+    AnswerSubmitIn,
+    PaperAnswersOut,
+    PaperSubmitOut,
+)
 from app.schemas.common import Envelope
 from app.schemas.paper import (
     PaperDetailOut,
@@ -22,7 +29,7 @@ from app.schemas.paper import (
     PaperReplaceOut,
     PaperSaveIn,
 )
-from app.services import paper_plan_service, pdf_service
+from app.services import answer_service, paper_plan_service, pdf_service
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -102,4 +109,49 @@ def read_paper(
 ) -> Envelope[PaperDetailOut]:
     """读本人试卷；顺序就是保存时数组的顺序。"""
     data = paper_plan_service.get_paper(session, user_id=user.id, paper_id=paper_id)
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.get("/{paper_id}/answers", response_model=Envelope[PaperAnswersOut])
+def read_paper_answers(
+    paper_id: int,
+    session: Session = Depends(get_db),
+    user: User = Depends(require_role("student")),
+) -> Envelope[PaperAnswersOut]:
+    """续答：返回卷面顺序的草稿；未答的题给 saved=false 占位。"""
+    data = answer_service.get_answers(session, user_id=user.id, paper_id=paper_id)
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.put("/{paper_id}/answers/{question_id}", response_model=Envelope[AnswerRowOut])
+def save_paper_answer(
+    paper_id: int,
+    question_id: int,
+    payload: AnswerSaveIn,
+    session: Session = Depends(get_db),
+    user: User = Depends(require_role("student")),
+) -> Envelope[AnswerRowOut]:
+    """自动保存单题草稿；只写不判分，交卷前可反复覆盖。"""
+    data = answer_service.save_answer(
+        session,
+        user_id=user.id,
+        paper_id=paper_id,
+        question_id=question_id,
+        payload=payload,
+    )
+    session.commit()
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.post("/{paper_id}/submit", response_model=Envelope[PaperSubmitOut])
+def submit_paper(
+    paper_id: int,
+    payload: AnswerSubmitIn,
+    session: Session = Depends(get_db),
+    user: User = Depends(require_role("student")),
+) -> Envelope[PaperSubmitOut]:
+    """交卷：判分、写答案/掌握度/错题、置已提交，全部在一个事务里。"""
+    data = answer_service.submit_paper(
+        session, user_id=user.id, paper_id=paper_id, items=payload.items
+    )
     return Envelope(trace_id=get_trace_id(), data=data)
