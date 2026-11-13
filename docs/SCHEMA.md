@@ -373,7 +373,9 @@ erDiagram
 
 > S5-2 落地：`total_score` 用 INTEGER 而非 NUMERIC——题分是整数（3/4/4/8），求和即整数，避免 Decimal 噪音（AGENTS §9.2）。索引 `ix_papers_user_id`；迁移 `0014_s5_2`；`question_ids` 的数组顺序就是卷面顺序。
 
-#> PDF 导出（S5-3）不落库、不缓存文件：每次按 `question_ids` 顺序实时渲染，缺题跳过并在 `missing_question_ids` 体现（与 `GET /papers/{id}` 一致）。
+> PDF 导出（S5-3）不落库、不缓存文件：每次按 `question_ids` 顺序实时渲染，缺题跳过并在 `missing_question_ids` 体现（与 `GET /papers/{id}` 一致）。
+>
+> 交卷（S5-4）：`POST /papers/{id}/submit` 成功后 `status` 由 `草稿/已生成` 变 `已提交`；已提交只读，重复交卷 409。
 
 ## 6.2 answers
 
@@ -385,10 +387,12 @@ erDiagram
 | paper_id | BIGINT | 是 | — | 所属试卷（非组卷练习为 NULL） | — |
 | user_answer_md | TEXT | 是 | — | 作答内容 | — |
 | is_correct | BOOLEAN | 是 | — | 判定结果 | — |
-| score | NUMERIC | 是 | — | 得分 | — |
-| self_rated | NUMERIC | 是 | — | 自评 0 / 0.5 / 1（掌握度更新输入 s，方案 6.6） | — |
+| score | NUMERIC(6,2) | 是 | — | 得分（半对会有 .50） | — |
+| self_rated | NUMERIC(2,1) | 是 | — | 自评 0 / 0.5 / 1（掌握度更新输入 s，方案 6.6） | — |
 | time_spent_sec | INTEGER | 是 | — | 用时（秒） | — |
 | created_at | TIMESTAMPTZ | 否 | now() | | — |
+
+> S5-4 落地：`score` 定为 `NUMERIC(6,2)`（半对会产生 2.50，是「分数用整数」的明确例外）；`self_rated` CHECK `(0, 0.5, 1)`；`ck_answers_score_nonneg` / `ck_answers_time_nonneg`；外键 `users.id CASCADE`、`questions.id RESTRICT`、`papers.id CASCADE`；部分唯一索引 `uq_answers_user_paper_question(user_id, paper_id, question_id) WHERE paper_id IS NOT NULL` 支撑自动保存 upsert；迁移 `0015_s5_4`。`paper_id IS NULL` 的非试卷练习不参与唯一（留给后续卡）。
 
 ### 6.3 mastery
 
