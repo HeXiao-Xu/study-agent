@@ -76,6 +76,12 @@ const router = createRouter({
           meta: { title: '导入试卷', nav: 'questions' },
         },
         {
+          path: 'papers/generate',
+          name: 'paper-generate',
+          component: () => import('@/views/papers/Generate.vue'),
+          meta: { title: '组卷', nav: 'papers', roles: ['student'] },
+        },
+        {
           path: 'qa',
           name: 'qa',
           component: () => import('@/views/qa/Chat.vue'),

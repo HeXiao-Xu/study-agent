@@ -58,13 +58,15 @@ describe('MainLayout', () => {
 
   it('renders nine nav items', async () => {
     const { wrapper } = await mountLayout()
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(9)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(10)
   })
 
   it('导航项不再显示 01/02 这类序号', async () => {
     const { wrapper } = await mountLayout()
     const links = wrapper.findAll('[data-testid="nav-link"]')
     expect(links[0]!.text()).toBe('笔记')
+    expect(links[3]!.text()).toBe('题库')
+    expect(links[4]!.text()).toBe('组卷')
     expect(links[0]!.find('.nav-index').exists()).toBe(false)
     expect(links.map((link) => link.text())).not.toContain('01')
   })
