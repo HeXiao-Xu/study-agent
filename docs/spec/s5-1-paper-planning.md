@@ -117,6 +117,18 @@ class PaperItem:
     parts: ScoreParts
 
 @dataclass(frozen=True, slots=True)
+class QuotaPlan:
+    quota_by_qtype: dict[str, int]         # 最终题型计数（含 3.2 邻域调整）
+    quota_by_difficulty: dict[int, int]    # 原始难度配额（借位前）
+    quota_by_kp: dict[int, int]            # 原始 kp 配额（借位前）
+    target_by_difficulty: dict[int, int]   # 借位后的贪心目标
+    target_by_kp: dict[int, int]
+    base_total_score: int                  # 按 quota_by_qtype 算出的总分
+    score_out_of_tolerance: bool           # 3.2 邻域搜索是否无解
+    tolerance: int
+    warnings: tuple[str, ...]
+
+@dataclass(frozen=True, slots=True)
 class Violation:
     code: str          # 见 4.6
     message: str       # 给人看的一句话
@@ -168,7 +180,7 @@ class PaperPlan:
 - `alloc` = **原始配额**，只用于报告与 violation 判定（见 4.6）
 - `target` = **贪心用目标**，初始化等于 `alloc`，只做缺口借位
 
-**借位规则**：某 kp 的可用候选数 < `target[kp]` 时，缺口按「其他 kp 的富余容量」（`可用候选数 − target` 的正值部分）比例重分配，只改 `target`，不改 `alloc`；难度档同理（缺口优先借给 |d−d′| 最小的相邻难度，再按富余容量比例）。借位**不改变总题量**，也不在这里记 violation——缺口最终由 4.6 用 `alloc` 比对自动报出。
+**借位规则**：某 kp 的可用候选数 < `target[kp]` 时，缺口按「其他 kp 的富余容量」（`可用候选数 − target` 的正值部分）**从大到小逐个借 1 题**（同容量按 `kp_ids` 顺序），只改 `target`，不改 `alloc`；难度档同理，但缺口**优先借给 |d−d′| 最小的相邻难度**（同距离按富余容量从大到小、再按难度升序）。借位**不改变总题量**（借不出去就保留缺口），也不在这里记 violation——缺口最终由 4.6 用 `alloc` 比对自动报出。
 
 ### 4.4 候选打分（四项加权，权重可配）
 
@@ -235,15 +247,29 @@ MASTERY_LOW, MASTERY_HIGH = 0.5, 0.8
 TARGET_DIFFICULTY = {low: 2, middle: 3, high: 5}
 SCORING_WEIGHTS = ScoringWeights()
 
+def prepare_pool(constraints, candidates, *, now) -> tuple[tuple[CandidateQuestion, ...], int]
+    # 去重（同 id 取首条）、校验题型/难度、过滤与约束 kp 无交集者、排除近期做过的
+    # 返回 (pool, excluded_recent)
+
+def largest_remainder(weights: Mapping[K, float], total: int) -> dict[K, int]
+
+def allocate_quotas(constraints, pool) -> QuotaPlan
+    # 题型/难度/kp 配额 + 总分邻域调整 + 缺口借位（只改 target_*）
+
 def difficulty_target(mastery: float | None) -> int
 def novelty_score(last_done_at: datetime | None, *, now: datetime) -> float
 def quality_score(*, verified: bool, origin: str) -> float
 def score_parts(*, candidate, constraints, mastery_by_kp, now) -> ScoreParts
-def largest_remainder(weights: Mapping[K, float], total: int) -> dict[K, int]
-def plan_paper(constraints, candidates, *, mastery_by_kp, now=None) -> PaperPlan
+def select_items(constraints, pool, quotas, *, mastery_by_kp, now) -> tuple[PaperItem, ...]
+    # 贪心选取 + 输出排序（题量可能 < total_questions）
+
+def plan_paper(constraints, candidates, *, mastery_by_kp=None, now=None) -> PaperPlan
+    # 校验 → prepare_pool → allocate_quotas → select_items → 汇总 counts/violations/warnings
 ```
 
 `now` 缺省 `datetime.now(timezone.utc)`；`now` 参与新颖度与近期排除，测试必须显式传入，保证可复现。
+
+分层约定：`prepare_pool` / `allocate_quotas` / `select_items` / `score_parts` 是**公开的中间层**（S5-2 预览页与单测都要单独用），`plan_paper` 只是把它们串起来；任何一层都不查库、不写库。
 
 ## 5. 测试设计（`backend/tests/test_paper.py`）
 
@@ -275,10 +301,10 @@ def plan_paper(constraints, candidates, *, mastery_by_kp, now=None) -> PaperPlan
 1. `cd backend && .venv/Scripts/python.exe -m pytest tests/test_paper.py -q` 全绿
 2. `cd backend && .venv/Scripts/python.exe -m pytest -q` 全量不回退（S4-8 基线 **1201 passed**）
 3. **10 份卷子人工检查**（临时脚本，不进仓库）：
-   - 题库候选池按 S4-1 文档记载的真实分布构造（单选 8 / 填空 4 / 解答 8、难度 1–3 为主、20 题挂 32 条知识点链接；2026-11-13 实测本机 Docker Desktop 未运行、PG 连接超时，**真实题库一轮在 Docker 起来后补**，证据里两种来源分开标注）
-   - 约束组合覆盖：20 题标准卷、10 题小卷、单 kp 卷、难度全 d=5（不可满足）、近期全做过（空卷）、题型配比极端（解答占 80%）
+   - 主数据源：**真实题库**（2026-11-13 实测：56 题 = 单选 8 / 填空 4 / 解答 44；难度 1:5、2:13、3:36、4:2、**无 5**；38 题挂 28 个知识点，另有 18 题无知识点）
+   - 约束组合覆盖：20 题标准卷、10 题小卷、单 kp 卷、**难度含 d=5（必然不可满足，验 `DIFFICULTY_SHORTAGE`）**、**题型含多选（题库 0 道，验 `QTYPE_SHORTAGE`）**、近期全做过（空卷）、题型配比极端（解答占 80%）
    - 逐卷检查：题量、题型/难度计数、总分是否在容差、kp 覆盖是否合理、排序是否像真卷、violation 文案是否说人话
-   - 输出与结论写 `.sdd/s5-1/acceptance-evidence.md`，**如实标注数据来源**
+   - 输出与结论写 `.sdd/s5-1/acceptance-evidence.md`，**如实标注数据来源**（真实库一轮 / 构造数据一轮分开写）
 4. 未覆盖就写「未覆盖」，不允许用「应该没问题」代替
 
 ## 7. 风险与已知限制
