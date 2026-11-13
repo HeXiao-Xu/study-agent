@@ -778,3 +778,17 @@
 - 决策 8（前端单页 + 默认折叠答案）：表单（学科/知识点树/题量/总分/时长/四题型配比/五档难度滑块/排除天数）+ 预览表同页；换题、删题、上下移只改本地卷面并实时重算显示总分；答案默认折叠，开关打开才显示答案/解析；保存用 `ElMessageBox.prompt` 填标题。
 - 验证：后端 1298 passed（新增迁移 6 / 服务 18 / 接口 11）；前端 282 passed / 45 files，`npm run build` 退出 0。真机：20 题卷如实 shortage（8 题/55 分/14 条 violation），5 组可行配比全 `ok=true`，「解答 5 题」卷换题 3/3、保存/读回一致；Chrome CDP 实测生成→换题→保存（#6）。详见 `.sdd/s5-2/acceptance-evidence.md`。
 - 已知边界：勾选整棵树会得到 108 个 kp，超 `kp_ids ≤100` 的契约上限（会 422）；如需「全选」要另行确认放宽上限或前端分片。草稿无管理入口、读回无打分，均留后续卡。
+
+## D-060 PDF 导出管线（S5-3）
+
+- 背景：S5-2 的卷子只在库里，学生拿不到能打印的纸。本轮交付「保存后导出 A4 题干卷/答案卷」，任务卡明确要求 Playwright + Jinja2 + KaTeX 前端渲染 + pdfplumber 抽文字验收，且明确不用 WeasyPrint。
+- 决策 1（三层拆分）：`build_context`（纯函数，DTO → 模板上下文）→ `render_html`（Jinja2，转义 + KaTeX 占位）→ `render_pdf`（Playwright 打开本地 HTML、等 `window.__katexReady`、`page.pdf()`）。前两层可单测、不启浏览器；第三层通过 `export_pdf(renderer=...)` 注入，路由测试全 fake。
+- 决策 2（公式）：KaTeX 0.19.1 dist（css/js/auto-render/fonts）拷进 `backend/app/static/katex` 并进 git，模板用 `<base href="file:///.../static/">` + 相对路径加载；不走 CDN，保证离线/Docker 可用。升级时跑 `scripts/sync_katex.py`。
+- 决策 3（两卷）：同一接口 `GET /papers/{id}/export.pdf?variant=questions|answers`，默认题干卷；题干卷留白（单选/填空 2 行、解答 60mm），答案卷题干 + 答案 + 解析不留白；页眉左标题右卷别、页脚「第 X / Y 页」用 Playwright header/footer 模板。
+- 决策 4（线程模型，踩坑后定稿）：Playwright 同步对象有线程亲和性，模块级 browser 单例跨 FastAPI 线程池会炸；改为 `ThreadPoolExecutor(max_workers=1)` 单渲染线程独占 Playwright/Chromium，请求线程等 `future.result(40s)`，失败/超时整体重建 worker。代价是导出串行（单人场景够用），换来正确性。
+- 决策 5（失败语义）：空卷 409/40900（不导出空白页）；`variant` 非法 422/42200；渲染异常统一 `PdfRenderError` → 500/50000，日志带 trace_id，响应不回显浏览器路径/堆栈；PDF 字节流不套 `Envelope`。
+- 决策 6（不缓存/不落库）：每次按 `papers.question_ids` 顺序实时渲染；换题后立刻重导即最新；缺题跳过（与 `GET /papers/{id}` 一致），不在卷头提示。
+- 决策 7（资源与环境）：新增两个可选配置 `PLAYWRIGHT_BROWSERS_PATH`、`PDF_TMP_DIR`——Windows 开发机系统 temp 在沙箱下不可写（Node `EPERM mkdtemp`），指向仓库缓存；生产容器留空用默认路径，但**必须**预装 chromium 与 `fonts-noto-cjk`（阶段 7 Docker 化时落地，PROGRESS 待解决问题 101）。
+- 决策 8（前端）：保存成功后出现「导出题干卷 / 导出答案卷」，用保存返回 id 下载；浏览器读不到跨域 `Content-Disposition`，前端用 `试卷-{id}-{卷别}.pdf` 兜底；保存后再换题不更新已保存卷，旁边标注「导出的为已保存版本」。
+- 验证：后端 1315 passed（新增服务 9 / 接口 8），前端 285 passed / 45 files、build 0；真机导出 4 题/32 分卷：题干卷 2 页 55,465 B、答案卷 1 页 57,497 B，pdfplumber 抽到中文/题号/公式字形/页码；Chrome CDP 点按钮 5 秒下载两个中文名 PDF；401/404/422 真 HTTP，409/500 单测。详见 `.sdd/s5-3/acceptance-evidence.md`。
+- 已知边界：导出串行；Docker 字体/chromium 未装；不缓存；请求题数受真实题库限制（本次 5 题只出 4 题）。

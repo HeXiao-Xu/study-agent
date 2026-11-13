@@ -152,6 +152,7 @@ eval/{datasets,configs,results}
 - 变式题样例：backend/app/ai/gen/{compare,variant_generator,variant_verifier,json_repair,quality}.py + backend/app/services/question_gen_service.py + backend/app/tasks/generate_variants.py（三分工：生成只产出结构化题目、复算只给题干重新解题、比对是纯函数；`match_answers` 五级顺序与 1e-6 数值容差；版本化 JSONB `similar_questions_json` v1；accept 幂等靠 `accepted_question_id` + `stem_hash` 两道；handler 不 commit）
 - 组卷样例：backend/app/services/paper_service.py + backend/tests/test_paper.py（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 纯函数链、不碰库；`alloc` 判 shortage 报 violation、`target` 只做缺口借位；题型固定分 + 总分 ±5% 邻域搜索；同种子同候选集输出一致且与输入顺序无关；naive `now` 抛 `PaperPlanError`）
 - 组卷 API 样例：backend/app/api/v1/papers.py + backend/app/services/paper_plan_service.py + backend/app/models/paper.py + web/src/views/papers/Generate.vue（同步 4 接口；生成/换题不落库，保存才写 `papers`；换题同题型同难度优先、再同题型任意难度、否则 `replaced=false`；`question_ids` 数组顺序即卷面顺序；总分服务端按题型分值重算；读回缺题返 `missing_question_ids` 不 500；组卷页答案默认折叠）
+- PDF 导出样例：backend/app/services/pdf_service.py + backend/app/templates/paper_pdf.html + backend/app/static/katex（`build_context`/`render_html`/`build_header_footer` 纯函数、`render_pdf` 单渲染线程、`export_pdf` 注入 renderer；`variant=questions|answers`；空卷 409、渲染失败 500/50000；KaTeX 走本地静态资源；导出不落库不缓存）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）
