@@ -121,3 +121,21 @@ class CauseType(StrEnum):
 
 MISTAKE_STATUSES: tuple[str, ...] = tuple(item.value for item in MistakeStatus)
 CAUSE_TYPES: tuple[str, ...] = tuple(item.value for item in CauseType)
+
+class PaperStatus(StrEnum):
+    """papers.status：草稿 → 已生成 → 已提交（SCHEMA §10.9）。"""
+
+    DRAFT = "草稿"
+    GENERATED = "已生成"
+    SUBMITTED = "已提交"
+
+
+class PaperGeneratedBy(StrEnum):
+    """papers.generated_by：人工组卷 / Agent 组卷（SCHEMA §10.9）。"""
+
+    MANUAL = "manual"
+    AI_AGENT = "ai_agent"
+
+
+PAPER_STATUSES: tuple[str, ...] = tuple(item.value for item in PaperStatus)
+PAPER_GENERATED_BY: tuple[str, ...] = tuple(item.value for item in PaperGeneratedBy)

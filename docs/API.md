@@ -842,31 +842,56 @@
 
 ## 8. 组卷与作答
 
+> S5-2 定死：组卷是**同步接口**（纯函数 + 两次批量查询，毫秒级），不用异步任务。
+> 生成与换题**不写库**；只有 `POST /papers` 保存草稿时落 `papers` 表。
+
 ### POST /api/v1/papers/generate
 - 权限：student
-- 类型：异步任务 ⚠（TODO S5-2 定）
+- 类型：同步 200；**不写库**
 - 入参：
 
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
-  | kp_ids | array | 是 | 知识点覆盖清单 |
-  | qtype_ratio | object | 是 | 题型配比 |
-  | difficulty_dist | object | 是 | 难度分布（如 3:5:2） |
-  | total_score | number | 是 | 总分 |
+  | kp_ids | int[] | 是 | 知识点覆盖清单（1–100，去重） |
+  | total_questions | int | 是 | 题量（1–100） |
+  | qtype_ratio | object | 是 | 题型配比，键 ∈ 单选/多选/填空/解答，值 ≥0 且至少一个 >0 |
+  | difficulty_dist | object | 是 | 难度分布，键 ∈ 1–5，值 ≥0 且至少一个 >0 |
+  | total_score | int | 是 | 目标总分（1–300） |
+  | duration_min | int? | 否 | 时长，只回显/保存，不参与算法 |
+  | exclude_recent_days | int | 否 | 默认 14；0–365 |
+  | seed | int? | 否 | 不传则服务端随机并回显；同种子同候选集结果一致 |
+  | kp_weights | object? | 否 | 键 ⊆ kp_ids，值 >0 |
 
-- 出参：试卷 JSON + 预览（题干与答案分离，方案 6.5）
-- 备注：组卷为「约束满足 + 贪心打分」：掌握度 < 0.5 优先基础题、> 0.8 配难题、排除近 14 天做过的题
+- 出参：`constraint`（归一化回显，含 `score_by_qtype`）、`seed`、`ok`、`items[]`、`total_score`、`target_score`、`quota_by_*`、`counts_by_*`、`violations[]`、`warnings[]`。
+- `items[]` 每项：`question_id / qtype / difficulty / score / kp_ids / parts / subject_id / stem_md / options / answer_md / analysis_md / verified / origin`。
+- 题库不足：**200 + `ok=false`**，`violations` 逐条给出 QTYPE_SHORTAGE / DIFFICULTY_SHORTAGE / KP_SHORTAGE / TOTAL_SCORE_OUT_OF_TOLERANCE / NO_CANDIDATES；不抛 409。
+- 备注：组卷为「约束满足 + 贪心打分」：掌握度 < 0.5 优先基础题、> 0.8 配难题、排除近 14 天做过的题（算法见 S5-1 spec）。
+
+### POST /api/v1/papers/replace-item
+- 权限：student；同步 200；无状态、**不写库**
+- 入参：generate 的全部约束字段 + `selected_question_ids`（当前卷面全部题）+ `replace_question_id`
+- 规则：候选池重建后剔除已选与原题；先挑「同题型 + 同难度」最高分，再退「同题型任意难度」；没有则 `{replaced:false, item:null, reason}`（200）
+- 出参：`replaced`、`item`（null 或题目项）、`reason`
+
+### POST /api/v1/papers
+- 权限：student；201；保存草稿
+- 入参：`title`（1–100）、`constraint`（同 generate 约束）、`question_ids`（1–100、去重、必须存在）、`duration_min?`
+- 服务端：按 `question_ids` 重算 `total_score`；`status='草稿'`、`generated_by='manual'`
+- 出参：`id`、`title`、`status`、`total_score`、`duration_min`、`question_ids`、`created_at`
+
+### GET /api/v1/papers/{id}
+- 权限：student（本人）；不存在 404/40400，别人的 403/40300
+- 出参：papers 元信息 + `constraint_json` + `items[]`（按保存顺序，`parts=null`）+ `missing_question_ids`（题目被硬删时跳过）
 
 ### GET /api/v1/papers/{id}/export.pdf
 - 权限：student
-- 类型：同步（Playwright 渲染）
+- 类型：同步（Playwright 渲染，S5-3 实现）
 - 出参：PDF 下载
 
 ### POST /api/v1/answers
 - 权限：student
 - 类型：同步
-- 说明：提交作答 → 回写掌握度（方案 6.6：s = 1/0.5/0，K_eff = K0/difficulty，M ← clamp(M + K_eff·(s−M), 0, 1)；S 更新与 due_at 计算）
-- 入参/出参：TODO（S5-4）
+- 说明：提交作答 → 回写掌握度（方案 6.6；S5-4 实现，入参/出参 TODO）
 
 ## 9. 复习与报告
 

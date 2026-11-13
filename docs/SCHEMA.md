@@ -365,11 +365,13 @@ erDiagram
 | title | TEXT | 否 | — | 试卷标题 | — |
 | constraint_json | JSONB | 否 | — | 组卷约束（kp_ids/题型配比/难度分布/总分/时长/排除近期） | — |
 | question_ids | BIGINT[] ⚠ | 否 | — | 题目 ID 有序列表 | — |
-| total_score | NUMERIC | 否 | — | 总分 | — |
+| total_score | INTEGER | 否 | — | 总分（按题目分值表求和，整数） | — |
 | duration_min | INTEGER | 是 | — | 时长（分钟） | — |
 | status | TEXT | 否 | '草稿' | §10.9 | — |
 | generated_by | TEXT | 否 | — | manual / ai_agent | — |
 | created_at | TIMESTAMPTZ | 否 | now() | | — |
+
+> S5-2 落地：`total_score` 用 INTEGER 而非 NUMERIC——题分是整数（3/4/4/8），求和即整数，避免 Decimal 噪音（AGENTS §9.2）。索引 `ix_papers_user_id`；迁移 `0014_s5_2`；`question_ids` 的数组顺序就是卷面顺序。
 
 ### 6.2 answers
 

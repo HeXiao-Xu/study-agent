@@ -14,6 +14,7 @@ from app.models.mistake_analysis import MistakeAnalysis
 from app.models.note import Note
 from app.models.note_chunk import NoteChunk
 from app.models.note_kp import NoteKp
+from app.models.paper import Paper
 from app.models.prompt_template import PromptTemplate
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
@@ -37,6 +38,7 @@ __all__ = [
     "Note",
     "NoteChunk",
     "NoteKp",
+    "Paper",
     "PromptTemplate",
     "Question",
     "QuestionKp",
