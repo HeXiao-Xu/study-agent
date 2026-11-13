@@ -123,7 +123,7 @@ class QuotaPlan:
     quota_by_kp: dict[int, int]            # 原始 kp 配额（借位前）
     target_by_difficulty: dict[int, int]   # 借位后的贪心目标
     target_by_kp: dict[int, int]
-    base_total_score: int                  # 按 quota_by_qtype 算出的总分
+    planned_total_score: int               # 按最终题型计数算出的总分
     score_out_of_tolerance: bool           # 3.2 邻域搜索是否无解
     tolerance: int
     warnings: tuple[str, ...]
@@ -228,7 +228,7 @@ for _ in range(N):
 | `KP_SHORTAGE` | `counts_by_kp[kp] < alloc[kp]` | `{kp_id, need: alloc[kp], selected: 实选, available: 该 kp 可用候选数}` |
 | `QTYPE_SHORTAGE` | `counts_by_qtype[q] < alloc_qtype[q]` | `{qtype, need, selected, available}` |
 | `DIFFICULTY_SHORTAGE` | `counts_by_difficulty[d] < alloc_diff[d]` | `{difficulty, need, selected, available}` |
-| `TOTAL_SCORE_OUT_OF_TOLERANCE` | 3.2 邻域搜索无解 | `{target, achieved, tolerance, suggestion}` |
+| `TOTAL_SCORE_OUT_OF_TOLERANCE` | 3.2 邻域搜索无解 | `{target, achieved, tolerance, suggestion}`（`achieved` = `planned_total_score`） |
 
 - 三类 shortage 用同一套判定（实选 < 原始配额），不重复报；`available` 一律指**过滤后（含近期排除）**涉及该键的候选数
 - `ok = not violations`；`warnings` 只放「不构成约束不满足」的说明，本卡只有一条规则：某题型配比权重 > 0 但取整后分配 0 题 → `"题型「单选」按配比取整为 0 题"`；无 warning 时为 `()`
