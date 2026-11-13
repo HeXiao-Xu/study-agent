@@ -5,9 +5,10 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5 首卡 S5-1 组卷算法内核已交付**（纯函数，无表、无接口）
-- 最近完成：S5-1 组卷算法内核（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 五个纯函数 + 7 个数据类，不碰库）；新增 `backend/tests/test_paper.py` 62 条纯函数用例，后端 **1263 passed, 1 warning**（S4-8 基线 1201）
-- 上一完成（S4-8）：错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5：S5-1 组卷算法内核 + S5-2 组卷 API + 预览页已交付**（`papers` 表、4 个同步接口、`/papers/generate` 页面）
+- 最近完成：S5-2 组卷 API + 预览页（`papers` 表 + 迁移 `0014_s5_2`、4 个同步接口 `generate / replace-item / POST /papers 201 / GET {id}`、`services/paper_plan_service.py`、前端 `/papers/generate` 单页组卷）；后端 **1298 passed, 2 warnings**（S5-1 基线 1263），前端 **282 passed / 45 files**，`npm run build` 退出 0
+- 上一完成（S5-1）：组卷算法内核（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 五个纯函数 + 7 个数据类，不碰库）；新增 `backend/tests/test_paper.py` 62 条纯函数用例，后端 **1263 passed, 1 warning**（S4-8 基线 1201）
+- 更早（S4-8）：错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
 - 关键口径（S4-4）：只手动触发、一次固定 3 道；三分工（生成 → 只给题干的独立复算 → 纯函数比对），**不设第三个 LLM 判官**；最多 2 轮 / 12 次调用；结果写 `similar_questions_json`（v1、覆盖式、无迁移）；**不自动入库**，逐题 accept 才建题（`origin=ai`、`verified=false`、`tags=["AI变式"]`）；生成彻底失败 → 任务 `failed` 且旧 JSON 不动（D-047）
 - 关键口径（S4-5）：`contains` 结构边（107 条，自动 `approved`）+ `prerequisite`（向量 top-8 候选 + 每节点一次 LLM，≤2 条）+ `related`/`confusable`（余弦分档 + 批量复核）；**AI 边一律 `pending`**，`rejected` 当墓碑不复活、`approved` 永不降级；单次构建 ≤180 次调用、超时 1800 s；候选排除同名/祖先-后代对，前置还拦反向对（D-048）
@@ -19,6 +20,8 @@
 - 关键口径（S4-8）：看板**新开** `GET /api/v1/stats/overview`（`range=7d|30d|90d`，默认 30d，仅 student 仅本人），不动 S4-2 的 `/mistakes/stats`（错题页继续用那三条小统计）；窗口按 `mistakes.created_at` 落在 `[今天-N+1 天 00:00 UTC, 现在]`，四块同窗口；`by_status` 恒 3 行补 0、`by_cause` 按 `count DESC, cause_type ASC`、`top_kps` 最多 10 条带折算 `M_t`（无行 `null`）；`trend` 按天补零，`mastered` 是**回算累计**（当前状态=已掌握 且 `last_review_at` 不晚于当天，窗口前的计入起点，不是历史快照，状态回退会让历史曲线变低）；`analyzed`/`with_kp`/`mastery_rows` 是解释性数字（解释 TOP 柱为什么少）；前端图表逻辑全在 `views/stats/useStatsCharts.ts` 纯函数里，掌握度四色提炼到 `web/src/utils/masteryColor.ts`（与图谱共用）（D-051）
 - 验收（S4-8，真机 + 真浏览器）：学生 50 → `34/33/1/0/34/3/5`，`by_cause` 7 类合计 34，`top_kps` 5 条各 1（`mastery` 0.347/0.000/0.347/0.141/0.347），`trend` 30 点只有 11-03（34）非零；与 `/mistakes/stats` 的 total/by_status/by_cause/top_kps 逐项一致；7d/90d 分别 7/90 点；教师 403、`range=abc` 422、无 token 401；Chrome headless（CDP，未加依赖）实测三块画布 521×260/521×260/1088×260 均有像素、切 7d/90d 后窗口与折线随动（趋势画布非空像素 20133→46536→16879）；空账号（`s43_edge_other`）显示「窗口内没有错题」且 canvas 数 0。验收中抓到并修掉两个真机缺陷：`date_trunc` 参数化触发 PG `GroupingError`（改 `literal_column("'day'")` + 编译期断言）、切窗口后骨架屏重建 DOM 导致画布清零（改为每次加载后重绑 ECharts 实例 + 回归用例）。详见 `.sdd/s4-8/acceptance-evidence.md`
 - 关键口径（S5-1）：题型固定分值 `{"单选":3,"多选":4,"填空":4,"解答":8}`（`questions` 无分值列），总分 = 题型计数 × 分值；容差 `max(1, ceil(target×5%))`，超差在题型计数 ±1 邻域搜索（改动量 → 偏差 → 字典序）；三份配额「原始 `quota_*`（alloc，判 shortage）+ 借位后 `target_*`（只给贪心）」分离，难度缺口借相邻难度、kp 缺口借富余最多者；掌握度 `<0.5 → d2` / `>0.8 → d5` / 其余（含未评估）`d3`，候选掌握度按 `question_kps.weight` 加权、缺行用中性 0.5；四维权重 0.35/0.30/0.20/0.15；贪心无回溯，同种子同结果且与候选输入顺序无关；violation 严格按 QTYPE → DIFFICULTY → KP → TOTAL_SCORE 顺序，题库为空早返 `NO_CANDIDATES`（D-058）
+- 关键口径（S5-2）：组卷是**同步 4 接口**（`POST /papers/generate`、`POST /papers/replace-item`、`POST /papers` 201、`GET /papers/{id}`）；生成与换题**不写库**，只有保存落 `papers`；表按 SCHEMA 原样 10 列（`question_ids` 有序数组 + `constraint_json` + `total_score` INTEGER）；换题「同题型同难度最高分 → 同题型任意难度 → `replaced=false`」，不自动放宽题型；题库不足 **200 + `ok=false` + violations**（不 409）；总分由服务端按题型分值重算；读回 `parts=null`、被硬删的题进 `missing_question_ids`；组卷页单页完成「表单 → 预览 → 换题/删题/调序 → 保存」，答案默认折叠（D-059）
+- 验收（S5-2，真机 + 真浏览器）：后端 **1298 passed, 2 warnings**（S5-1 基线 1263 + 迁移 6 + 服务 18 + 接口 11），前端 **282 passed / 45 files**，`npm run build` 退出 0；真实库 56 题 / 25 题挂 kp / 排除 14 天剩 19 题（单选 5、填空 4、解答 10），任务卡原句「5 个 kp + 20 题」→ **200 `ok=false`、实出 8 题 / 55 分、14 条 violations**；可行配比 5 组全 `ok=true`（19/111、9/31、10/80、5/15、5/40），「解答 5 题」卷换 3 次全成功（58→117、60→58、59→60）、保存 201（id=4、40 分）、读回顺序一致且 `parts` 全 null；无 token 401、非法入参 422/42200、不存在 404/40400；Chrome headless（5173 + CDP）实测「函数」子树生成 2 行 / 11 分、换题成功 1 次、保存弹窗并落库 #6。**验收中发现并记录**：勾选整棵树（108 kp）会超 `kp_ids ≤100` 的入参上限（契约如此，未擅自放宽）。详见 `.sdd/s5-2/acceptance-evidence.md`
 - 验收（S5-1，真实题库 + 构造）：`check_services.py` 3/3；真实库 56 题仅 25 题挂知识点、排除 14 天内做过剩 19 题可用，6 个高频 kp 范围内只剩 9 题 → 12 组约束里 **11 组如实报 shortage**（含 d5 0/5、多选 0/2、总分 200 不可达），**1 组 `ok=True`**（kp=117 的 3 题卷 24/24）；构造「10 题全部 3 天前做过」→ `NO_CANDIDATES{excluded_recent:10}`；不变量（同参一致 / 逆序一致 / 四项 ∈ [0,1] / total = 加权和 / 排序 / kp 归属）全部实测通过。另发现贪心无回溯在第 12 组少选 1 题（穷举证明两维配额下存在 10 题可行组合，但该组 kp 配额本身不可满足，结论不变）。详见 `.sdd/s5-1/acceptance-evidence.md`
 - 模拟（S4-7，`scripts/mastery_sim.py`）：7 天对/错/对/对/错/对/对 → `M 0.117→0.427`、`S 3.60→9.47`、间隔 `1→4 天`；敏感性 3×3（K0 0.25/0.35/0.45 × 倍率 1.5/1.8/2.1）连对 5 次后 `M` 只随 K0 变、间隔随倍率单调变长
 - 小修（2026-11-05，侧栏导航）：去掉导航项前的 `01/02/…` 序号（用户要求），`layouts/nav.ts` 的 `NavItem` 删掉 `index` 字段、`SideNav.vue` 去掉序号 span 与样式；真机实测 9 项文本为「笔记 / 文件 / 知识库 / 题库 / 智能问答 / 错题本 / 复习计划 / 图谱 / 统计」，`.nav-index` 节点 0 个。前端 **267 passed / 43 files**，`npm run build` 退出 0（D-057）
@@ -27,7 +30,7 @@
 - 小修（2026-11-05，S4-1 题库列表可读性）：删掉无意义的「ID」列（详情面板头部本来就有 `题目 #47`），题干列前加归属徽标——自己导入的蓝 `我的`、别人导入的灰 `他人`（真机 55 题：34 我的 / 21 他人，与 `created_by` 分布一致）；「来源」列名改为「答案来源」（它显示的是 `verified`：`卷面` / `AI/无`，原列名与含义不符）。前端 **260 passed / 43 files**，`npm run build` 退出 0（D-053）
 - 小修（2026-11-05，S4-1/S4-2 列表公式显示）：题干里的 `$…$` 以前在列表里裸露（`$\log_a 5>\log_a 7$`），现在三处列表（题库审题页、错题列表、错题选题弹窗）统一走 `components/common/MathText.vue` + `utils/mathText.ts`（KaTeX 行内渲染、非公式片段 HTML 转义、写坏的公式退化成原文、列表 CSS 两行截断不切公式）；新增 13 条纯函数/组件用例 + 2 条列表回归断言，前端 **258 passed / 43 files**，`npm run build` 退出 0（D-052）
 - 已知限制（2026-11-05 实测，决定**不修**）：43 道解答题里 34 道没挂知识点。查过原因：不是漏跑，是 LLM 判「候选里没有够像的」；考纲 108 个知识点本身缺条目（无定积分、无乘法公式），这 34 道又多是短算式题。试算「取向量最接近的一律挂上」的结果：top1 余弦中位 0.552，且 top1-top2 差距普遍 <0.02（排名不稳定），抽看 12 条约 4 对 8 错——错标签会污染掌握度/看板 TOP10/复习推荐且用户难发现，因此**保留空标签**；若以后要救，口径是「cos≥0.55 且 gap≥0.02 才自动挂 + 标 inferred + 人工快捷入口」，见 D-054
-- 下一步：S5-2 组卷 API + 预览页（落 `papers` 表、把 `violations` 原样透出、支持「换一批/降题量」）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：S5-3 PDF 导出（Playwright 渲染、`GET /papers/{id}/export.pdf`）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -89,7 +92,7 @@
 
 ### 阶段 5：练习与复习（M4）
 - [x] S5-1 组卷算法 + 单测 ★
-- [ ] S5-2 组卷 API + 预览页
+- [x] S5-2 组卷 API + 预览页
 - [ ] S5-3 PDF 导出
 - [ ] S5-4 在线作答与掌握度回写
 - [ ] S5-5 复习调度 + 每日清单
@@ -209,8 +212,17 @@
 | 96 | 生成与复算可能犯同一个错，比对一致但答案错（S4-4 实测 m=44 变式2、m=48 变式1） | 自检机制无法自证数学正确，靠逐题人工确认兜底 | 若需更强保证，只能引入独立来源（教材答案库/教师审核流），成本高 |
 | 97 | 变式题一次固定 3 道、不可指定数量/题型，也不生成需要画图的题（S4-4） | 少数知识点（几何作图）出不了变式 | 需求出现时扩参数 |
 | 98 | 组卷可用池太小：真实库 56 题只有 25 题挂知识点、排除 14 天内做过剩 19 题，6 个高频 kp 范围内只有 9 题（S5-1） | 20 题标准卷在真实数据上必然 shortage；第 12 组贪心还因无回溯少选 1 题 | 先补 `question_kps` 覆盖（S4-1 导入/人工确认入口），S5-2 透出 violations 并支持换题；不引入黑盒求解器 |
+| 99 | 组卷页勾选整棵树会超入参上限：学科 7 有 108 个知识点，而 `kp_ids` 契约上限 100（S5-2 浏览器验收踩到） | 用户点根节点全选 → 422/42200，界面只弹通用错误 | 若要支持全选，需确认放宽上限或前端按子树分片；本轮保持契约不变 |
+| 100 | 草稿只创建不管理：无列表/改名/删除接口，`GET /papers/{id}` 的 `parts=null`（S5-2） | 学生保存后只能靠 id 或前端提示找回，回看没有打分 | 草稿管理并入 S5-7 练习页；打分如需持久化再议（本轮不扩表） |
 
 ## 变更日志
+
+### 2026-11-13（S5-2）
+- S5-2 完成（§10 全流程：spec `docs/spec/s5-2-paper-api.md` + plan `docs/plan/s5-2-paper-api.md`，8 项取舍经用户确认）。交付：`papers` 表 + 迁移 `0014_s5_2`、`models/paper.py`（TEXT+CHECK、`question_ids` ARRAY、`total_score` INTEGER）、`schemas/paper.py`、`services/paper_plan_service.py`（候选装载 / `generate_preview` / `replace_item` / `save_draft` / `get_paper`，算法全部复用 S5-1 内核）、`api/v1/papers.py` 4 个同步接口、前端 `types/papers.ts` + `api/papers.ts` + `views/papers/Generate.vue` + 路由/导航（9→10 项）。
+- 拍板（D-059）：同步生成（无异步任务）；生成/换题不落库、保存才写 `papers`；换题无状态 + 同题型降级；shortage 走 200 + `ok=false`；4 个接口；`total_score` 用 INTEGER；`papers` 不扩展列；组卷页单页交互、答案默认折叠。
+- 测试：后端 `pytest -q` → **1298 passed, 2 warnings**（S5-1 基线 1263 + 迁移 6 + 服务 18 + 接口 11）；前端 `npm run test:run` → **282 passed / 45 files**（新增 api 4 + 页面 11），`npm run build` 退出 0。
+- 真实验收（`.sdd/s5-2/acceptance-evidence.md`，真实 PG16 + 56 题题库 + user 50 + Chrome headless CDP）：任务卡原句「5 kp + 20 题」→ 200 `ok=false`、8 题 / 55 分、14 条 violations；可行配比 5 组全 `ok=true`，「解答 5 题」卷换题 3/3 成功、保存 201（40 分）、读回顺序一致、`parts` 全 null；权限 401/403/404/422 与契约一致；浏览器实测生成/换题/保存全链路（保存 #6）。**如实记录**：整棵树 108 个 kp 会超 `kp_ids ≤100` 上限（契约如此），20 题标准卷在真实数据上仍不可行。
+- 文档同步：`API.md §8` 重写、`SCHEMA §6.1` 的 `total_score` 改 INTEGER 并加落地备注、`PROGRESS.md`、`DECISIONS.md` D-059、`AGENTS.md §9.6` 组卷 API 锚点、`AI协作开发实施计划.md` S5-2 勾选；无新依赖/环境变量/配置。
 
 ### 2026-11-13（S5-1）
 - S5-1 完成（按 §10 全流程：spec `docs/spec/s5-1-paper-planning.md` + plan `docs/plan/s5-1-paper-planning.md`，均经用户确认）。交付：`services/paper_service.py`（`prepare_pool` / `allocate_quotas` / `score_parts` / `select_items` / `plan_paper` 五个纯函数 + `PaperConstraints` 等 7 个数据类 + `PaperPlanError`）、`tests/test_paper.py` 62 条用例。**不建表、不加接口、不加依赖、不改迁移**（spec 明示 S5-2 才落 `papers`）。

@@ -1034,7 +1034,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 
 ## 阶段 5：练习与复习（M4）
 [x] S5-1 组卷算法 + 单测 ★关键
-[ ] S5-2 组卷 API + 预览页
+[x] S5-2 组卷 API + 预览页
 [ ] S5-3 PDF 导出
 [ ] S5-4 在线作答与掌握度回写
 [ ] S5-5 复习调度 + 每日清单

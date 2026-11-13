@@ -151,6 +151,7 @@ eval/{datasets,configs,results}
 - 错因诊断样例：backend/app/services/mistake_analysis_service.py + backend/app/tasks/analyze_mistake.py + backend/app/api/v1/mistakes.py（`build_context` 六块上下文 + 笔记检索降级；`enqueue_analysis` 走 `task_service.create_task`、自动触发 `skip_if_analyzed=True`；`analyze` 用 upsert 覆盖 + `flush()`；`unknown` 与 `error_step` 引用校验在 `ai/analyze/mistake_analyzer.py`；Prompt `ai/prompts/mistake_analyze_v2.md` 内嵌错因判定口径；handler 不 commit，`force=false` 返回 `{"skipped": true}`）
 - 变式题样例：backend/app/ai/gen/{compare,variant_generator,variant_verifier,json_repair,quality}.py + backend/app/services/question_gen_service.py + backend/app/tasks/generate_variants.py（三分工：生成只产出结构化题目、复算只给题干重新解题、比对是纯函数；`match_answers` 五级顺序与 1e-6 数值容差；版本化 JSONB `similar_questions_json` v1；accept 幂等靠 `accepted_question_id` + `stem_hash` 两道；handler 不 commit）
 - 组卷样例：backend/app/services/paper_service.py + backend/tests/test_paper.py（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 纯函数链、不碰库；`alloc` 判 shortage 报 violation、`target` 只做缺口借位；题型固定分 + 总分 ±5% 邻域搜索；同种子同候选集输出一致且与输入顺序无关；naive `now` 抛 `PaperPlanError`）
+- 组卷 API 样例：backend/app/api/v1/papers.py + backend/app/services/paper_plan_service.py + backend/app/models/paper.py + web/src/views/papers/Generate.vue（同步 4 接口；生成/换题不落库，保存才写 `papers`；换题同题型同难度优先、再同题型任意难度、否则 `replaced=false`；`question_ids` 数组顺序即卷面顺序；总分服务端按题型分值重算；读回缺题返 `missing_question_ids` 不 500；组卷页答案默认折叠）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）

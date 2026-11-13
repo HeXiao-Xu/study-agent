@@ -764,3 +764,17 @@
 - 决策 6（贪心 + 种子）：候选先按 `question_id` 排序、再用 `random.Random(seed)` 洗牌，同分按洗牌位次（因此**结果与候选输入顺序无关**）；每步在满足题型/难度余量的题里取分最高，优先选还能推进 kp 配额的题；**无回溯**（spec §7 已知，不换黑盒求解器）。输出顺序固定：题型（单选→多选→填空→解答）→ 难度升序 → kp 在 `kp_ids` 中的序 → `question_id`。
 - 决策 7（violation 语义）：四类 shortage（QTYPE / DIFFICULTY / KP / TOTAL_SCORE）按顺序追加，`ok = not violations`；题库为空或全部被近期排除时早返回 `NO_CANDIDATES`（items 为空、计数字典补 0、配额仍给出）。配比 >0 但取整为 0 的题型只给 `warnings`，不判违规。
 - 实测影响（详见 `.sdd/s5-1/acceptance-evidence.md`）：真实题库 56 题里仅 25 题挂知识点（19 题在排除 14 天内做过之后可用），**20 题标准卷在真实数据上必然 shortage**；12 组约束 11 组如实报缺口、1 组 `ok=True`（kp=117 的 3 题卷，24/24）；第 12 组贪心少选 1 题（穷举证明仅按题型+难度两维存在 10 题可行组合），但该组 kp 配额本身不可满足，结论不变——这是「贪心非最优」的实测注脚。单测 62 条全绿，全量 1263 passed。
+
+## D-059 组卷接口与落库口径（S5-2）
+
+- 背景：S5-1 已有纯函数内核（`plan_paper` 等），本轮把它接成 4 个同步接口并落 `papers` 表，同时交付 `/papers/generate` 单页。真实题库只有 56 题、25 题挂知识点、排除 14 天后剩 19 题，因此「题库不足」必须是正常返回路径而不是异常。
+- 决策 1（同步、不异步）：组卷是两次批量查询 + 纯函数贪心，毫秒级；不开异步任务、不复用 `async_tasks`。生成与换题**不写库**，只有 `POST /papers` 保存草稿才落 `papers`；这样反复「换一批」不产生垃圾行。
+- 决策 2（4 个接口）：`POST /papers/generate`（200，含 `constraint/ok/items/violations`）、`POST /papers/replace-item`（200，无状态）、`POST /papers`（201，保存）、`GET /papers/{id}`（200/403/404）。不加列表、改名、删除接口（归 S5-7）。
+- 决策 3（换题无状态 + 降级）：请求带当前卷面 `selected_question_ids` + `replace_question_id`；服务端重建候选池、剔除已选与原题，先挑「同题型 + 同难度」最高分，再退「同题型任意难度」，都没有则 `{replaced:false, item:null, reason}`（200）。不自动放宽题型——换出来的题必须还是同一大题位置。
+- 决策 4（shortage 语义）：题库不足一律 **200 + `ok=false` + `violations`**（四类 shortage 原样透出，来自内核），不抛 409、不写 500；空卷面时前端禁用保存。
+- 决策 5（表不扩列、类型收紧）：`papers` 按 SCHEMA 原样 10 列（`question_ids` ARRAY 有序 + `constraint_json` JSONB + `status/generated_by` TEXT+CHECK）；`total_score` 从 SCHEMA 原写的 NUMERIC 收紧为 **INTEGER**（题分固定 3/4/4/8，求和必为整数，避免 Decimal 噪音），已在 SCHEMA §6.1 写明落地备注。
+- 决策 6（服务端重算总分）：保存时按 `question_ids` 的实际题型重算总分，不信任请求里的 `total_score`；`status` 固定 `草稿`、`generated_by` 固定 `manual`（Agent 组卷留给后续卡）。
+- 决策 7（读回口径）：`GET /papers/{id}` 按存库数组顺序返回题目；题目被硬删时跳过并放 `missing_question_ids`（不 500）；`parts=null`，打分是生成期信息，不落库。
+- 决策 8（前端单页 + 默认折叠答案）：表单（学科/知识点树/题量/总分/时长/四题型配比/五档难度滑块/排除天数）+ 预览表同页；换题、删题、上下移只改本地卷面并实时重算显示总分；答案默认折叠，开关打开才显示答案/解析；保存用 `ElMessageBox.prompt` 填标题。
+- 验证：后端 1298 passed（新增迁移 6 / 服务 18 / 接口 11）；前端 282 passed / 45 files，`npm run build` 退出 0。真机：20 题卷如实 shortage（8 题/55 分/14 条 violation），5 组可行配比全 `ok=true`，「解答 5 题」卷换题 3/3、保存/读回一致；Chrome CDP 实测生成→换题→保存（#6）。详见 `.sdd/s5-2/acceptance-evidence.md`。
+- 已知边界：勾选整棵树会得到 108 个 kp，超 `kp_ids ≤100` 的契约上限（会 422）；如需「全选」要另行确认放宽上限或前端分片。草稿无管理入口、读回无打分，均留后续卡。
