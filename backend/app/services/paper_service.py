@@ -246,3 +246,177 @@ def prepare_pool(
             continue
         pool.append(replace(candidate, kp_weights=tuple(weights.items())))
     return tuple(pool), excluded_recent
+
+def largest_remainder(weights: Mapping[K, float], total: int) -> dict[K, int]:
+    """最大余数法：先取整、再按小数部分补足；并列时按入参顺序（稳定排序）。"""
+    if total < 0:
+        raise PaperPlanError("配额总数不能为负")
+    if not weights:
+        raise PaperPlanError("配额权重不能为空")
+    values = {key: float(weight) for key, weight in weights.items()}
+    if any(weight < 0 for weight in values.values()):
+        raise PaperPlanError("配额权重不能为负")
+    weight_sum = sum(values.values())
+    if weight_sum <= 0:
+        raise PaperPlanError("配额权重之和必须大于 0")
+    raw = {key: weight / weight_sum * total for key, weight in values.items()}
+    result = {key: int(math.floor(raw[key])) for key in values}
+    missing = total - sum(result.values())
+    for key in sorted(values, key=lambda key: -(raw[key] - result[key]))[:missing]:
+        result[key] += 1
+    return result
+
+
+def _score_tolerance(target: int, ratio: float) -> int:
+    return max(1, math.ceil(target * ratio))
+
+
+def _qtype_total(counts: Mapping[str, int], score_map: Mapping[str, int]) -> int:
+    return sum(int(counts[qtype]) * int(score_map[qtype]) for qtype in counts)
+
+
+def _adjust_qtype_counts(
+    constraints: PaperConstraints, counts: Mapping[str, int]
+) -> tuple[dict[str, int], int, bool]:
+    """总分容差只能靠题型计数微调：题分按题型固定，换题不改总分（spec §3.2）。"""
+    score_map = constraints.score_map
+    target = constraints.total_score_target
+    tolerance = _score_tolerance(target, constraints.score_tolerance_ratio)
+    base = _qtype_total(counts, score_map)
+    if abs(base - target) <= tolerance:
+        return dict(counts), base, False
+    keys = [qtype for qtype in QTYPE_ORDER if qtype in counts]
+    best_rank: tuple[int, int, tuple[int, ...]] | None = None
+    best_counts: dict[str, int] | None = None
+    best_score = base
+    for deltas in itertools.product((-1, 0, 1), repeat=len(keys)):
+        if sum(deltas) != 0:
+            continue
+        candidate = dict(counts)
+        valid = True
+        for qtype, delta in zip(keys, deltas):
+            candidate[qtype] += delta
+            if candidate[qtype] < 0:
+                valid = False
+                break
+        if not valid:
+            continue
+        achieved = _qtype_total(candidate, score_map)
+        if abs(achieved - target) > tolerance:
+            continue
+        rank = (sum(abs(delta) for delta in deltas), abs(achieved - target), deltas)
+        if best_rank is None or rank < best_rank:
+            best_rank = rank
+            best_counts = candidate
+            best_score = achieved
+    if best_counts is None:
+        return dict(counts), base, True
+    return best_counts, best_score, False
+
+
+def _count_by_qtype(pool: Sequence[CandidateQuestion]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for candidate in pool:
+        counts[candidate.qtype] = counts.get(candidate.qtype, 0) + 1
+    return counts
+
+
+def _count_by_difficulty(pool: Sequence[CandidateQuestion]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for candidate in pool:
+        counts[candidate.difficulty] = counts.get(candidate.difficulty, 0) + 1
+    return counts
+
+
+def _count_by_kp(pool: Sequence[CandidateQuestion]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for candidate in pool:
+        for kp_id, _weight in candidate.kp_weights:
+            counts[kp_id] = counts.get(kp_id, 0) + 1
+    return counts
+
+
+def _borrow_difficulty(
+    alloc: Mapping[int, int], available: Mapping[int, int]
+) -> dict[int, int]:
+    """题库某难度不够时，把缺口借给相邻难度（先近距离、再富余多、再难度小）。"""
+    target = dict(alloc)
+    for difficulty in sorted(alloc):
+        deficit = target[difficulty] - available.get(difficulty, 0)
+        if deficit <= 0:
+            continue
+        target[difficulty] -= deficit
+        while deficit > 0:
+            donors = [
+                other
+                for other in target
+                if other != difficulty and available.get(other, 0) - target[other] > 0
+            ]
+            if not donors:
+                break
+            donor = min(
+                donors,
+                key=lambda other: (
+                    abs(other - difficulty),
+                    -(available[other] - target[other]),
+                    other,
+                ),
+            )
+            target[donor] += 1
+            deficit -= 1
+    return target
+
+
+def _borrow_kp(alloc: Mapping[int, int], available: Mapping[int, int]) -> dict[int, int]:
+    """某个知识点候选不足时，把缺口借给富余最多的知识点（同富余按 kp 顺序）。"""
+    target = dict(alloc)
+    for kp_id in alloc:
+        deficit = target[kp_id] - available.get(kp_id, 0)
+        if deficit <= 0:
+            continue
+        target[kp_id] -= deficit
+        while deficit > 0:
+            donors = [
+                other
+                for other in target
+                if other != kp_id and available.get(other, 0) - target[other] > 0
+            ]
+            if not donors:
+                break
+            donor = max(
+                donors, key=lambda other: (available[other] - target[other], -other)
+            )
+            target[donor] += 1
+            deficit -= 1
+    return target
+
+
+def allocate_quotas(
+    constraints: PaperConstraints, pool: Sequence[CandidateQuestion]
+) -> QuotaPlan:
+    """题型/难度/kp 三份配额 + 总分邻域调整 + 缺口借位；只算不选。"""
+    total = constraints.total_questions
+    base_counts = largest_remainder(constraints.qtype_ratio, total)
+    qtype_counts, planned_score, score_out = _adjust_qtype_counts(constraints, base_counts)
+    difficulty_alloc = largest_remainder(constraints.difficulty_dist, total)
+    kp_alloc = largest_remainder(constraints.kp_weight_map, total)
+    target_by_difficulty = _borrow_difficulty(difficulty_alloc, _count_by_difficulty(pool))
+    target_by_kp = _borrow_kp(kp_alloc, _count_by_kp(pool))
+    warnings = tuple(
+        f"题型「{qtype}」按配比取整为 0 题"
+        for qtype in QTYPE_ORDER
+        if qtype in constraints.qtype_ratio and qtype_counts.get(qtype, 0) == 0
+    )
+    return QuotaPlan(
+        quota_by_qtype=qtype_counts,
+        quota_by_difficulty=difficulty_alloc,
+        quota_by_kp=kp_alloc,
+        target_by_difficulty=target_by_difficulty,
+        target_by_kp=target_by_kp,
+        planned_total_score=planned_score,
+        score_out_of_tolerance=score_out,
+        tolerance=_score_tolerance(
+            constraints.total_score_target, constraints.score_tolerance_ratio
+        ),
+        warnings=warnings,
+    )

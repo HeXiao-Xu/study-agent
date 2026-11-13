@@ -10,6 +10,8 @@ from app.services.paper_service import (
     CandidateQuestion,
     PaperConstraints,
     PaperPlanError,
+    allocate_quotas,
+    largest_remainder,
     prepare_pool,
 )
 
@@ -152,3 +154,110 @@ def test_prepare_pool_treats_naive_last_done_at_as_utc() -> None:
     pool, excluded = prepare_pool(constraints, [cand(1, last_done_at=naive)], now=NOW)
     assert pool == ()
     assert excluded == 1
+
+def test_largest_remainder_sums_to_total() -> None:
+    assert largest_remainder({"a": 1.0, "b": 1.0}, 4) == {"a": 2, "b": 2}
+    assert largest_remainder({"单选": 0.5, "填空": 0.2, "解答": 0.3}, 20) == {
+        "单选": 10,
+        "填空": 4,
+        "解答": 6,
+    }
+
+
+def test_largest_remainder_breaks_ties_by_input_order() -> None:
+    assert largest_remainder({"a": 1.0, "b": 1.0, "c": 1.0}, 2) == {
+        "a": 1,
+        "b": 1,
+        "c": 0,
+    }
+
+
+def test_largest_remainder_handles_zero_weight() -> None:
+    assert largest_remainder({"a": 0.0, "b": 1.0}, 3) == {"a": 0, "b": 3}
+
+
+@pytest.mark.parametrize("weights", [{}, {"a": 0.0}, {"a": -1.0}])
+def test_largest_remainder_rejects_bad_weights(weights) -> None:
+    with pytest.raises(PaperPlanError):
+        largest_remainder(weights, 3)
+
+
+def test_allocate_quotas_fills_all_three_dimensions() -> None:
+    constraints = make_constraints(
+        kp_ids=(KP_A, KP_B),
+        total_questions=10,
+        qtype_ratio={"单选": 0.4, "填空": 0.2, "解答": 0.4},
+        difficulty_dist={2: 0.3, 3: 0.7},
+        total_score_target=52,
+    )
+    quotas = allocate_quotas(constraints, tuple(many(20)))
+    assert sum(quotas.quota_by_qtype.values()) == 10
+    assert sum(quotas.quota_by_difficulty.values()) == 10
+    assert sum(quotas.quota_by_kp.values()) == 10
+    assert sum(quotas.target_by_difficulty.values()) == 10
+    assert sum(quotas.target_by_kp.values()) == 10
+    assert quotas.quota_by_qtype == {"单选": 4, "填空": 2, "解答": 4}
+    assert quotas.planned_total_score == 52
+    assert quotas.score_out_of_tolerance is False
+
+
+def test_allocate_quotas_borrows_difficulty_from_neighbour() -> None:
+    constraints = make_constraints(
+        total_questions=10,
+        difficulty_dist={5: 0.5, 3: 0.5},
+        total_score_target=80,
+    )
+    pool = tuple(many(20, difficulty=3))
+    quotas = allocate_quotas(constraints, pool)
+    assert quotas.quota_by_difficulty == {3: 5, 5: 5}
+    assert quotas.target_by_difficulty == {3: 10, 5: 0}
+
+
+def test_allocate_quotas_borrows_kp_from_spare() -> None:
+    constraints = make_constraints(
+        kp_ids=(KP_A, KP_B), total_questions=10, total_score_target=80
+    )
+    pool = tuple(
+        many(2, start=1, kps=[(KP_A, 1.0)]) + many(10, start=11, kps=[(KP_B, 1.0)])
+    )
+    quotas = allocate_quotas(constraints, pool)
+    assert quotas.quota_by_kp == {KP_A: 5, KP_B: 5}
+    assert quotas.target_by_kp == {KP_A: 2, KP_B: 8}
+
+
+def test_allocate_quotas_tunes_qtype_counts_to_hit_score() -> None:
+    constraints = make_constraints(
+        total_questions=20,
+        qtype_ratio={"单选": 0.5, "填空": 0.2, "解答": 0.3},
+        difficulty_dist={3: 1.0},
+        total_score_target=100,
+    )
+    quotas = allocate_quotas(constraints, tuple(mixed_pool()))
+    assert quotas.quota_by_qtype == {"单选": 9, "填空": 4, "解答": 7}
+    assert quotas.planned_total_score == 99
+    assert quotas.score_out_of_tolerance is False
+
+
+def test_allocate_quotas_reports_impossible_score() -> None:
+    constraints = make_constraints(
+        total_questions=20,
+        qtype_ratio={"单选": 0.5, "填空": 0.2, "解答": 0.3},
+        difficulty_dist={3: 1.0},
+        total_score_target=200,
+    )
+    quotas = allocate_quotas(constraints, tuple(mixed_pool()))
+    assert quotas.quota_by_qtype == {"单选": 10, "填空": 4, "解答": 6}
+    assert quotas.planned_total_score == 94
+    assert quotas.score_out_of_tolerance is True
+    assert quotas.tolerance == 10
+
+
+def test_allocate_quotas_warns_when_qtype_rounds_to_zero() -> None:
+    constraints = make_constraints(
+        qtype_ratio={"单选": 0.01, "解答": 0.99},
+        difficulty_dist={3: 1.0},
+        total_score_target=80,
+    )
+    quotas = allocate_quotas(constraints, tuple(mixed_pool()))
+    assert quotas.quota_by_qtype == {"单选": 0, "解答": 10}
+    assert quotas.warnings == ("题型「单选」按配比取整为 0 题",)
