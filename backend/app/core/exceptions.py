@@ -112,6 +112,13 @@ class TaskQueueUnavailableError(AppError):
         super().__init__(message, code=CODE_INTERNAL, http_status=500)
 
 
+class PdfRenderError(AppError):
+    """PDF 渲染失败：对外固定话术，不泄露浏览器路径/堆栈。"""
+
+    def __init__(self, message: str = "PDF 渲染失败") -> None:
+        super().__init__(message, code=CODE_INTERNAL, http_status=500)
+
+
 def install_exception_handlers(app: FastAPI) -> None:
     """把四类异常统一转成 {code, message, trace_id, data:null}。"""
 
