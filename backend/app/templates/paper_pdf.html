@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <base href="{{ base_href }}" />
+    <title>{{ context.title }} · {{ context.variant_label }}</title>
+    <link rel="stylesheet" href="katex/katex.min.css" />
+    <style>
+      @page {
+        size: A4;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Noto Sans CJK SC", "Microsoft YaHei", "SimSun", sans-serif;
+        font-size: 12pt;
+        line-height: 1.65;
+        color: #111;
+      }
+      .paper-head {
+        border-bottom: 2px solid #222;
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+      }
+      .paper-title {
+        margin: 0 0 6px;
+        font-size: 20pt;
+        text-align: center;
+        letter-spacing: 2px;
+      }
+      .paper-meta {
+        margin: 0;
+        text-align: center;
+        font-size: 10.5pt;
+        color: #333;
+      }
+      .question {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 14px;
+      }
+      .stem {
+        white-space: pre-wrap;
+      }
+      .options {
+        margin: 6px 0 0;
+        padding-left: 18px;
+      }
+      .options li {
+        list-style: none;
+      }
+      .blank-2 {
+        height: 34px;
+      }
+      .blank-solve {
+        height: 60mm;
+        border-bottom: 1px dotted #bbb;
+      }
+      .answer,
+      .analysis {
+        margin-top: 6px;
+        padding: 4px 8px;
+        border-left: 3px solid #4a7;
+        background: #f6fbf8;
+        font-size: 11pt;
+        white-space: pre-wrap;
+      }
+      .analysis {
+        border-left-color: #999;
+        background: #fafafa;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="paper-head">
+      <h1 class="paper-title">{{ context.title }}</h1>
+      <p class="paper-meta">
+        {% if context.subject_name %}{{ context.subject_name }} · {% endif %}
+        总分 {{ context.total_score }} 分
+        {% if context.duration_min %} · {{ context.duration_min }} 分钟{% endif %}
+        · 共 {{ context.question_count }} 题 · {{ context.generated_at.strftime("%Y-%m-%d") }}
+      </p>
+    </header>
+
+    {% for question in context.questions %}
+    <section class="question">
+      <div class="stem">{{ question.number }}.（{{ question.qtype }}，{{ question.score }} 分）{{ question.stem_md }}</div>
+      {% if question.options %}
+      <ul class="options">
+        {% for option in question.options %}
+        <li>{{ option.key }}. {{ option.text }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if context.variant == "answers" %}
+        {% if question.answer_md %}
+        <div class="answer">答案：{{ question.answer_md }}</div>
+        {% endif %}
+        {% if question.analysis_md %}
+        <div class="analysis">解析：{{ question.analysis_md }}</div>
+        {% endif %}
+      {% else %}
+        {% if question.blank_lines %}
+        <div class="blank-2"></div>
+        {% endif %}
+        {% if question.qtype == "解答" %}
+        <div class="blank-solve"></div>
+        {% endif %}
+      {% endif %}
+    </section>
+    {% endfor %}
+
+    <script src="katex/katex.min.js"></script>
+    <script src="katex/contrib/auto-render.min.js"></script>
+    <script>
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+        ],
+        throwOnError: false,
+      })
+      document.fonts.ready.then(function () {
+        window.__katexReady = true
+      })
+    </script>
+  </body>
+</html>

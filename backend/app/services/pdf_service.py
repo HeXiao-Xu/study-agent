@@ -1,9 +1,12 @@
 """S5-3 PDF 导出：已保存卷子 → 题干卷/答案卷（Jinja2 + KaTeX + Playwright）。"""
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.core.exceptions import ConflictError, InvalidParamError
 from app.schemas.paper import OptionOut, PaperDetailOut
@@ -19,6 +22,13 @@ TEMPLATE_DIR = APP_DIR / "app" / "templates"
 STATIC_DIR = APP_DIR / "app" / "static"
 TEMPLATE_NAME = "paper_pdf.html"
 RENDER_TIMEOUT_MS = 30_000
+
+_JINJA_ENV = Environment(
+    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    autoescape=select_autoescape(["html", "xml"]),
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,3 +96,27 @@ def build_context(
         questions=questions,
         generated_at=now,
     )
+
+def render_html(context: PdfContext) -> str:
+    """渲染模板；base_href 指向静态目录，KaTeX 的 CSS/字体按相对路径加载。"""
+    template = _JINJA_ENV.get_template(TEMPLATE_NAME)
+    return template.render(context=context, base_href=STATIC_DIR.as_uri() + "/")
+
+
+def build_header_footer(context: PdfContext) -> tuple[str, str]:
+    """Playwright 的页眉/页脚模板：页眉左标题右卷别，页脚页码。"""
+    style = (
+        "width:100%;font-size:9pt;color:#555;padding:0 16mm;"
+        "font-family:'Microsoft YaHei','Noto Sans CJK SC',sans-serif;"
+    )
+    title = html.escape(context.title)
+    label = html.escape(context.variant_label)
+    header = (
+        f'<div style="{style}display:flex;justify-content:space-between;">'
+        f"<span>{title}</span><span>{label}</span></div>"
+    )
+    footer = (
+        f'<div style="{style}text-align:right;">第 '
+        f'<span class="pageNumber"></span> / <span class="totalPages"></span> 页</div>'
+    )
+    return header, footer

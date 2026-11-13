@@ -96,3 +96,44 @@ def test_build_context_rejects_unknown_variant() -> None:
         pdf_service.build_context(
             _detail([_item(501, "单选")]), variant="both", subject_name=None, now=NOW
         )
+
+
+def test_render_html_escapes_and_keeps_math() -> None:
+    detail = _detail([_item(501, "单选", stem="<script>alert(1)</script> 求 $x^2$")])
+
+    html_text = pdf_service.render_html(
+        pdf_service.build_context(
+            detail, variant="questions", subject_name=None, now=NOW
+        )
+    )
+
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_text
+    assert "<script>alert(1)</script>" not in html_text
+    assert "$x^2$" in html_text
+
+
+def test_render_html_variant_diff() -> None:
+    detail = _detail([_item(501, "单选", answer="选 A", analysis="因为 A")])
+    questions = pdf_service.render_html(
+        pdf_service.build_context(detail, variant="questions", subject_name=None, now=NOW)
+    )
+    answers = pdf_service.render_html(
+        pdf_service.build_context(detail, variant="answers", subject_name=None, now=NOW)
+    )
+
+    assert "答案：" not in questions
+    assert "答案：" in answers
+    assert "因为 A" in answers
+
+
+def test_build_header_footer_has_page_numbers_and_escapes_title() -> None:
+    detail = _detail([_item(501, "单选")], title="<期中>卷")
+
+    header, footer = pdf_service.build_header_footer(
+        pdf_service.build_context(detail, variant="answers", subject_name=None, now=NOW)
+    )
+
+    assert "&lt;期中&gt;卷" in header
+    assert "答案卷" in header
+    assert 'class="pageNumber"' in footer
+    assert 'class="totalPages"' in footer
