@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # 逗号分隔、小写、不带点；服务层解析
     upload_allowed_extensions: str = "pdf,docx,md,txt,png,jpg,jpeg"
 
+    # --- PDF 导出（S5-3）---
+    # Playwright 浏览器缓存目录；Windows 开发机装在仓库 .cache 下，生产容器留空用默认路径
+    playwright_browsers_path: str | None = None
+    # Playwright/Chromium 的临时目录；开发机系统 temp 在沙箱下不可写时指向仓库 .cache
+    pdf_tmp_dir: str | None = None
+
     # --- 异步任务（S2-7，ARQ Worker）---
     task_max_tries: int = 3
     task_retry_base_seconds: float = 2.0

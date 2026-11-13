@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.core.exceptions import ConflictError, InvalidParamError
+from app.core.exceptions import ConflictError, InvalidParamError, PdfRenderError
+from app.models.subject import Subject
 from app.schemas.paper import OptionOut, PaperDetailOut, PaperItemOut
 from app.services import pdf_service
 
@@ -137,3 +138,59 @@ def test_build_header_footer_has_page_numbers_and_escapes_title() -> None:
     assert "答案卷" in header
     assert 'class="pageNumber"' in footer
     assert 'class="totalPages"' in footer
+
+
+class FakeExportSession:
+    def __init__(self, subject_name: str = "高中数学") -> None:
+        self.subject_name = subject_name
+
+    def get(self, model, pk):  # noqa: ANN001, ANN201
+        if model is Subject:
+            subject = Subject(name=self.subject_name, code="math")
+            subject.id = pk
+            return subject
+        return None
+
+
+def test_export_pdf_uses_injected_renderer(monkeypatch) -> None:
+    detail = _detail([_item(501, "单选")], title="期中卷/高一")
+    monkeypatch.setattr(pdf_service.paper_plan_service, "get_paper", lambda *a, **k: detail)
+    captured: dict[str, str] = {}
+
+    def fake_renderer(html_text: str, header: str, footer: str) -> bytes:
+        captured["html"] = html_text
+        captured["header"] = header
+        captured["footer"] = footer
+        return b"%PDF-1.4 fake"
+
+    pdf_bytes, filename = pdf_service.export_pdf(
+        FakeExportSession(),
+        user_id=50,
+        paper_id=7,
+        variant="questions",
+        now=NOW,
+        renderer=fake_renderer,
+    )
+
+    assert pdf_bytes.startswith(b"%PDF")
+    assert filename == "期中卷高一-题干卷.pdf"
+    assert "求 $x^2$ 的值" in captured["html"]
+    assert '第 <span class="pageNumber"></span>' in captured["footer"]
+
+
+def test_export_pdf_wraps_renderer_failure(monkeypatch) -> None:
+    detail = _detail([_item(501, "单选")])
+    monkeypatch.setattr(pdf_service.paper_plan_service, "get_paper", lambda *a, **k: detail)
+
+    def broken_renderer(html_text: str, header: str, footer: str) -> bytes:
+        raise RuntimeError("chromium 崩了")
+
+    with pytest.raises(PdfRenderError):
+        pdf_service.export_pdf(
+            FakeExportSession(),
+            user_id=50,
+            paper_id=7,
+            variant="questions",
+            now=NOW,
+            renderer=broken_renderer,
+        )
