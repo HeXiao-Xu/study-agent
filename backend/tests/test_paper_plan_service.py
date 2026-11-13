@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.core.exceptions import InvalidParamError
 from app.models.paper import Paper
-from app.schemas.paper import PaperGenerateIn
+from app.schemas.paper import PaperGenerateIn, PaperReplaceIn
 from app.services import paper_plan_service
 
 NOW = datetime(2026, 11, 13, 6, 0, tzinfo=timezone.utc)
@@ -144,3 +144,106 @@ def test_load_candidates_empty_rows_yields_empty_pool():
     )
     assert data.candidates == ()
     assert data.mastery_by_kp == {}
+
+def detail_rows():
+    """明细 SQL 的行：id, subject_id, qtype, difficulty, stem_md, options_json, answer_md, analysis_md, verified, origin。"""
+    return [
+        (501, 7, "单选", 2, "题干 501", [{"key": "A", "text": "选项 A"}], "答案 501", None, True, "exam"),
+        (502, 7, "单选", 2, "题干 502", [], "答案 502", None, False, "upload"),
+        (503, 7, "解答", 3, "题干 503", [], "答案 503", "解析 503", True, "textbook"),
+        (504, 7, "单选", 2, "题干 504", [], "答案 504", None, True, "mock"),
+    ]
+
+
+def full_row_set():
+    """一次 generate 的查询顺序：候选 → 错题时间 → 掌握度 → 明细。"""
+    return [
+        candidate_rows(),
+        [],
+        [(101, Decimal("0.200"), Decimal("2.00"), NOW - timedelta(days=30))],
+        detail_rows(),
+    ]
+
+
+def test_generate_preview_ok_returns_items_with_stem_and_answers():
+    session = FakeSession(results=full_row_set())
+    preview = paper_plan_service.generate_preview(
+        session, make_payload(), user_id=50, now=NOW
+    )
+    assert preview.ok is True
+    assert len(preview.items) == 2
+    assert preview.total_score == 6
+    assert preview.items[0].stem_md.startswith("题干")
+    assert preview.items[0].answer_md.startswith("答案")
+    assert preview.constraint.seed == 7
+    assert preview.constraint.score_by_qtype == {"单选": 3, "多选": 4, "填空": 4, "解答": 8}
+
+
+def test_generate_preview_reports_shortage_without_raising():
+    session = FakeSession(results=full_row_set())
+    preview = paper_plan_service.generate_preview(
+        session, make_payload(total_questions=4, total_score=12), user_id=50, now=NOW
+    )
+    assert preview.ok is False
+    codes = {violation.code for violation in preview.violations}
+    assert "QTYPE_SHORTAGE" in codes
+
+
+def test_generate_preview_no_candidates_reports_no_candidates():
+    rows = candidate_rows()
+    recent = [(501, NOW, NOW), (502, NOW, NOW), (503, NOW, NOW)]
+    session = FakeSession(results=[rows, recent, [], []])
+    preview = paper_plan_service.generate_preview(
+        session, make_payload(kp_ids=[101]), user_id=50, now=NOW
+    )
+    assert preview.ok is False
+    assert preview.items == []
+    assert preview.violations[0].code == "NO_CANDIDATES"
+
+
+def test_replace_item_prefers_same_qtype_and_difficulty_highest_score():
+    rows = candidate_rows() + [(504, "单选", 2, True, "mock", 101, Decimal("1.000000"))]
+    session = FakeSession(
+        results=[rows, [], [], [(504, 7, "单选", 2, "题干 504", [], "答案 504", None, True, "mock")]]
+    )
+    payload = PaperReplaceIn(
+        **make_payload().model_dump(exclude={"seed"}),
+        seed=7,
+        selected_question_ids=[501],
+        replace_question_id=501,
+    )
+    result = paper_plan_service.replace_item(session, payload, user_id=50, now=NOW)
+    assert result.replaced is True
+    assert result.item is not None
+    # 504（verified=True, exam/mock 质量分高）应压过 502（未核对）
+    assert result.item.question_id == 504
+
+
+def test_replace_item_falls_back_to_same_qtype_any_difficulty():
+    rows = candidate_rows() + [(505, "单选", 4, True, "exam", 101, Decimal("1.000000"))]
+    details = [(505, 7, "单选", 4, "题干 505", [], "答案 505", None, True, "exam")]
+    session = FakeSession(results=[rows, [], [], details])
+    payload = PaperReplaceIn(
+        **make_payload().model_dump(exclude={"seed"}),
+        seed=7,
+        selected_question_ids=[501, 502],
+        replace_question_id=501,
+    )
+    result = paper_plan_service.replace_item(session, payload, user_id=50, now=NOW)
+    assert result.replaced is True
+    assert result.item is not None
+    assert result.item.question_id == 505  # 同题型里没有 d2 了，退到 d4 的 505
+
+
+def test_replace_item_returns_reason_when_pool_exhausted():
+    session = FakeSession(results=[candidate_rows(), [], [], []])
+    payload = PaperReplaceIn(
+        **make_payload().model_dump(exclude={"seed"}),
+        seed=7,
+        selected_question_ids=[501, 502, 503],
+        replace_question_id=501,
+    )
+    result = paper_plan_service.replace_item(session, payload, user_id=50, now=NOW)
+    assert result.replaced is False
+    assert result.item is None
+    assert result.reason == "没有可替换的候选题"

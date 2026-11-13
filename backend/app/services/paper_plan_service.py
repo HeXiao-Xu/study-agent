@@ -17,7 +17,11 @@ from app.schemas.paper import (
     OptionOut,
     PaperConstraintIn,
     PaperConstraintOut,
+    PaperGenerateIn,
     PaperItemOut,
+    PaperPreviewOut,
+    PaperReplaceIn,
+    PaperReplaceOut,
     PaperViolationOut,
     ScorePartsOut,
 )
@@ -165,3 +169,237 @@ def _last_done_at(
         if current is None or moment > current:
             result[int(question_id)] = moment
     return result
+
+@dataclass(frozen=True, slots=True)
+class QuestionDetail:
+    question_id: int
+    subject_id: int
+    qtype: str
+    difficulty: int
+    stem_md: str
+    options: tuple[dict[str, str], ...]
+    answer_md: str | None
+    analysis_md: str | None
+    verified: bool
+    origin: str
+
+
+def load_question_details(
+    session: Session, question_ids: Sequence[int]
+) -> dict[int, QuestionDetail]:
+    unique = list(dict.fromkeys(int(question_id) for question_id in question_ids))
+    if not unique:
+        return {}
+    rows = session.execute(
+        select(
+            Question.id,
+            Question.subject_id,
+            Question.qtype,
+            Question.difficulty,
+            Question.stem_md,
+            Question.options_json,
+            Question.answer_md,
+            Question.analysis_md,
+            Question.verified,
+            Question.origin,
+        ).where(Question.id.in_(unique))
+    ).all()
+    details: dict[int, QuestionDetail] = {}
+    for (
+        question_id,
+        subject_id,
+        qtype,
+        difficulty,
+        stem_md,
+        options_json,
+        answer_md,
+        analysis_md,
+        verified,
+        origin,
+    ) in rows:
+        options = tuple(
+            {"key": str(item.get("key", "")), "text": str(item.get("text", ""))}
+            for item in (options_json or [])
+        )
+        details[int(question_id)] = QuestionDetail(
+            question_id=int(question_id),
+            subject_id=int(subject_id),
+            qtype=str(qtype),
+            difficulty=int(difficulty),
+            stem_md=str(stem_md),
+            options=options,
+            answer_md=answer_md,
+            analysis_md=analysis_md,
+            verified=bool(verified),
+            origin=str(origin),
+        )
+    return details
+
+
+def kp_ids_by_question(session: Session, question_ids: Sequence[int]) -> dict[int, list[int]]:
+    unique = list(dict.fromkeys(int(question_id) for question_id in question_ids))
+    if not unique:
+        return {}
+    rows = session.execute(
+        select(QuestionKp.question_id, QuestionKp.kp_id)
+        .where(QuestionKp.question_id.in_(unique))
+        .order_by(QuestionKp.question_id, QuestionKp.kp_id)
+    ).all()
+    result: dict[int, list[int]] = {}
+    for question_id, kp_id in rows:
+        result.setdefault(int(question_id), []).append(int(kp_id))
+    return result
+
+
+def _item_out(
+    item: PaperItem,
+    detail: QuestionDetail,
+    *,
+    score: int | None = None,
+    parts: ScorePartsOut | None = None,
+) -> PaperItemOut:
+    return PaperItemOut(
+        question_id=item.question_id,
+        qtype=item.qtype,
+        difficulty=item.difficulty,
+        score=item.score if score is None else score,
+        kp_ids=list(item.kp_ids),
+        parts=parts
+        or ScorePartsOut(
+            difficulty_match=item.parts.difficulty_match,
+            mastery_match=item.parts.mastery_match,
+            novelty=item.parts.novelty,
+            quality=item.parts.quality,
+            total=item.parts.total,
+        ),
+        subject_id=detail.subject_id,
+        stem_md=detail.stem_md,
+        options=[OptionOut(**option) for option in detail.options],
+        answer_md=detail.answer_md,
+        analysis_md=detail.analysis_md,
+        verified=detail.verified,
+        origin=detail.origin,
+    )
+
+
+def generate_preview(
+    session: Session,
+    payload: PaperGenerateIn,
+    *,
+    user_id: int,
+    now: datetime,
+) -> PaperPreviewOut:
+    constraints = build_constraints(payload)
+    data = load_candidates(session, constraints, user_id=user_id, now=now)
+    try:
+        plan = paper_service.plan_paper(
+            constraints,
+            data.candidates,
+            mastery_by_kp=data.mastery_by_kp,
+            now=now,
+        )
+    except paper_service.PaperPlanError as exc:
+        raise InvalidParamError(str(exc)) from exc
+    details = load_question_details(session, [item.question_id for item in plan.items])
+    missing = [item.question_id for item in plan.items if item.question_id not in details]
+    if missing:
+        raise InvalidParamError(f"候选题已被删除，请重试：{missing[:10]}")
+    return PaperPreviewOut(
+        constraint=normalized_constraint(constraints),
+        seed=plan.seed,
+        ok=plan.ok,
+        items=[_item_out(item, details[item.question_id]) for item in plan.items],
+        total_score=plan.total_score,
+        target_score=plan.target_score,
+        quota_by_qtype=plan.quota_by_qtype,
+        quota_by_difficulty=plan.quota_by_difficulty,
+        quota_by_kp=plan.quota_by_kp,
+        counts_by_qtype=plan.counts_by_qtype,
+        counts_by_difficulty=plan.counts_by_difficulty,
+        counts_by_kp=plan.counts_by_kp,
+        violations=[
+            PaperViolationOut(code=violation.code, message=violation.message, detail=violation.detail)
+            for violation in plan.violations
+        ],
+        warnings=list(plan.warnings),
+    )
+
+
+def replace_item(
+    session: Session,
+    payload: PaperReplaceIn,
+    *,
+    user_id: int,
+    now: datetime,
+) -> PaperReplaceOut:
+    constraints = build_constraints(payload)
+    data = load_candidates(session, constraints, user_id=user_id, now=now)
+    original = next(
+        (
+            candidate
+            for candidate in data.candidates
+            if candidate.question_id == payload.replace_question_id
+        ),
+        None,
+    )
+    if original is None:
+        return PaperReplaceOut(
+            replaced=False, item=None, reason="原题不在候选池中，无法判断题型与难度"
+        )
+    pool, _excluded_recent = paper_service.prepare_pool(
+        constraints, data.candidates, now=now
+    )
+    excluded = set(payload.selected_question_ids) | {payload.replace_question_id}
+    available = [candidate for candidate in pool if candidate.question_id not in excluded]
+    scored = [
+        (
+            paper_service.score_parts(
+                candidate=candidate,
+                constraints=constraints,
+                mastery_by_kp=data.mastery_by_kp,
+                now=now,
+            ),
+            candidate,
+        )
+        for candidate in available
+    ]
+    scored.sort(key=lambda pair: (-pair[0].total, pair[1].question_id))
+
+    chosen = next(
+        (
+            (parts, candidate)
+            for parts, candidate in scored
+            if candidate.qtype == original.qtype
+            and candidate.difficulty == original.difficulty
+        ),
+        None,
+    )
+    if chosen is None:
+        chosen = next(
+            (
+                (parts, candidate)
+                for parts, candidate in scored
+                if candidate.qtype == original.qtype
+            ),
+            None,
+        )
+    if chosen is None:
+        return PaperReplaceOut(
+            replaced=False, item=None, reason="没有可替换的候选题"
+        )
+    parts, candidate = chosen
+    details = load_question_details(session, [candidate.question_id])
+    detail = details.get(candidate.question_id)
+    if detail is None:
+        return PaperReplaceOut(
+            replaced=False, item=None, reason="候选题已被删除，请重试"
+        )
+    item = PaperItem(
+        question_id=candidate.question_id,
+        qtype=candidate.qtype,
+        difficulty=candidate.difficulty,
+        score=int(constraints.score_map[candidate.qtype]),
+        kp_ids=tuple(kp_id for kp_id, _weight in candidate.kp_weights),
+        parts=parts,
+    )
+    return PaperReplaceOut(replaced=True, item=_item_out(item, detail), reason=None)
