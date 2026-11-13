@@ -171,7 +171,7 @@ export async function exportPaperPdf(
 
 ### 后端 `tests/test_pdf_api.py`（TestClient + fake renderer）
 
-17. `test_export_requires_login_returns_401`。
+10. `test_export_requires_login_returns_401`。
 10. `test_export_forbids_other_user_returns_403`。
 11. `test_export_missing_paper_returns_404`。
 12. `test_export_empty_paper_returns_409`。
