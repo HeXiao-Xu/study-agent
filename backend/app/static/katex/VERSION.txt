@@ -1,0 +1,1 @@
+katex@0.19.1 copied from web/node_modules/katex/dist (S5-3, 2026-11-13)

@@ -43,3 +43,7 @@ python-multipart==0.0.32
 # --- S2-7 异步任务框架（ARQ + Redis；2026-10-26 用户批准）---
 arq==0.28.0
 redis==5.3.1
+
+# --- S5-3 PDF 导出（Playwright 渲染 + pdfplumber 验收；2026-11-13 用户批准）---
+playwright==1.65.1
+pdfplumber==0.11.10
