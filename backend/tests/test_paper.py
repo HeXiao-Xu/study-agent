@@ -8,8 +8,10 @@ import pytest
 from app.services.paper_service import (
     DEFAULT_SCORE_BY_QTYPE,
     NEUTRAL_MASTERY,
+    QTYPE_ORDER,
     CandidateQuestion,
     PaperConstraints,
+    PaperItem,
     PaperPlanError,
     allocate_quotas,
     difficulty_target,
@@ -18,6 +20,7 @@ from app.services.paper_service import (
     prepare_pool,
     quality_score,
     score_parts,
+    select_items,
 )
 
 NOW = datetime(2026, 11, 13, 9, 0, tzinfo=timezone.utc)
@@ -338,3 +341,88 @@ def test_score_parts_defaults_to_neutral_mastery() -> None:
     assert parts.mastery_match == pytest.approx(NEUTRAL_MASTERY)
     assert parts.difficulty_match == pytest.approx(1.0)
     assert parts.total == pytest.approx(0.35 * 1.0 + 0.30 * 0.5 + 0.20 + 0.15)
+
+
+def test_select_items_fills_all_quotas() -> None:
+    constraints = make_constraints(
+        total_questions=6,
+        qtype_ratio={"单选": 0.5, "解答": 0.5},
+        difficulty_dist={2: 0.5, 3: 0.5},
+        total_score_target=33,
+    )
+    pool = tuple(
+        many(3, start=1, qtype="单选", difficulty=2)
+        + many(3, start=4, qtype="单选", difficulty=3)
+        + many(3, start=7, qtype="解答", difficulty=2)
+        + many(3, start=10, qtype="解答", difficulty=3)
+    )
+    quotas = allocate_quotas(constraints, pool)
+    items = select_items(constraints, pool, quotas, mastery_by_kp={}, now=NOW)
+    assert len(items) == 6
+    assert sum(1 for item in items if item.qtype == "单选") == 3
+    assert sum(1 for item in items if item.qtype == "解答") == 3
+    assert sum(1 for item in items if item.difficulty == 2) == 3
+    assert sum(1 for item in items if item.difficulty == 3) == 3
+    assert all(item.parts.total > 0 for item in items)
+
+
+def test_select_items_is_seed_deterministic_and_order_independent() -> None:
+    constraints = make_constraints(total_questions=5, total_score_target=40)
+    pool = tuple(
+        cand(index, last_done_at=NOW - timedelta(days=14 + index)) for index in range(1, 11)
+    )
+    quotas = allocate_quotas(constraints, pool)
+    first = select_items(constraints, pool, quotas, mastery_by_kp={}, now=NOW)
+    second = select_items(constraints, pool, quotas, mastery_by_kp={}, now=NOW)
+    reversed_pool = tuple(reversed(pool))
+    third = select_items(
+        constraints,
+        reversed_pool,
+        allocate_quotas(constraints, reversed_pool),
+        mastery_by_kp={},
+        now=NOW,
+    )
+    assert first == second == third
+    assert len(first) == 5
+
+
+def test_select_items_sorts_like_a_real_paper() -> None:
+    constraints = make_constraints(
+        kp_ids=(KP_A, KP_B),
+        total_questions=6,
+        qtype_ratio={"单选": 1 / 3, "填空": 1 / 3, "解答": 1 / 3},
+        difficulty_dist={2: 0.5, 4: 0.5},
+        total_score_target=30,
+    )
+    combos = [
+        (qtype, difficulty, kp_id)
+        for qtype in ("单选", "填空", "解答")
+        for difficulty in (2, 4)
+        for kp_id in (KP_A, KP_B)
+    ]
+    # 每个 (题型, 难度, 知识点) 格子放 4 份，保证贪心不会因格子耗尽提前卡住
+    pool = tuple(
+        cand(
+            1 + copy_index * len(combos) + combo_index,
+            qtype=qtype,
+            difficulty=difficulty,
+            kps=[(kp_id, 1.0)],
+        )
+        for copy_index in range(4)
+        for combo_index, (qtype, difficulty, kp_id) in enumerate(combos)
+    )
+    quotas = allocate_quotas(constraints, pool)
+    items = select_items(constraints, pool, quotas, mastery_by_kp={}, now=NOW)
+    assert len(items) == 6
+    order_index = {qtype: index for index, qtype in enumerate(QTYPE_ORDER)}
+    kp_order = {KP_A: 0, KP_B: 1}
+    keys = [
+        (
+            order_index[item.qtype],
+            item.difficulty,
+            kp_order[item.kp_ids[0]],
+            item.question_id,
+        )
+        for item in items
+    ]
+    assert keys == sorted(keys)

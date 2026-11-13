@@ -496,3 +496,95 @@ def score_parts(
         quality=quality,
         total=total,
     )
+
+
+def select_items(
+    constraints: PaperConstraints,
+    pool: Sequence[CandidateQuestion],
+    quotas: QuotaPlan,
+    *,
+    mastery_by_kp: Mapping[int, float],
+    now: datetime,
+) -> tuple[PaperItem, ...]:
+    """贪心选取：每步在可行题里取分最高者；同分由种子洗牌决定（spec §4.5）。"""
+    _require_aware(now, "now")
+    if not pool:
+        return ()
+    rng = random.Random(constraints.seed)
+    order = sorted(pool, key=lambda candidate: candidate.question_id)
+    rng.shuffle(order)
+    position = {candidate.question_id: index for index, candidate in enumerate(order)}
+    parts = {
+        candidate.question_id: score_parts(
+            candidate=candidate,
+            constraints=constraints,
+            mastery_by_kp=mastery_by_kp,
+            now=now,
+        )
+        for candidate in order
+    }
+    remaining_qtype = dict(quotas.quota_by_qtype)
+    remaining_difficulty = dict(quotas.target_by_difficulty)
+    remaining_kp = dict(quotas.target_by_kp)
+    score_map = constraints.score_map
+    kp_order = {kp_id: index for index, kp_id in enumerate(constraints.kp_ids)}
+    selected: dict[int, CandidateQuestion] = {}
+    for _ in range(constraints.total_questions):
+        feasible = [
+            candidate
+            for candidate in order
+            if candidate.question_id not in selected
+            and remaining_qtype.get(candidate.qtype, 0) > 0
+            and remaining_difficulty.get(candidate.difficulty, 0) > 0
+        ]
+        if not feasible:
+            break
+        advancing = [
+            candidate
+            for candidate in feasible
+            if any(
+                remaining_kp.get(kp_id, 0) > 0 for kp_id, _weight in candidate.kp_weights
+            )
+        ]
+        bucket = advancing or feasible
+        best = max(
+            bucket,
+            key=lambda candidate: (
+                parts[candidate.question_id].total,
+                -position[candidate.question_id],
+            ),
+        )
+        selected[best.question_id] = best
+        remaining_qtype[best.qtype] -= 1
+        remaining_difficulty[best.difficulty] -= 1
+        for kp_id, _weight in best.kp_weights:
+            if remaining_kp.get(kp_id, 0) > 0:
+                remaining_kp[kp_id] -= 1
+    items = [
+        PaperItem(
+            question_id=candidate.question_id,
+            qtype=candidate.qtype,
+            difficulty=candidate.difficulty,
+            score=int(score_map[candidate.qtype]),
+            kp_ids=tuple(
+                sorted(
+                    (kp_id for kp_id, _weight in candidate.kp_weights),
+                    key=lambda kp_id: kp_order.get(kp_id, len(kp_order)),
+                )
+            ),
+            parts=parts[candidate.question_id],
+        )
+        for candidate in selected.values()
+    ]
+    items.sort(
+        key=lambda item: (
+            QTYPE_ORDER.index(item.qtype),
+            item.difficulty,
+            min(
+                (kp_order.get(kp_id, len(kp_order)) for kp_id in item.kp_ids),
+                default=len(kp_order),
+            ),
+            item.question_id,
+        )
+    )
+    return tuple(items)
