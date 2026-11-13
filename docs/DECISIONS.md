@@ -792,3 +792,16 @@
 - 决策 8（前端）：保存成功后出现「导出题干卷 / 导出答案卷」，用保存返回 id 下载；浏览器读不到跨域 `Content-Disposition`，前端用 `试卷-{id}-{卷别}.pdf` 兜底；保存后再换题不更新已保存卷，旁边标注「导出的为已保存版本」。
 - 验证：后端 1315 passed（新增服务 9 / 接口 8），前端 285 passed / 45 files、build 0；真机导出 4 题/32 分卷：题干卷 2 页 55,465 B、答案卷 1 页 57,497 B，pdfplumber 抽到中文/题号/公式字形/页码；Chrome CDP 点按钮 5 秒下载两个中文名 PDF；401/404/422 真 HTTP，409/500 单测。详见 `.sdd/s5-3/acceptance-evidence.md`。
 - 已知边界：导出串行；Docker 字体/chromium 未装；不缓存；请求题数受真实题库限制（本次 5 题只出 4 题）。
+
+## D-061 在线作答与掌握度回写（S5-4）
+
+- 背景：S5-2 只把卷子存下来，S5-3 只能导出 PDF；学生不能在系统里做卷，掌握度也拿不到新作答事件。任务卡要求「20 题卷提交后掌握度变化符合预期 + 错题自动进错题本」。
+- 决策 1（接口）：试卷作用域 3 接口（续答 `GET /papers/{id}/answers` / 自动保存 `PUT /papers/{id}/answers/{question_id}` / 交卷 `POST /papers/{id}/submit`），权限与状态校验只写一处；`answers.paper_id` 非空时 `uq(user_id,paper_id,question_id)` 部分唯一，自动保存走 `INSERT ... ON CONFLICT DO UPDATE`。
+- 决策 2（判分）：单选/多选自动；填空/解答学生自评 0/0.5/1。用户明确选择「填空也自评」，偏离任务卡「客观题自动判分」字面口径；好处是不误判 LaTeX/多空填空，代价是主观虚报。半对 `score=题分×0.5`，因此 `answers.score` 用 `NUMERIC(6,2)`，是「分数用整数」约定的明确例外。
+- 决策 3（交卷事务）：先 `SELECT ... FOR UPDATE` 锁 `papers` 行，再判分、写 `answers`、逐题 `mastery_service.record_attempts`（复用 S4-7 公式，不重复实现）、错题 upsert，最后一次 commit；双交卷被行锁串行化，后到者读到 `已提交` 409。失败整体回滚，不出现「答了但掌握度没动」。
+- 决策 4（错题）：`score < 题分` 且作答去空白非空才入库；新增 `mistake_service.record_wrong_answer`（复用并重置、只 flush 不 commit、不触发错因诊断）。空白未答只扣掌握度，不算错题。
+- 决策 5（反馈）：交卷响应给每 kp `{kp_id,kp_name,mastery_before,mastery_after,attempts_delta}`，无既有行时 `mastery_before=null`（未评估，不冒充 0）；不落库快照。`before` 必须在 `record_attempts` 前快照成 float——ORM 行会被原地改值，验收时实际踩到并修复。
+- 决策 6（只读）：已提交卷 GET 可看，PUT/交卷 409；不做重新作答，避免掌握度重复累计（重做策略留给后续卡）。
+- 决策 7（前端）：`/papers/:id/take` 单页 + 题号面板 + 每题计时 + 800ms 防抖自动保存；未自评时交卷按钮禁用并提示；交卷后展示得分、逐题判分、kp 掌握度 before→after 与错题数；交卷后切到只读复习视图。
+- 验证：后端 1373 passed（新增迁移 5 / 判分与编排 36 / 接口 15 / 错题 2），前端 295 passed / 46 files，build 0；真实库 8 题卷（请求 19）交卷 31/59，单次命中 kp 手算一致，错题 5 道全 `待订正`；Chrome CDP 小卷 16/16 全链路通过。详见 `.sdd/s5-4/acceptance-evidence.md`。
+- 已知边界：真实题库组不出 20 题（本卷 8 题），验收按实际题量如实记录；自评有虚报风险；已提交不可重做；自动保存失败仅页面提示、无离线队列。

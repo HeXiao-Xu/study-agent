@@ -5,11 +5,14 @@
 
 ## 当前状态
 
-- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5：S5-1 组卷内核 + S5-2 组卷 API/预览页 + S5-3 PDF 导出已交付**（`papers` 表、组卷 4 接口 + 导出接口、`/papers/generate` 页面、A4 题干卷/答案卷）
-- 最近完成：S5-3 PDF 导出（`services/pdf_service.py` + `GET /papers/{id}/export.pdf?variant=questions|answers`、Jinja2 模板 + 本地 KaTeX 0.19.1 + Playwright 单渲染线程、组卷页保存后两个导出按钮）；后端 **1315 passed, 2 warnings**（S5-2 基线 1298），前端 **285 passed / 45 files**，`npm run build` 退出 0
-- 上一完成（S5-2）：组卷 API + 预览页（`papers` 表 + 迁移 `0014_s5_2`、4 个同步接口 `generate / replace-item / POST /papers 201 / GET {id}`、`services/paper_plan_service.py`、前端 `/papers/generate` 单页组卷）；后端 **1298 passed, 2 warnings**（S5-1 基线 1263），前端 **282 passed / 45 files**，`npm run build` 退出 0
+- 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5：S5-1 组卷内核 + S5-2 组卷 API/预览页 + S5-3 PDF 导出 + S5-4 在线作答已交付**（`papers`/`answers` 表、组卷 4 接口 + 导出接口 + 作答 3 接口、`/papers/generate` 与 `/papers/:id/take` 页面）
+- 最近完成：S5-4 在线作答与判分 → 掌握度回写（`answers` 表 + 迁移 `0015_s5_4`、`services/answer_service.py`（判分纯函数 + 草稿 upsert + 交卷单事务）、`mistake_service.record_wrong_answer`、`GET/PUT /papers/{id}/answers[/{question_id}]` + `POST /papers/{id}/submit`、`views/papers/Take.vue` + 组卷页「开始作答」）；后端 **1373 passed, 3 warnings**（S5-3 基线 1315），前端 **295 passed / 46 files**，`npm run build` 退出 0
+- 上一完成（S5-3）：PDF 导出（`services/pdf_service.py` + `GET /papers/{id}/export.pdf?variant=questions|answers`、Jinja2 模板 + 本地 KaTeX 0.19.1 + Playwright 单渲染线程、组卷页保存后两个导出按钮）；后端 **1315 passed, 2 warnings**（S5-2 基线 1298），前端 **285 passed / 45 files**，`npm run build` 退出 0
+- 更早（S5-2）：组卷 API + 预览页（`papers` 表 + 迁移 `0014_s5_2`、4 个同步接口 `generate / replace-item / POST /papers 201 / GET {id}`、`services/paper_plan_service.py`、前端 `/papers/generate` 单页组卷）；后端 **1298 passed, 2 warnings**（S5-1 基线 1263），前端 **282 passed / 45 files**，`npm run build` 退出 0
 - 更早（S5-1）：组卷算法内核（`prepare_pool → allocate_quotas → score_parts → select_items → plan_paper` 五个纯函数 + 7 个数据类，不碰库）；新增 `backend/tests/test_paper.py` 62 条纯函数用例，后端 **1263 passed, 1 warning**（S4-8 基线 1201）
 - 更早（S4-8）：错题统计看板（`GET /api/v1/stats/overview` 一次聚合状态/错因/知识点 TOP10+掌握度/按天趋势；前端 `/stats` 页三张 ECharts 图 + 摘要卡 + 空态；顺手把 `M_t` 批查提炼成 `mastery_service.mastery_values`，图谱与看板共用一份折算逻辑）；后端 **1201 passed, 1 warning**，前端 **244 passed / 41 files**，`npm run build` 退出 0（实测）
+- 关键口径（S5-4）：作答是**试卷作用域**的 3 个同步接口——`GET /papers/{id}/answers` 续答、`PUT /papers/{id}/answers/{question_id}` 自动保存（部分唯一索引 upsert、不判分）、`POST /papers/{id}/submit` 交卷；交卷**单事务**串行 `answers upsert → record_attempts（S4-7 公式）→ 错题 upsert（非满分且有作答）→ papers.status=已提交`，失败整体回滚；判分**单选/多选自动**（字母集合归一化，全半角/大小写/顺序不敏感），**填空/解答学生自评 0/0.5/1**（用户 D-061 明确选择，偏离任务卡「客观题自动判分」字面口径）；半对产生 `NUMERIC(6,2)` 小数分；交卷响应给每 kp `mastery_before/after`（无行=null 未评估）；不自动触发错因诊断；已提交只读，重复交卷/再保存 409；前端 `/papers/:id/take` 单页 + 题号面板 + 800ms 自动保存 + 每题计时
+- 验收（S5-4，真实库 + 真浏览器）：后端 **1373 passed, 3 warnings**（S5-3 基线 1315 + 迁移 5 + 判分/编排 36 + 接口 15 + 错题 2），前端 **295 passed / 46 files**，`npm run build` 退出 0；请求 19 题只组出 8 题（单选 1 / 解答 7，59 分）→ 逐题自动保存 8/8、续答保留用时、交卷 **31 / 59**（正确 3）、5 道非满分有作答入错题本且状态 `待订正`、单次命中 kp 手算 `0.220→0.311` / `0.159→0.219` / `0.0→0.0` 与接口一致、多命中 kp 各 +2/+3/+4 次；重复交卷 409、交卷后 PUT 409；Chrome headless（CDP）实测小卷 #12（2 解答）自动保存「已保存」、未自评按钮禁用且提示、自评后交卷 **16 / 16** 并显示 `函数 0.489→0.549`。**验收中抓到并修掉** `mastery_before` 被 ORM 原地更新污染（改更新前快照 + 回归用例）。详见 `.sdd/s5-4/acceptance-evidence.md`
 - 关键口径（S5-3）：导出是**同步单接口** `GET /papers/{id}/export.pdf?variant=questions|answers`（默认题干卷），只读不落库、不缓存；管线 `build_context`（纯函数）→ `render_html`（Jinja2，题干/选项先转义，公式留给 KaTeX `$...$` auto-render）→ `render_pdf`（Playwright，A4、页眉标题+卷别、页脚第 X/Y 页、题干卷单选/填空留 2 行、解答留 60mm、答案卷给题干+答案+解析）；**Playwright 同步对象有线程亲和性**，用 `ThreadPoolExecutor(max_workers=1)` 单渲染线程独占 Chromium，请求线程只等 future，超时/失败重建 worker；KaTeX dist（0.19.1）拷进 `backend/app/static/katex` 进仓库；中文靠系统字体栈，Docker 需装 `fonts-noto-cjk` + chromium；空卷 409/40900、渲染失败 500/50000、`variant` 非法 422/42200；文件名同时给 ASCII 与 RFC 5987 中文名（D-060）
 - 验收（S5-3，真机 + 真浏览器）：后端 **1315 passed**（S5-2 基线 1298 + 服务 9 + 接口 8），前端 **285 passed / 45 files**，`npm run build` 退出 0；真实库导出「S5-3 验收卷」（请求 5 题实际 4 题/32 分）：题干卷 2 页 55,465 B、答案卷 1 页 57,497 B，pdfplumber 抽到标题/题号/中文/公式字形/「第 1」页脚，题干卷无「答案：」、答案卷有；Chrome headless 点保存后两个按钮 → 5 秒内下载 `试卷-8-题干卷.pdf` 67,870 B 与 `试卷-8-答案卷.pdf` 70,371 B；真 HTTP 401/404/422 实测，409/500 由单测覆盖；首卷导出约 3 秒、第二次约 2 秒。详见 `.sdd/s5-3/acceptance-evidence.md`
 - 关键口径（S4-3）：诊断与录入解耦（入队失败只 WARNING）；自动触发 `force=False` 已有诊断跳过、手动接口默认覆盖；1:1 覆盖式 UPDATE + `created_at` = 最近诊断时间；缺作答由**代码强制** `unknown`（`secondary_causes=[]`、`error_step=None`）；`error_step` 必须引用学生作答片段否则丢弃；笔记检索失败降级为空；Prompt 走文件 `mistake_analyze_v2.md`（含 6 条错因判定口径与优先级，D-17）
@@ -33,7 +36,7 @@
 - 小修（2026-11-05，S4-1 题库列表可读性）：删掉无意义的「ID」列（详情面板头部本来就有 `题目 #47`），题干列前加归属徽标——自己导入的蓝 `我的`、别人导入的灰 `他人`（真机 55 题：34 我的 / 21 他人，与 `created_by` 分布一致）；「来源」列名改为「答案来源」（它显示的是 `verified`：`卷面` / `AI/无`，原列名与含义不符）。前端 **260 passed / 43 files**，`npm run build` 退出 0（D-053）
 - 小修（2026-11-05，S4-1/S4-2 列表公式显示）：题干里的 `$…$` 以前在列表里裸露（`$\log_a 5>\log_a 7$`），现在三处列表（题库审题页、错题列表、错题选题弹窗）统一走 `components/common/MathText.vue` + `utils/mathText.ts`（KaTeX 行内渲染、非公式片段 HTML 转义、写坏的公式退化成原文、列表 CSS 两行截断不切公式）；新增 13 条纯函数/组件用例 + 2 条列表回归断言，前端 **258 passed / 43 files**，`npm run build` 退出 0（D-052）
 - 已知限制（2026-11-05 实测，决定**不修**）：43 道解答题里 34 道没挂知识点。查过原因：不是漏跑，是 LLM 判「候选里没有够像的」；考纲 108 个知识点本身缺条目（无定积分、无乘法公式），这 34 道又多是短算式题。试算「取向量最接近的一律挂上」的结果：top1 余弦中位 0.552，且 top1-top2 差距普遍 <0.02（排名不稳定），抽看 12 条约 4 对 8 错——错标签会污染掌握度/看板 TOP10/复习推荐且用户难发现，因此**保留空标签**；若以后要救，口径是「cos≥0.55 且 gap≥0.02 才自动挂 + 标 inferred + 人工快捷入口」，见 D-054
-- 下一步：S5-4 在线作答与判分 → 掌握度回写（`answers` 表、`views/papers/Take.vue`）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6 学习报告；复习清单/优先级（含「按前置推荐」）归 S5-5；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：S5-5 复习调度 + 每日清单（`review_items`、`services/review_service.py`、APScheduler）；`GET /reports/mastery?range=30d` 与掌握度雷达/热力图/学习轨迹/周报仍归 S5-6；复习/报告/练习前端页归 S5-7；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -97,7 +100,7 @@
 - [x] S5-1 组卷算法 + 单测 ★
 - [x] S5-2 组卷 API + 预览页
 - [x] S5-3 PDF 导出
-- [ ] S5-4 在线作答与掌握度回写
+- [x] S5-4 在线作答与掌握度回写
 - [ ] S5-5 复习调度 + 每日清单
 - [ ] S5-6 学习报告 + 周报
 - [ ] S5-7 前端复习/报告/练习页
@@ -221,6 +224,13 @@
 | 102 | 导出串行：单渲染线程（Playwright 同步对象线程亲和性）（S5-3） | 多人同时导出排队，约 1–3 秒/卷 | 单人学生场景够用；要并发再引入多浏览器池/独立渲染服务 |
 
 ## 变更日志
+
+### 2026-11-13（S5-4）
+- S5-4 完成（§10 全流程：spec `docs/spec/s5-4-paper-take.md` + plan `docs/plan/s5-4-paper-take.md`，8 项取舍经用户确认）。交付：`answers` 表 + 迁移 `0015_s5_4`（部分唯一索引 `uq_answers_user_paper_question`、`score NUMERIC(6,2)`、自评/用时 CHECK）、`schemas/answer.py`、`services/answer_service.py`（判分纯函数 `normalize_choice/grade_objective/validate_self_rated/grade_item/build_answer_map/missing_self_ratings/grade_paper` + `get_answers/save_answer/submit_paper`）、`mistake_service.record_wrong_answer`、`api/v1/papers.py` 新增 3 接口（GET answers / PUT answer / POST submit）、前端 `types/papers.ts` + `api/papers.ts` + `views/papers/Take.vue` + `/papers/:id/take` 路由 + 组卷页「开始作答」。
+- 拍板（D-061）：试卷作用域 3 接口；填空/解答学生自评（用户明确选择，偏离任务卡「客观题自动判分」字面口径）；交卷单事务 + `SELECT ... FOR UPDATE`；错题 = 非满分且有作答且复用重置；半对用 `NUMERIC(6,2)`；交卷响应给 before/after 不落快照；已提交只读；单页 + 题号面板 + 800ms 自动保存。
+- 测试：后端 `pytest -q` → **1373 passed, 3 warnings**（S5-3 基线 1315 + 迁移 5 + 判分/编排 36 + 接口 15 + 错题 2）；前端 `npm run test:run` → **295 passed / 46 files**（+3 API +6 页面 +1 组卷入口），`npm run build` 退出 0。
+- 真实验收（`.sdd/s5-4/acceptance-evidence.md`，真实 PG16 + 学生 50 + Chrome headless CDP）：请求 19 题只组出 8 题（单选 1 / 解答 7，59 分），逐题自动保存/续答 8/8、交卷 31/59（正确 3）、5 道错题入错题本且 `待订正`、单次命中 kp 掌握度与 `next_mastery` 手算一致；重复交卷/交卷后保存均 409；浏览器小卷 #12 自动保存、未自评拦截、交卷 16/16 且展示掌握度变化。**验收中修掉** `mastery_before` 被 ORM 原地更新污染（改为更新前快照 + 单测）。
+- 文档同步：`API.md §8` 重写 3 接口、`SCHEMA.md §6.2` 补落地口径与 `papers` 状态备注、`PROGRESS.md`、`DECISIONS.md` D-061、`AGENTS.md §9.2/§9.6`、`AI协作开发实施计划.md` S5-4 勾选；无新依赖/环境变量/配置。
 
 ### 2026-11-13（S5-3）
 - S5-3 完成（spec `docs/spec/s5-3-pdf-export.md` + plan `docs/plan/s5-3-pdf-export.md`，10 项取舍经用户确认）。交付：`services/pdf_service.py`（`build_context` / `render_html` / `build_header_footer` / `render_pdf` / `export_pdf`）、`templates/paper_pdf.html`、`static/katex`（0.19.1）、`scripts/sync_katex.py`、`GET /papers/{id}/export.pdf`、前端 `exportPaperPdf` + 保存后两个导出按钮；`requirements.txt` 加 playwright 1.65.1 / pdfplumber 0.11.10。
