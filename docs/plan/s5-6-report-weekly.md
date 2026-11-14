@@ -1236,6 +1236,8 @@ git commit -m "feat(s5-6): 周报统计与数字校验"
 
 ### Task 5: 周报 Prompt、LLM 适配器与生成用例
 
+> 实现补丁（真机验收后）：`WeeklyReportContext` 必须带 `period`（`from/to/days`）。最终 `generate_weekly` 传 `{"period": period.model_dump(by_alias=True), **stats.model_dump()}`，校验允许集合也包含 `period`；Prompt 追加「周期只用 period.days、不数列表条数、不写未给出阈值」三条硬规则。原因是首次带 period 的真实 LLM 写出 `6/5/0.01` 被校验拦截，根因是 context 漏 period + Prompt 未点名高发编造点。以代码 `9a7793d` 为准。
+
 **Files:**
 - Create: `backend/app/ai/report/__init__.py`
 - Create: `backend/app/ai/report/weekly_report.py`
