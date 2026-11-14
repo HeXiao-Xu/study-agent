@@ -324,3 +324,26 @@ def test_mark_item_rejects_completed_and_missing(monkeypatch):
         review_service.mark_item(
             FakeSession(scalar=None), user_id=50, item_id=99, action="done", now=now
         )
+
+
+def test_refresh_user_does_not_reopen_row_deferred_to_tomorrow(monkeypatch):
+    now = datetime(2026, 11, 14, 1, 0, tzinfo=timezone.utc)
+    deferred = SimpleNamespace(
+        done_at=None, due_at=datetime(2026, 11, 14, 16, 0, tzinfo=timezone.utc)
+    )
+    upserts = []
+    session = FakeSession()
+    monkeypatch.setattr(review_service, "_load_mastery_snapshots", lambda s, *a, **k: [_snapshot()])
+    monkeypatch.setattr(
+        review_service,
+        "_load_ref_choices",
+        lambda s, *a, **k: {117: RefChoice("question", 501, 3)},
+    )
+    monkeypatch.setattr(review_service, "_load_items", lambda s, *a, **k: {117: deferred})
+    monkeypatch.setattr(review_service, "_upsert_item", lambda s, **kw: upserts.append(kw))
+    monkeypatch.setattr(review_service, "get_today", lambda s, *a, **k: _today())
+
+    review_service.refresh_user(session, user_id=50, now=now)
+
+    assert upserts == []
+    assert session.flushed == 1

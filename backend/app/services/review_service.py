@@ -519,8 +519,12 @@ def refresh_user(
     eligible: list[ItemPlan] = []
     for plan in plans:
         row = existing.get(plan.kp_id)
-        if row is not None and row.done_at is not None and row.done_at >= day_start:
-            continue
+        if row is not None:
+            if row.done_at is not None and row.done_at >= day_start:
+                continue
+            # later/超限已顺延到次日：同日再刷新不得被“弱项天天出现”拉回今天
+            if row.done_at is None and row.due_at >= next_start:
+                continue
         eligible.append(plan)
 
     selected, deferred = select_capped(eligible, get_settings().review_daily_minutes)
