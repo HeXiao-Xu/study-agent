@@ -162,6 +162,53 @@ def test_generate_rejects_empty_kp_ids():
     response = client.post("/api/v1/papers/generate", json=_payload(kp_ids=[]))
     assert response.status_code == 422
     assert response.json()["code"] == 42200
+    assert response.json()["message"] == "请至少选择 1 个知识点"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"total_questions": 0}, "题量不能小于 1"),
+        ({"total_score": 0}, "总分不能小于 1"),
+        (
+            {"qtype_ratio": {"判断": 1.0}},
+            "题型占比里有不认识的题型，请只使用单选、多选、填空、解答",
+        ),
+        ({"qtype_ratio": {"单选": -1.0}}, "题型占比不能为负数"),
+        ({"difficulty_dist": {"6": 1.0}}, "难度只能在 1 到 5 之间"),
+        ({"difficulty_dist": {"2": -1.0}}, "难度权重不能为负数"),
+        (
+            {"qtype_ratio": {"单选": 0, "多选": 0, "填空": 0, "解答": 0}},
+            "请至少给一个题型设置占比",
+        ),
+        (
+            {"difficulty_dist": {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}},
+            "请至少选择一个难度档位",
+        ),
+        ({"kp_weights": {999: 1.0}}, "知识点权重只能设置已选中的知识点"),
+        ({"kp_weights": {101: 0}}, "知识点权重必须大于 0"),
+    ],
+)
+def test_generate_validation_messages_are_plain(overrides, expected) -> None:
+    student = _user()
+    client = _client(FakeSession(user=student), student)
+    response = client.post("/api/v1/papers/generate", json=_payload(**overrides))
+    assert response.status_code == 422
+    assert response.json()["code"] == 42200
+    message = response.json()["message"]
+    assert message == expected
+    assert "body." not in message
+    assert not any(char in message for char in "[]{}'\"≥≤_")
+
+
+def test_generate_missing_ratio_message_is_plain() -> None:
+    student = _user()
+    client = _client(FakeSession(user=student), student)
+    body = _payload()
+    body.pop("qtype_ratio")
+    response = client.post("/api/v1/papers/generate", json=body)
+    assert response.status_code == 422
+    assert response.json()["message"] == "请填写题型占比"
 
 
 def test_replace_item_returns_new_item():
@@ -214,7 +261,7 @@ def test_save_paper_rejects_missing_question():
     body = {"title": "t", "constraint": _payload(), "question_ids": [501, 999]}
     response = client.post("/api/v1/papers", json=body)
     assert response.status_code == 422
-    assert "999" in response.json()["message"]
+    assert response.json()["message"] == "有题目已不存在，请重新选择"
 
 
 def test_get_paper_returns_items_and_missing_ids():

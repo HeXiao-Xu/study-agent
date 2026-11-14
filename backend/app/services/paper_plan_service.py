@@ -47,7 +47,7 @@ def build_constraints(payload: PaperConstraintIn) -> PaperConstraints:
         qtype: float(weight) for qtype, weight in payload.qtype_ratio.items() if weight > 0
     }
     if not qtype_ratio:
-        raise InvalidParamError("qtype_ratio 至少一个题型配比大于 0")
+        raise InvalidParamError("请至少给一个题型设置占比")
     seed = payload.seed if payload.seed is not None else secrets.randbelow(SEED_MAX + 1)
     try:
         return PaperConstraints(
@@ -307,7 +307,7 @@ def generate_preview(
     details = load_question_details(session, [item.question_id for item in plan.items])
     missing = [item.question_id for item in plan.items if item.question_id not in details]
     if missing:
-        raise InvalidParamError(f"候选题已被删除，请重试：{missing[:10]}")
+        raise InvalidParamError("有候选题已被删除，请重新生成试卷")
     return PaperPreviewOut(
         constraint=normalized_constraint(constraints),
         seed=plan.seed,
@@ -418,7 +418,7 @@ def save_draft(session: Session, payload: PaperSaveIn, *, user_id: int) -> Paper
     qtype_by_id = {int(question_id): str(qtype) for question_id, qtype in rows}
     missing = [question_id for question_id in question_ids if question_id not in qtype_by_id]
     if missing:
-        raise InvalidParamError(f"题目不存在：{missing[:10]}")
+        raise InvalidParamError("有题目已不存在，请重新选择")
     score_map = paper_service.DEFAULT_SCORE_BY_QTYPE
     total_score = sum(int(score_map[qtype_by_id[question_id]]) for question_id in question_ids)
     constraints = build_constraints(payload.constraint)

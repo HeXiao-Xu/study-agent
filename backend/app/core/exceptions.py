@@ -39,6 +39,70 @@ _HTTP_TO_CODE = {
     429: CODE_RATE_LIMIT,
 }
 
+_PAPER_FIELD_LABELS = {
+    "kp_ids": "知识点",
+    "total_questions": "题量",
+    "qtype_ratio": "题型占比",
+    "difficulty_dist": "难度分布",
+    "total_score": "总分",
+    "duration_min": "时长",
+    "exclude_recent_days": "排除近期天数",
+    "seed": "随机种子",
+    "kp_weights": "知识点权重",
+    "title": "试卷标题",
+    "question_ids": "题目",
+    "selected_question_ids": "当前卷面题目",
+    "replace_question_id": "要替换的题目",
+    "constraint": "组卷条件",
+}
+_CODE_LIKE_CHARS = "[]{}'\"≥≤_"
+
+
+def _is_paper_path(path: str) -> bool:
+    return path == "/api/v1/papers" or path.startswith("/api/v1/papers/")
+
+
+def _paper_validation_message(error: dict[str, object]) -> str:
+    """把组卷参数错误翻成不含字段名/括号/英文的普通中文。"""
+    loc = [str(part) for part in error.get("loc", [])]
+    field = next((part for part in reversed(loc) if part in _PAPER_FIELD_LABELS), "")
+    label = _PAPER_FIELD_LABELS.get(field, "填写内容")
+    kind = str(error.get("type", ""))
+    ctx = error.get("ctx") or {}
+    if kind == "missing":
+        return f"请填写{label}"
+    if kind == "too_short":
+        if field == "kp_ids":
+            return "请至少选择 1 个知识点"
+        if field == "question_ids":
+            return "请至少保留 1 道题"
+        return f"{label}不能为空"
+    if kind == "too_long":
+        return f"{label}数量太多"
+    if kind == "greater_than_equal":
+        return f"{label}不能小于 {ctx.get('ge')}"
+    if kind == "greater_than":
+        return f"{label}必须大于 {ctx.get('gt')}"
+    if kind == "less_than_equal":
+        return f"{label}不能大于 {ctx.get('le')}"
+    if kind == "less_than":
+        return f"{label}必须小于 {ctx.get('lt')}"
+    if kind in ("int_parsing", "int_type"):
+        return f"{label}必须是整数"
+    if kind in ("float_parsing", "float_type"):
+        return f"{label}必须是数字"
+    if kind in ("dict_type", "list_type"):
+        return f"{label}格式不正确"
+    if kind == "string_too_short":
+        return f"{label}不能为空"
+    if kind == "literal_error":
+        return f"{label}选项不正确"
+    if kind == "value_error":
+        message = str(error.get("msg", "")).removeprefix("Value error, ").strip()
+        if message and not any(char in message for char in _CODE_LIKE_CHARS):
+            return message
+    return f"{label}填写不正确"
+
 
 def _trace_of(request: Request) -> str:
     """contextvar 优先（内层异常处理器可见）；最外层兜底处理器退回 scope state。
@@ -141,8 +205,11 @@ def install_exception_handlers(app: FastAPI) -> None:
         # 细节全量进日志（服务端排查用）；对外壳只给首条错误定位，保持格式严格
         logger.warning("validation_failed", extra={"errors": exc.errors()})
         first = exc.errors()[0] if exc.errors() else {}
-        loc = ".".join(str(part) for part in first.get("loc", []))
-        message = f"参数校验失败: {loc} {first.get('msg', '')}".strip()
+        if _is_paper_path(request.url.path):
+            message = _paper_validation_message(first)
+        else:
+            loc = ".".join(str(part) for part in first.get("loc", []))
+            message = f"参数校验失败: {loc} {first.get('msg', '')}".strip()
         return JSONResponse(status_code=422, content=_error_body(request, CODE_VALIDATION, message))
 
     @app.exception_handler(Exception)

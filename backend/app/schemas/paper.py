@@ -37,35 +37,32 @@ class PaperConstraintIn(BaseModel):
     @field_validator("qtype_ratio")
     @classmethod
     def _validate_qtype_ratio(cls, value: dict[str, float]) -> dict[str, float]:
-        unknown = [qtype for qtype in value if qtype not in QTYPE_VALUES]
-        if unknown:
-            raise ValueError(f"qtype_ratio 含未知题型：{unknown}")
+        if any(qtype not in QTYPE_VALUES for qtype in value):
+            raise ValueError("题型占比里有不认识的题型，请只使用单选、多选、填空、解答")
         if any(weight < 0 for weight in value.values()):
-            raise ValueError("qtype_ratio 的权重不能为负")
+            raise ValueError("题型占比不能为负数")
         return value
 
     @field_validator("difficulty_dist")
     @classmethod
     def _validate_difficulty(cls, value: dict[int, float]) -> dict[int, float]:
-        unknown = [str(difficulty) for difficulty in value if difficulty not in range(1, 6)]
-        if unknown:
-            raise ValueError(f"difficulty_dist 含 1–5 之外的难度：{unknown}")
+        if any(difficulty not in range(1, 6) for difficulty in value):
+            raise ValueError("难度只能在 1 到 5 之间")
         if any(weight < 0 for weight in value.values()):
-            raise ValueError("difficulty_dist 的权重不能为负")
+            raise ValueError("难度权重不能为负数")
         return value
 
     @model_validator(mode="after")
     def _validate_cross_fields(self) -> Self:
         if sum(self.qtype_ratio.values()) <= 0:
-            raise ValueError("qtype_ratio 至少一个题型配比大于 0")
+            raise ValueError("请至少给一个题型设置占比")
         if sum(self.difficulty_dist.values()) <= 0:
-            raise ValueError("difficulty_dist 至少一个难度权重大于 0")
+            raise ValueError("请至少选择一个难度档位")
         if self.kp_weights is not None:
-            outside = [kp_id for kp_id in self.kp_weights if kp_id not in self.kp_ids]
-            if outside:
-                raise ValueError(f"kp_weights 含不在 kp_ids 里的知识点：{outside}")
+            if any(kp_id not in self.kp_ids for kp_id in self.kp_weights):
+                raise ValueError("知识点权重只能设置已选中的知识点")
             if any(weight <= 0 for weight in self.kp_weights.values()):
-                raise ValueError("kp_weights 的权重必须大于 0")
+                raise ValueError("知识点权重必须大于 0")
         return self
 
 
@@ -92,7 +89,7 @@ class PaperSaveIn(BaseModel):
     @classmethod
     def _reject_duplicates(cls, value: list[int]) -> list[int]:
         if len(set(value)) != len(value):
-            raise ValueError("question_ids 不能重复")
+            raise ValueError("题目不能重复")
         return value
 
 

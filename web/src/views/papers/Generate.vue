@@ -97,12 +97,12 @@ function buildConstraint(): PaperConstraintPayload {
     const weight = Number(form.qtype_ratio[qtype])
     if (weight > 0) qtype_ratio[qtype] = weight
   }
-  if (Object.keys(qtype_ratio).length === 0) throw new Error('至少给一个题型配置配比')
+  if (Object.keys(qtype_ratio).length === 0) throw new Error('请至少给一个题型设置占比')
   const difficulty_dist: Record<string, number> = {}
   form.difficulty_dist.forEach((value, index) => {
     if ((value ?? 0) > 0) difficulty_dist[String(index + 1)] = value / 100
   })
-  if (Object.keys(difficulty_dist).length === 0) throw new Error('至少给一个难度配置权重')
+  if (Object.keys(difficulty_dist).length === 0) throw new Error('请至少选择一个难度档位')
   return {
     kp_ids: [...checkedKpIds.value],
     total_questions: form.total_questions,
@@ -296,6 +296,7 @@ onMounted(() => {
             <span>{{ qtype }}</span>
             <el-input-number
               v-model="form.qtype_ratio[qtype]"
+              :data-testid="`qtype-ratio-${qtype}`"
               :min="0"
               :max="1"
               :step="0.1"

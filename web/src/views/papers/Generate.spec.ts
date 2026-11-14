@@ -149,6 +149,31 @@ describe('Generate', () => {
     expect(warning).toHaveBeenCalledWith('请至少选择 1 个知识点')
   })
 
+  it('warns with plain copy when every qtype is zero', async () => {
+    const warning = vi.spyOn(ElMessage, 'warning')
+    const wrapper = await mountView()
+    for (const qtype of ['单选', '多选', '填空', '解答']) {
+      const input = wrapper.get(`[data-testid="qtype-ratio-${qtype}"] input`)
+      await input.setValue('0')
+      await input.trigger('change')
+    }
+    await generate(wrapper)
+    expect(papers.generatePaper).not.toHaveBeenCalled()
+    expect(warning).toHaveBeenCalledWith('请至少给一个题型设置占比')
+  })
+
+  it('warns with plain copy when every difficulty is zero', async () => {
+    const warning = vi.spyOn(ElMessage, 'warning')
+    const wrapper = await mountView()
+    const sliders = wrapper.findAllComponents({ name: 'ElSlider' })
+    sliders[1].vm.$emit('update:modelValue', 0)
+    sliders[2].vm.$emit('update:modelValue', 0)
+    await flushPromises()
+    await generate(wrapper)
+    expect(papers.generatePaper).not.toHaveBeenCalled()
+    expect(warning).toHaveBeenCalledWith('请至少选择一个难度档位')
+  })
+
   it('renders the preview and total after generating', async () => {
     papers.generatePaper.mockResolvedValue(preview())
     const wrapper = await mountView()

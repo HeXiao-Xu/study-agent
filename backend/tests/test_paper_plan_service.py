@@ -92,12 +92,12 @@ def test_build_constraints_generates_seed_in_range():
 
 def test_generate_in_rejects_all_zero_qtype_ratio():
     # 零权重在 schema 层就被挡住，build_constraints 里那层过滤只是防御
-    with pytest.raises(ValidationError, match="至少一个题型配比"):
+    with pytest.raises(ValidationError, match="请至少给一个题型设置占比"):
         make_payload(qtype_ratio={"单选": 0})
 
 
 def test_generate_in_rejects_kp_weight_outside_selection():
-    with pytest.raises(ValidationError, match="kp_weights"):
+    with pytest.raises(ValidationError, match="知识点权重只能设置已选中的知识点"):
         make_payload(kp_weights={999: 1.0})
 
 
@@ -283,7 +283,7 @@ def test_save_draft_recomputes_total_and_forces_draft():
 def test_save_draft_rejects_missing_question_ids_and_writes_nothing():
     session = FakeSession(results=[[(501, "单选")]])
     payload = PaperSaveIn(title="t", constraint=make_payload(), question_ids=[501, 999])
-    with pytest.raises(InvalidParamError, match="999"):
+    with pytest.raises(InvalidParamError, match="有题目已不存在"):
         paper_plan_service.save_draft(session, payload, user_id=50)
     assert session.committed == 0
     assert session.added == []
