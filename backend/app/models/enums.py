@@ -67,6 +67,7 @@ class LLMCallScene(StrEnum):
     GEN = "gen"
     GRAPH = "graph"
     AGENT = "agent"
+    REPORT = "report"
 
 
 class LLMCallStatus(StrEnum):

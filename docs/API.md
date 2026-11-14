@@ -982,10 +982,91 @@
 - 错误：404/40400「复习项不存在」；409/40900「该复习项已完成」；403/40300 非 student
 - 说明：done/skip 只写 `done_at`，不改掌握度；later 只把 `due_at` 顺延到次日 00:00
 
-### GET /api/v1/reports/mastery?range=30d
-- 权限：student
-- 类型：同步
-- 出参：掌握度数据（雷达图/热力图/学习轨迹所需，方案 6.8）
+### GET /api/v1/reports/mastery
+- 权限：`student`（teacher/parent/admin → 403/40300；只查本人，不接受 `student_id`）
+- 类型：同步、只读
+- 说明：学习报告的图表数据，供前端画「模块雷达 + 知识点 Treemap + 近 N 天趋势」。
+- 入参：`range`（可选，`7d`｜`30d`｜`90d`，默认 `30d`；其他值 422/42200）
+- 出参：`Envelope[ReportOverviewOut]`
+
+  ```json
+  {
+    "range": {"key": "30d", "from": "2026-10-16", "to": "2026-11-14"},
+    "subjects": [
+      {
+        "subject_id": 7,
+        "subject_name": "高中数学",
+        "modules": [
+          {"kp_id": 115, "kp_name": "集合与常用逻辑用语", "exam_weight": 0.8,
+           "kp_count": 8, "assessed_count": 2, "mastery": 0.512}
+        ],
+        "heatmap": [
+          {"kp_id": 115, "kp_name": "集合与常用逻辑用语", "parent_id": null,
+           "level": 2, "exam_weight": 0.8, "mastery": 0.5, "mastery_t": 0.48,
+           "color_value": 0.52, "assessed": true}
+        ]
+      }
+    ],
+    "trend": [
+      {"date": "2026-11-14", "new_notes": 0, "reviews_done": 0,
+       "new_mistakes": 3, "mastered_mistakes": 1, "mistakes_net": 2}
+    ]
+  }
+  ```
+
+- 口径：
+  - `range` **只影响趋势**；`modules`/`heatmap` 是当前时刻的掌握度快照，不随 range 变。
+  - 全部日界/补零按 **UTC**，与 `GET /stats/overview` 一致。
+  - `modules` 固定返回全部 level=2 模块（按 `kp_id ASC`）；`mastery` = 模块子树（含模块自身）内**已评估**知识点的 `M_t` 简单均值，保留 3 位；无已评估行 = `null`（不冒充 0）；`kp_count`/`assessed_count` 均含模块自身。
+  - `heatmap` 固定返回 level 2–4 全量节点，按 `level ASC, kp_id ASC`；level2 的 `parent_id` 归一为 `null`，level3/4 用真实父 id；未评估节点 `mastery/mastery_t/color_value=null`、`assessed=false`；有评估时 `color_value = round(1 - mastery_t, 3)`。
+  - `trend` 长度 = 7/30/90，按天补零；`new_notes` = 当天新建且未软删笔记；`reviews_done` = 当天 `review_items.done_at`（done/skip 都算，**只反映当前行快照**）；`new_mistakes` = 当天新增错题；`mastered_mistakes` = 当前已掌握且 `last_review_at` 落在当天；`mistakes_net = new_mistakes - mastered_mistakes`。
+  - `subjects` 只包含至少有一个 level=2 知识点的学科；当前库只有数学。
+- 错误：401/40100、403/40300、422/42200
+
+### POST /api/v1/reports/weekly
+- 权限：`student`（teacher/parent/admin → 403/40300；只查本人）
+- 类型：同步；可能耗时数秒（LLM），无请求体；不接受客户端传入统计数字
+- 说明：用最近 7 个 UTC 日的结构化统计生成 Markdown 周报，不落库、不缓存。
+- 出参：`Envelope[WeeklyReportOut]`
+
+  ```json
+  {
+    "period": {"from": "2026-11-08", "to": "2026-11-14", "days": 7},
+    "generated_by": "llm",
+    "report_md": "## 本周概览\n...",
+    "stats": {
+      "totals": {"new_notes": 0, "reviews_done": 0, "new_mistakes": 3,
+                  "mastered_mistakes": 1, "mistakes_net": 2},
+      "active_days": 1,
+      "mastery": {
+        "assessed_kp_count": 10,
+        "avg_mastery": 0.351,
+        "weak_modules": [
+          {"subject_id": 7, "kp_id": 120, "kp_name": "数列", "mastery": 0.35}
+        ],
+        "weak_kps": [
+          {"subject_id": 7, "kp_id": 197, "kp_name": "同角三角函数基本关系",
+           "level": 4, "mastery": 0.144}
+        ]
+      },
+      "trend": ["同 GET 的 7 个点"]
+    },
+    "validation": {
+      "ok": true, "attempts": 1,
+      "checked_numbers": ["0", "3", "1", "2", "10", "0.351", "7"],
+      "invalid_numbers": []
+    }
+  }
+  ```
+
+- 口径：
+  - `period` 为最近 7 个 UTC 日（`from = today-6`，`to = today`）。
+  - `totals` = 7 天趋势逐项求和；`active_days` = 四项活动至少一项 > 0 的天数。
+  - `mastery` 是当前快照：`assessed_kp_count` = 本人 mastery 行数；`avg_mastery` = 全部行 `M_t` 简单平均（无行 null）；`weak_modules`/`weak_kps` 按 `M_t` 升序取最低 3/5，字段 `mastery` 填 `M_t`。
+  - 不提供「复习完成率 / 薄弱点变化」；`reviews_done` 只是当前 `done_at` 快照，重开后历史完成数会丢失。
+  - 周报只允许使用输入 `stats` 中出现的数字；代码提取阿拉伯数字逐个比对，失败带非法数字重试最多 2 次；仍失败 500/50000，不返回报告。
+  - 无学习数据（五项 totals 全 0 且 `assessed_kp_count=0`）：返回固定空文案，`generated_by="empty"`、`attempts=0`，不调用 LLM。
+- 错误：401/40100、403/40300、500/50000「周报生成失败」（LLM 调用或数字校验重试耗尽；不泄露 Prompt/模型响应/Key）
 
 ## 10. Agent
 
