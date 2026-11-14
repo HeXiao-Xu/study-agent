@@ -35,10 +35,12 @@ describe('reports api', () => {
     })
   })
 
-  it('posts weekly generation without a body', async () => {
+  it('posts weekly generation with a longer timeout', async () => {
     http.post.mockResolvedValue(envelope<WeeklyReport>({ generated_by: 'empty' } as WeeklyReport))
     const data = await generateWeeklyReport()
-    expect(http.post).toHaveBeenCalledWith('/api/v1/reports/weekly')
+    expect(http.post).toHaveBeenCalledWith('/api/v1/reports/weekly', undefined, {
+      timeout: 90_000,
+    })
     expect(data.generated_by).toBe('empty')
   })
 })
