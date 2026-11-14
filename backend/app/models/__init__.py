@@ -18,6 +18,7 @@ from app.models.paper import Paper
 from app.models.prompt_template import PromptTemplate
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
+from app.models.review_item import ReviewItem
 from app.models.subject import Subject
 from app.models.user import User
 from app.models.user_relation import UserRelation
@@ -42,6 +43,7 @@ __all__ = [
     "PromptTemplate",
     "Question",
     "QuestionKp",
+    "ReviewItem",
     "Subject",
     "User",
     "UserRelation",

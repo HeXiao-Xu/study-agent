@@ -139,3 +139,14 @@ class PaperGeneratedBy(StrEnum):
 
 PAPER_STATUSES: tuple[str, ...] = tuple(item.value for item in PaperStatus)
 PAPER_GENERATED_BY: tuple[str, ...] = tuple(item.value for item in PaperGeneratedBy)
+
+
+class ReviewRefType(StrEnum):
+    """review_items.ref_type：复习项指向的资源类型（SCHEMA §6.4/§10.11）。"""
+
+    NOTE = "note"
+    QUESTION = "question"
+    MISTAKE = "mistake"
+
+
+REVIEW_REF_TYPES: tuple[str, ...] = tuple(item.value for item in ReviewRefType)

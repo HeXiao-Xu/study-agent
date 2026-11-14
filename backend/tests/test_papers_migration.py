@@ -58,7 +58,7 @@ def test_user_fk_cascades_and_is_indexed():
     assert "ix_papers_user_id" in index_names
 
 
-def test_migration_chain_head_is_s5_4():
+def test_migration_chain_head_is_s5_5():
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "0015_s5_4"
+    assert script.get_current_head() == "0016_s5_5"
