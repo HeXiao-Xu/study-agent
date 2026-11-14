@@ -6,7 +6,7 @@ import type { ReportOverview, WeeklyReport } from '@/types/reports'
 const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('@/api/http', () => ({ default: http, API_PREFIX: '/api/v1' }))
 
-import { fetchReportOverview, generateWeeklyReport } from './reports'
+import { fetchReportOverview, fetchWeeklyReport, generateWeeklyReport } from './reports'
 
 function envelope<T>(data: T) {
   const body: ApiEnvelope<T> = { code: 0, message: 'ok', trace_id: 't', data }
@@ -33,6 +33,15 @@ describe('reports api', () => {
     expect(http.get).toHaveBeenCalledWith('/api/v1/reports/mastery', {
       params: { range: '30d' },
     })
+  })
+
+  it('gets the cached weekly report or null', async () => {
+    http.get.mockResolvedValueOnce(envelope<WeeklyReport | null>(null))
+    expect(await fetchWeeklyReport()).toBeNull()
+    expect(http.get).toHaveBeenCalledWith('/api/v1/reports/weekly')
+
+    http.get.mockResolvedValueOnce(envelope<WeeklyReport | null>({ generated_by: 'empty' } as WeeklyReport))
+    expect((await fetchWeeklyReport())?.generated_by).toBe('empty')
   })
 
   it('posts weekly generation with a longer timeout', async () => {

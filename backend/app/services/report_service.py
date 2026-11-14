@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -11,10 +12,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import Date, func, literal_column, select
 from sqlalchemy.orm import Session
 
 from app.ai.report import weekly_report
+from app.core.cache import Cache
 from app.core.exceptions import CODE_INTERNAL, AppError
 from app.models.enums import MistakeStatus
 from app.models.knowledge_point import KnowledgePoint
@@ -43,6 +46,10 @@ from app.services import mastery_service, stats_service
 
 RANGES: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 DEFAULT_RANGE = "30d"
+WEEKLY_CACHE_VERSION = "report:weekly:v1"
+WEEKLY_CACHE_TTL_SECONDS = 48 * 3600
+
+logger = logging.getLogger(__name__)
 
 Window = stats_service.Window
 
@@ -513,6 +520,41 @@ def _validation_tuple(
 ) -> tuple[list[str], list[str]]:
     result = validate_numbers(text, stats)
     return result.checked_numbers, result.invalid_numbers
+
+
+def weekly_cache_key(user_id: int, period_to: date) -> str:
+    return f"{WEEKLY_CACHE_VERSION}:{user_id}:{period_to.isoformat()}"
+
+
+def store_weekly_report(
+    cache: Cache, *, user_id: int, report: WeeklyReportOut
+) -> bool:
+    """best-effort 写入当天结果；缓存故障不影响已生成的周报。"""
+    try:
+        return cache.set(
+            weekly_cache_key(user_id, report.period.to),
+            report.model_dump_json(by_alias=True),
+            WEEKLY_CACHE_TTL_SECONDS,
+        )
+    except Exception:
+        logger.warning("weekly_report_cache_write_failed")
+        return False
+
+
+def load_weekly_report(
+    cache: Cache, *, user_id: int, now: datetime | None = None
+) -> WeeklyReportOut | None:
+    moment = now or datetime.now(timezone.utc)
+    key = weekly_cache_key(user_id, moment.date())
+    raw = cache.get(key)
+    if raw is None:
+        return None
+    try:
+        return WeeklyReportOut.model_validate_json(raw)
+    except (ValidationError, ValueError, TypeError):
+        logger.warning("weekly_report_cache_payload_invalid")
+        cache.delete(key)
+        return None
 
 
 def generate_weekly(

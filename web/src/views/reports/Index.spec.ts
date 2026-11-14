@@ -27,6 +27,7 @@ vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 
 const api = vi.hoisted(() => ({
   fetchReportOverview: vi.fn(),
+  fetchWeeklyReport: vi.fn(),
   generateWeeklyReport: vi.fn(),
 }))
 vi.mock('@/api/reports', () => api)
@@ -90,6 +91,7 @@ function mountPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   api.fetchReportOverview.mockResolvedValue(overview())
+  api.fetchWeeklyReport.mockResolvedValue(null)
   api.generateWeeklyReport.mockResolvedValue(weekly())
 })
 
@@ -115,11 +117,32 @@ describe('Reports 页面', () => {
   it('进入页面不生成周报，点击后才调用', async () => {
     const wrapper = mountPage()
     await flushPromises()
+    expect(api.fetchWeeklyReport).toHaveBeenCalledTimes(1)
     expect(api.generateWeeklyReport).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="weekly-generate"]').text()).toContain('生成周报')
     await wrapper.get('[data-testid="weekly-generate"]').trigger('click')
     await flushPromises()
     expect(api.generateWeeklyReport).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-testid="weekly-report"]').text()).toContain('本周新增 1 条')
+  })
+
+  it('进入页面读取当天缓存的周报', async () => {
+    api.fetchWeeklyReport.mockResolvedValue(weekly())
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="weekly-report"]').text()).toContain('本周新增 1 条')
+    expect(wrapper.get('[data-testid="weekly-generate"]').text()).toContain('重新生成周报')
+  })
+
+  it('重新生成失败时保留已缓存的周报', async () => {
+    api.fetchWeeklyReport.mockResolvedValue(weekly({ report_md: '缓存的旧周报' }))
+    api.generateWeeklyReport.mockRejectedValue(new Error('boom'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-testid="weekly-generate"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="weekly-error"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="weekly-report"]').text()).toContain('缓存的旧周报')
   })
 
   it('空数据给空态，不画假图', async () => {

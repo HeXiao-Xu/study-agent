@@ -11,7 +11,11 @@ import { ElMessage } from 'element-plus'
 import { MdPreview } from 'md-editor-v3'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { fetchReportOverview, generateWeeklyReport } from '@/api/reports'
+import {
+  fetchReportOverview,
+  fetchWeeklyReport,
+  generateWeeklyReport,
+} from '@/api/reports'
 import EmptyState from '@/components/common/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import type { ReportOverview, ReportRange, WeeklyReport } from '@/types/reports'
@@ -55,6 +59,9 @@ const subjectIndex = ref(0)
 const weekly = ref<WeeklyReport | null>(null)
 const weeklyLoading = ref(false)
 const weeklyError = ref('')
+const weeklyButtonLabel = computed(() =>
+  weekly.value === null ? '生成周报' : '重新生成周报',
+)
 const exporting = ref(false)
 const chartsReady = ref(false)
 
@@ -141,6 +148,17 @@ watch(subjectIndex, async () => {
   render()
 })
 
+async function loadWeeklyCache(): Promise<void> {
+  weeklyLoading.value = true
+  try {
+    weekly.value = await fetchWeeklyReport()
+  } catch {
+    weekly.value = null
+  } finally {
+    weeklyLoading.value = false
+  }
+}
+
 async function onWeekly(): Promise<void> {
   if (weeklyLoading.value) return
   weeklyLoading.value = true
@@ -148,7 +166,6 @@ async function onWeekly(): Promise<void> {
   try {
     weekly.value = await generateWeeklyReport()
   } catch {
-    weekly.value = null
     weeklyError.value = '周报生成失败，请稍后重试'
   } finally {
     weeklyLoading.value = false
@@ -198,6 +215,7 @@ async function onExport(): Promise<void> {
 
 onMounted(() => {
   void load()
+  void loadWeeklyCache()
 })
 
 onBeforeUnmount(() => {
@@ -309,11 +327,11 @@ onBeforeUnmount(() => {
             data-testid="weekly-generate"
             @click="onWeekly"
           >
-            生成周报
+            {{ weeklyButtonLabel }}
           </el-button>
         </div>
         <p class="weekly-hint">
-          仅点击后调用真实 LLM，约需数秒；空数据会返回固定文案。
+          页面会读取当天已生成的周报；只有生成/重新生成才调用真实 LLM，约需数秒。
         </p>
         <el-alert
           v-if="weeklyError"

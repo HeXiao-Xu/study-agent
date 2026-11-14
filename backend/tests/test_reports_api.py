@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_db
+from app.api.v1 import reports as reports_api
+from app.core.cache import MemoryCache
 from app.core.security import create_access_token
 from app.main import app
 from app.models.user import User
@@ -21,6 +23,14 @@ from app.schemas.report import (
     WeeklyTotalsOut,
 )
 from app.services import report_service
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch) -> MemoryCache:
+    """禁止接口测试写真实 Redis；需要时测试可再次覆盖 get_cache。"""
+    cache = MemoryCache()
+    monkeypatch.setattr(reports_api, "get_cache", lambda: cache)
+    return cache
 
 
 def _user(role: str = "student") -> User:
@@ -93,6 +103,7 @@ def _weekly() -> WeeklyReportOut:
 def test_reports_api_requires_auth() -> None:
     with TestClient(app) as client:
         assert client.get("/api/v1/reports/mastery").status_code == 401
+        assert client.get("/api/v1/reports/weekly").status_code == 401
         assert client.post("/api/v1/reports/weekly").status_code == 401
 
 
@@ -100,6 +111,7 @@ def test_reports_api_rejects_non_student() -> None:
     client = _client(_user("teacher"))
     try:
         assert client.get("/api/v1/reports/mastery").status_code == 403
+        assert client.get("/api/v1/reports/weekly").status_code == 403
         assert client.post("/api/v1/reports/weekly").status_code == 403
     finally:
         app.dependency_overrides.clear()
@@ -146,6 +158,64 @@ def test_mastery_defaults_to_30d(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         assert client.get("/api/v1/reports/mastery").status_code == 200
         assert captured["range_key"] == "30d"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_weekly_get_returns_cached_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    cache = object()
+    seen: dict[str, object] = {}
+
+    def fake_load(cache_arg, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        seen.update({"cache": cache_arg, **kwargs})
+        return _weekly()
+
+    monkeypatch.setattr(reports_api, "get_cache", lambda: cache)
+    monkeypatch.setattr(report_service, "load_weekly_report", fake_load)
+    client = _client(_user())
+    try:
+        resp = client.get("/api/v1/reports/weekly")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert seen == {"cache": cache, "user_id": 50}
+        assert data["report_md"] == "本周暂无学习记录。"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_weekly_get_returns_null_on_cache_miss(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(reports_api, "get_cache", lambda: object())
+    monkeypatch.setattr(
+        report_service, "load_weekly_report", lambda cache, **kwargs: None
+    )
+    client = _client(_user())
+    try:
+        resp = client.get("/api/v1/reports/weekly")
+        assert resp.status_code == 200
+        assert resp.json()["data"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_weekly_post_writes_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    cache = object()
+    captured: dict[str, object] = {}
+    report = _weekly()
+
+    monkeypatch.setattr(reports_api, "get_cache", lambda: cache)
+    monkeypatch.setattr(
+        report_service, "generate_weekly", lambda session, **kwargs: report
+    )
+
+    def fake_store(cache_arg, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        captured.update({"cache": cache_arg, **kwargs})
+        return True
+
+    monkeypatch.setattr(report_service, "store_weekly_report", fake_store)
+    client = _client(_user())
+    try:
+        assert client.post("/api/v1/reports/weekly").status_code == 200
+        assert captured == {"cache": cache, "user_id": 50, "report": report}
     finally:
         app.dependency_overrides.clear()
 

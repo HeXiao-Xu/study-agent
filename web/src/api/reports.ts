@@ -11,6 +11,13 @@ export async function fetchReportOverview(
   return resp.data.data
 }
 
+export async function fetchWeeklyReport(): Promise<WeeklyReport | null> {
+  const resp = await http.get<ApiEnvelope<WeeklyReport | null>>(
+    `${API_PREFIX}/reports/weekly`,
+  )
+  return resp.data.data
+}
+
 export async function generateWeeklyReport(): Promise<WeeklyReport> {
   // 周报同步调 LLM 且可能因数字校验重试，全局 15s 会把成功响应误判为网络失败。
   const resp = await http.post<ApiEnvelope<WeeklyReport>>(

@@ -5,10 +5,93 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from app.core.cache import MemoryCache
 from app.core.exceptions import InvalidParamError
+from app.schemas.report import (
+    NumberValidationOut,
+    WeeklyMasteryOut,
+    WeeklyPeriodOut,
+    WeeklyReportOut,
+    WeeklyStatsOut,
+    WeeklyTotalsOut,
+)
 from app.services import report_service
 
 NOW = datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc)
+
+
+def _weekly_report() -> WeeklyReportOut:
+    return WeeklyReportOut(
+        period=WeeklyPeriodOut(
+            from_=date(2026, 11, 8), to=date(2026, 11, 14), days=7
+        ),
+        generated_by="empty",
+        report_md="本周暂无学习记录。",
+        stats=WeeklyStatsOut(
+            totals=WeeklyTotalsOut(
+                new_notes=0,
+                reviews_done=0,
+                new_mistakes=0,
+                mastered_mistakes=0,
+                mistakes_net=0,
+            ),
+            active_days=0,
+            mastery=WeeklyMasteryOut(
+                assessed_kp_count=0,
+                avg_mastery=None,
+                weak_modules=[],
+                weak_kps=[],
+            ),
+            trend=[],
+        ),
+        validation=NumberValidationOut(
+            ok=True, attempts=0, checked_numbers=[], invalid_numbers=[]
+        ),
+    )
+
+
+def test_weekly_cache_key_is_scoped_by_user_and_period_end():
+    assert report_service.weekly_cache_key(50, date(2026, 11, 14)) != (
+        report_service.weekly_cache_key(51, date(2026, 11, 14))
+    )
+    assert report_service.weekly_cache_key(50, date(2026, 11, 14)) != (
+        report_service.weekly_cache_key(50, date(2026, 11, 15))
+    )
+
+
+def test_weekly_cache_roundtrip_uses_alias_and_ttl():
+    cache = MemoryCache()
+    report = _weekly_report()
+
+    assert report_service.store_weekly_report(cache, user_id=50, report=report) is True
+    key = report_service.weekly_cache_key(50, date(2026, 11, 14))
+    raw = cache.get(key)
+    assert raw is not None
+    assert '"from":"2026-11-08"' in raw
+    assert report_service.load_weekly_report(cache, user_id=50, now=NOW) == report
+
+
+def test_weekly_cache_is_isolated_by_user_and_day():
+    cache = MemoryCache()
+    report = _weekly_report()
+    report_service.store_weekly_report(cache, user_id=50, report=report)
+
+    assert report_service.load_weekly_report(cache, user_id=51, now=NOW) is None
+    assert (
+        report_service.load_weekly_report(
+            cache, user_id=50, now=datetime(2026, 11, 15, 9, tzinfo=timezone.utc)
+        )
+        is None
+    )
+
+
+def test_weekly_cache_drops_corrupt_payload():
+    cache = MemoryCache()
+    key = report_service.weekly_cache_key(50, date(2026, 11, 14))
+    cache.set(key, "{not-json", 60)
+
+    assert report_service.load_weekly_report(cache, user_id=50, now=NOW) is None
+    assert cache.get(key) is None
 
 
 def test_build_window_30d_has_thirty_utc_days():
