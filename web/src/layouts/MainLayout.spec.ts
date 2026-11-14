@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { UserOut } from '@/types/auth'
 import MainLayout from './MainLayout.vue'
 
-const user: UserOut = {
+const student: UserOut = {
   id: 1,
   username: 's211_student',
   nickname: '测试用户_1',
@@ -17,9 +17,18 @@ const user: UserOut = {
   created_at: '2026-10-27T00:00:00Z',
 }
 
+const teacher: UserOut = {
+  id: 2,
+  username: 's211_teacher',
+  nickname: '测试老师_1',
+  grade: null,
+  role: 'teacher',
+  created_at: '2026-10-27T00:00:00Z',
+}
+
 const Dummy = { template: '<div class="dummy-page" />' }
 
-async function mountLayout(path = '/notes') {
+async function mountLayout(path = '/notes', role: UserOut['role'] = 'student') {
   const pinia = createPinia()
   setActivePinia(pinia)
   const router = createRouter({
@@ -35,9 +44,19 @@ async function mountLayout(path = '/notes') {
           { path: 'questions', name: 'questions', component: Dummy },
           { path: 'papers/generate', name: 'paper-generate', component: Dummy },
           { path: 'practice', name: 'practice', component: Dummy },
-          { path: 'qa', name: 'qa', component: Dummy },
+          {
+            path: 'qa',
+            name: 'qa',
+            component: Dummy,
+            meta: { title: '智能问答', nav: 'qa', roles: ['student'] },
+          },
           { path: 'mistakes', name: 'mistakes', component: Dummy },
-          { path: 'review', name: 'review', component: Dummy },
+          {
+            path: 'review',
+            name: 'review',
+            component: Dummy,
+            meta: { title: '复习清单', nav: 'review', roles: ['student'] },
+          },
           { path: 'reports', name: 'reports', component: Dummy },
           { path: 'graph', name: 'graph', component: Dummy },
           { path: 'stats', name: 'stats', component: Dummy },
@@ -48,7 +67,7 @@ async function mountLayout(path = '/notes') {
   await router.push(path)
   await router.isReady()
   const auth = useAuthStore()
-  auth.setSession('token-1', user)
+  auth.setSession('token-1', role === 'teacher' ? teacher : student)
   const wrapper = mount(MainLayout, {
     global: { plugins: [pinia, router, ElementPlus] },
   })
@@ -80,6 +99,22 @@ describe('MainLayout', () => {
     const { wrapper } = await mountLayout('/notes')
     const active = wrapper.find('[data-testid="nav-link"][aria-current="page"]')
     expect(active.text()).toContain('笔记')
+  })
+
+  it('教师进入学生专属页时保留导航并在右侧显示无权限', async () => {
+    const { wrapper } = await mountLayout('/qa', 'teacher')
+
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(12)
+    expect(wrapper.text()).toContain('暂不支持查看')
+    expect(wrapper.text()).toContain('智能问答功能仅向学生开放')
+    expect(wrapper.find('.dummy-page').exists()).toBe(false)
+  })
+
+  it('学生正常进入学生专属页', async () => {
+    const { wrapper } = await mountLayout('/qa', 'student')
+
+    expect(wrapper.find('.dummy-page').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('暂不支持查看')
   })
 
   it('renders nickname and role label', async () => {

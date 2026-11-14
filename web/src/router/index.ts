@@ -194,7 +194,11 @@ router.beforeEach(async (to) => {
     redirectPath: to.fullPath,
   })
 
-  if (decision.type === 'forbidden') return { path: '/403' }
+  if (decision.type === 'forbidden') {
+    // 已登录但角色不符：交给 MainLayout 在右侧渲染无权限，保留导航。
+    if (auth.user) return true
+    return { path: '/403' }
+  }
   if (decision.type === 'login') {
     return { path: '/login', query: { redirect: decision.redirect } }
   }
