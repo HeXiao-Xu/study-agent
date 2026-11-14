@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Playwright/Chromium 的临时目录；开发机系统 temp 在沙箱下不可写时指向仓库 .cache
     pdf_tmp_dir: str | None = None
 
+    # --- 复习调度（S5-5）---
+    review_timezone: str = "Asia/Shanghai"
+    review_daily_minutes: int = Field(default=35, ge=10, le=120)
+
     # --- 异步任务（S2-7，ARQ Worker）---
     task_max_tries: int = 3
     task_retry_base_seconds: float = 2.0
