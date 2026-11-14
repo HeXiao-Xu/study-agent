@@ -118,14 +118,26 @@ const router = createRouter({
           meta: { title: '统计', nav: 'stats', roles: ['student'] },
         },
         {
+          path: 'review',
+          name: 'review',
+          component: () => import('@/views/review/Today.vue'),
+          meta: { title: '复习清单', nav: 'review', roles: ['student'] },
+        },
+        {
+          path: 'reports',
+          name: 'reports',
+          component: () => import('@/views/reports/Index.vue'),
+          meta: { title: '学习报告', nav: 'reports', roles: ['student'] },
+        },
+        {
+          path: 'practice',
+          name: 'practice',
+          component: () => import('@/views/practice/PracticeHome.vue'),
+          meta: { title: '练习', nav: 'practice', roles: ['student'] },
+        },
+        {
           path: 'plan',
-          name: 'plan',
-          component: () => import('@/views/ComingSoonView.vue'),
-          meta: {
-            title: '复习计划',
-            task: 'S4-4',
-            description: '按掌握度生成每日复习任务。',
-          },
+          redirect: '/review',
         },
         {
           path: 'debug',
