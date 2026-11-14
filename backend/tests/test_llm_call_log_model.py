@@ -17,6 +17,7 @@ def test_llm_call_scene_and_status_values_match_schema() -> None:
         "gen",
         "graph",
         "agent",
+        "report",
     }
     assert {item.value for item in LLMCallStatus} == {"success", "failed"}
 
@@ -62,5 +63,5 @@ def test_llm_call_log_constraints_and_indexes_exist() -> None:
 def test_llm_call_log_check_text_is_rendered() -> None:
     assert in_check("scene", LLMCallScene) == (
         "scene IN ('qa', 'query_rewrite', 'kp_align', 'embed', "
-        "'mistake', 'gen', 'graph', 'agent')"
+        "'mistake', 'gen', 'graph', 'agent', 'report')"
     )
