@@ -33,9 +33,14 @@ async function mountLayout(path = '/notes') {
           { path: 'files', name: 'files', component: Dummy },
           { path: 'knowledge', name: 'knowledge', component: Dummy },
           { path: 'questions', name: 'questions', component: Dummy },
+          { path: 'papers/generate', name: 'paper-generate', component: Dummy },
+          { path: 'practice', name: 'practice', component: Dummy },
           { path: 'qa', name: 'qa', component: Dummy },
           { path: 'mistakes', name: 'mistakes', component: Dummy },
-          { path: 'plan', name: 'plan', component: Dummy },
+          { path: 'review', name: 'review', component: Dummy },
+          { path: 'reports', name: 'reports', component: Dummy },
+          { path: 'graph', name: 'graph', component: Dummy },
+          { path: 'stats', name: 'stats', component: Dummy },
         ],
       },
     ],
@@ -56,9 +61,9 @@ describe('MainLayout', () => {
     localStorage.clear()
   })
 
-  it('renders nine nav items', async () => {
+  it('renders all nav items', async () => {
     const { wrapper } = await mountLayout()
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(10)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(12)
   })
 
   it('导航项不再显示 01/02 这类序号', async () => {
