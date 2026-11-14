@@ -1064,7 +1064,7 @@
   - `totals` = 7 天趋势逐项求和；`active_days` = 四项活动至少一项 > 0 的天数。
   - `mastery` 是当前快照：`assessed_kp_count` = 本人 mastery 行数；`avg_mastery` = 全部行 `M_t` 简单平均（无行 null）；`weak_modules`/`weak_kps` 按 `M_t` 升序取最低 3/5，字段 `mastery` 填 `M_t`。
   - 不提供「复习完成率 / 薄弱点变化」；`reviews_done` 只是当前 `done_at` 快照，重开后历史完成数会丢失。
-  - 周报只允许使用输入 `stats` 中出现的数字；代码提取阿拉伯数字逐个比对，失败带非法数字重试最多 2 次；仍失败 500/50000，不返回报告。
+  - 周报只允许使用输入 `stats` 与 `period` 中出现的数字（含日期拆出的年/月/日）；代码提取阿拉伯数字逐个比对，失败带非法数字重试最多 2 次；仍失败 500/50000，不返回报告。
   - 无学习数据（五项 totals 全 0 且 `assessed_kp_count=0`）：返回固定空文案，`generated_by="empty"`、`attempts=0`，不调用 LLM。
 - 错误：401/40100、403/40300、500/50000「周报生成失败」（LLM 调用或数字校验重试耗尽；不泄露 Prompt/模型响应/Key）
 
