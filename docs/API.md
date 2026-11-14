@@ -951,8 +951,36 @@
 
 ### GET /api/v1/review/today
 - 权限：student
+- 类型：同步、只读（不隐式生成；前端进入页面先调 `POST /review/refresh`）
+- 出参：
+
+  | 字段 | 类型 | 说明 |
+  |---|---|---|
+  | date | string | 本地日期 `YYYY-MM-DD` |
+  | timezone | string | 生效时区 |
+  | items | array | 复习项，按 priority 降序、mastery_t 升序、kp_id 升序 |
+  | item_count | int | 项数 |
+  | total_minutes | int | 预估总分钟 |
+  | cap_minutes | int | 当前上限（默认 35） |
+  | truncated_count | int? | GET 恒 null；refresh 返回实际顺延数 |
+
+  `items[]`：`{id,kp_id,kp_name,subject_id,ref_type,ref_id,ref_title,ref_available,due_at,interval_days,priority,estimated_minutes,mastery,mastery_t,stability,attempts,overdue_days,low_mastery,done_at}`。
+- 说明：`ref_type` 为 `question` 或 `mistake`；`ref_available=false` 表示资源已被删除。空清单 200。
+
+### POST /api/v1/review/refresh
+- 权限：student
+- 类型：同步；按当前用户重算并提交
+- 出参：同 `GET /review/today`，`truncated_count` 为本次实际顺延到明天的条数
+- 行为：幂等；当天已完成（done/skip）的项不重开；无掌握度行返回空清单
+
+### POST /api/v1/review/items/{item_id}/done
+### POST /api/v1/review/items/{item_id}/skip
+### POST /api/v1/review/items/{item_id}/later
+- 权限：student，仅本人
 - 类型：同步
-- 出参：今日复习清单（priority = 0.5·(1−M_t) + 0.3·逾期程度 + 0.2·考纲权重；M_t < 0.4 天天出现；总量控制在 30–40 分钟，方案 6.6）
+- 出参：更新后的 `ReviewItemOut`
+- 错误：404/40400「复习项不存在」；409/40900「该复习项已完成」；403/40300 非 student
+- 说明：done/skip 只写 `done_at`，不改掌握度；later 只把 `due_at` 顺延到次日 00:00
 
 ### GET /api/v1/reports/mastery?range=30d
 - 权限：student

@@ -13,6 +13,7 @@ from app.api.v1 import (
     qa,
     questions,
     retrieval,
+    review,
     stats,
     tasks,
 )
@@ -30,6 +31,7 @@ api_router.include_router(stats.router)
 api_router.include_router(retrieval.router)
 api_router.include_router(qa.router)
 api_router.include_router(papers.router)
+api_router.include_router(review.router)
 api_router.include_router(admin.router)
 
 __all__ = ["api_router"]
