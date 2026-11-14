@@ -805,3 +805,18 @@
 - 决策 7（前端）：`/papers/:id/take` 单页 + 题号面板 + 每题计时 + 800ms 防抖自动保存；未自评时交卷按钮禁用并提示；交卷后展示得分、逐题判分、kp 掌握度 before→after 与错题数；交卷后切到只读复习视图。
 - 验证：后端 1373 passed（新增迁移 5 / 判分与编排 36 / 接口 15 / 错题 2），前端 295 passed / 46 files，build 0；真实库 8 题卷（请求 19）交卷 31/59，单次命中 kp 手算一致，错题 5 道全 `待订正`；Chrome CDP 小卷 16/16 全链路通过。详见 `.sdd/s5-4/acceptance-evidence.md`。
 - 已知边界：真实题库组不出 20 题（本卷 8 题），验收按实际题量如实记录；自评有虚报风险；已提交不可重做；自动保存失败仅页面提示、无离线队列。
+
+## D-062 复习调度与每日清单（S5-5）
+
+- 背景：S4-7 已有掌握度与 `due_at`，但没有「今天该复习什么」的可执行清单；任务卡要求 35 分钟量级、弱项天天出现、连续 7 天模拟可验收。真实库当前只有 1 个学生有掌握度、10 条 mastery 行，因此验收必须自建专用学生并模拟 7 天。
+- 决策 1（只做后端）：本卡只交付表/服务/调度器/5 接口；`/plan` 前端页归 S5-7，避免 S5-7 之前造一个无法验收的页面。
+- 决策 2（一 kp 一行）：`review_items` 加 `UNIQUE(user_id,kp_id)`，刷新用 `INSERT ... ON CONFLICT DO UPDATE` 幂等；不加 `status`，避免「同一 kp 多条待办」和状态机歧义。代价是 done 与 skip 在库里不可区分，只影响统计不影响清单。
+- 决策 3（ref 选择）：未掌握错题优先（`待订正` 先于 `已订正`，按 `last_review_at or created_at` 倒序、id 倒序），没有错题回退到 `question_kps.weight` 最高的题；`ref_id` 是多态引用且**不加外键**，资源硬删后保留行、接口返回 `ref_available=false`。本轮不生成 `note` 类型。
+- 决策 4（硬上限 35 分钟）：`priority=0.5(1−M_t)+0.3·min(1,逾期天数/interval)+0.2·考纲权重`（缺权重按 0.5），按 priority 降序装填；弱项不豁免上限；至少保留 1 条；装不下的顺延到次日本地 00:00，refresh 返回 `truncated_count`。用户确认「35 分钟硬上限」而不是任务卡「30–40 分钟」的软目标。
+- 决策 5（done/skip 不改掌握度）：done/skip 都只写 `done_at`，later 只把 `due_at` 改到次日 00:00；掌握度只由真实作答（S4-7）更新，避免「点完成就涨掌握度」的假信号。当天已完成（done/skip）的项同日 refresh 不重开；已顺延（`due_at >= 次日 00:00`）的项同日 refresh 也不重开——后者是验收中发现的真机缺陷，已补回归用例。
+- 决策 6（5 个接口）：`GET /review/today` 只读；`POST /review/refresh` 生成并提交；`POST /review/items/{id}/done|skip|later`。GET 不隐式生成，前端进入页面先 refresh（S5-7 落实）。全部 `student` 且只查本人；不存在/越权统一 404，重复完成 409。
+- 决策 7（独立调度进程）：`python -m app.scheduler` 每日 00:05 `Asia/Shanghai` 跑一次，`--once` 供验收/手工补跑；用 `pg_try_advisory_lock(5505)` 防多实例重复，逐用户独立 session + commit，单用户失败记日志不拖垮整批。没有塞进 FastAPI 进程，避免多 worker 各跑一份。
+- 决策 8（APScheduler 依赖）：用户批准引入 `apscheduler==3.11.3`（PyPI 2026-11-14 最新稳定版，实际安装成功）；不引入 Celery/Redis 调度，复用 ARQ 之外的最小方案。
+- 决策 9（时间口径）：统一 `Asia/Shanghai`，所有「今天」用本地日界，DB 仍存 UTC；`M_t` 用 S4-7 `decayed_mastery`，间隔用 `review_interval_days`，不重复实现公式。排期只支持全局时区，不做 per-user 时区。
+- 验证：后端 1404 passed（新增迁移 5 / service 18 / API 6 / scheduler 2）；真实库 8 个 kp 连续 7 天模拟，每日 6 项 / 33–34 分钟 / 顺延 2 项，done/later 后同日 refresh 不返回该项；同一 session 内 Core upsert 后靠 `populate_existing=True` 防 identity map 旧值；真 HTTP refresh 与 GET 一致、重复 done 409、later 次日 00:00、他人 404、`scheduler --once` 2 用户 9 项且 8 行无重复。详见 `.sdd/s5-5/acceptance-evidence.md`。
+- 已知边界：硬上限会截断弱项（顺延不是丢弃）；done 与 skip 库内不可区分；`note` ref 未启用；`ref_id` 无外键；完成动作不改掌握度；单全局时区；调度器逐用户串行，用户量大时需分片/队列化；`GET /review/today` 只读，S5-7 必须记得先 refresh。

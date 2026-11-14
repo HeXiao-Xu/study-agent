@@ -42,7 +42,7 @@
 - Consumes: `Base`、`in_check()`、`ReviewRefType`
 - Produces: ORM `ReviewItem`，表 `review_items`；迁移 head `0016_s5_5`
 
-- [ ] **Step 1: 写迁移契约测试（先红）**
+- [x] **Step 1: 写迁移契约测试（先红）**
 
 创建 `backend/tests/test_review_migration.py`：
 
@@ -120,7 +120,7 @@ def test_migration_chain_head_is_s5_5():
     assert script.get_current_head() == "0016_s5_5"
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 
@@ -131,7 +131,7 @@ cd backend
 
 Expected: `ModuleNotFoundError: No module named 'app.models.review_item'`（或 head 断言失败）。
 
-- [ ] **Step 3: 建枚举与 ORM 模型**
+- [x] **Step 3: 建枚举与 ORM 模型**
 
 在 `backend/app/models/enums.py` 末尾追加：
 
@@ -224,7 +224,7 @@ from app.models.review_item import ReviewItem
 
 并在 `__all__` 末尾加 `"ReviewItem"`。
 
-- [ ] **Step 4: 写迁移 `0016_s5_5`**
+- [x] **Step 4: 写迁移 `0016_s5_5`**
 
 创建 `backend/alembic/versions/0016_s5_5.py`：
 
@@ -286,7 +286,7 @@ def downgrade() -> None:
     op.drop_table("review_items")
 ```
 
-- [ ] **Step 5: 更新 SCHEMA §6.4**
+- [x] **Step 5: 更新 SCHEMA §6.4**
 
 把 `docs/SCHEMA.md` 的 `### 6.4 review_items` 表后补：
 
@@ -294,7 +294,7 @@ def downgrade() -> None:
 > S5-5 落地口径：**唯一键 `uq_review_items_user_kp (user_id, kp_id)`**——一 kp 一条待办，刷新幂等；`interval_days` CHECK 1–30；`priority` NUMERIC(5,4) CHECK 0–1；`ref_id` 是多态引用（question/mistake），**故意不加外键**，资源被硬删后保留行并由接口返回 `ref_available=false`；不加 `status`：done/skip 都写 `done_at`，later 只改 `due_at` 到次日 00:00。
 ```
 
-- [ ] **Step 6: 跑迁移测试与真实迁移**
+- [x] **Step 6: 跑迁移测试与真实迁移**
 
 Run:
 
@@ -307,7 +307,7 @@ cd backend
 
 Expected: 全部 passed；`alembic current` 输出 `0016_s5_5 (head)`。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/models/review_item.py backend/app/models/enums.py backend/app/models/__init__.py \
@@ -337,7 +337,7 @@ git commit -m "feat(s5-5): review_items 表与迁移 0016"
   - `select_capped(plans: Sequence[ItemPlan], cap_minutes: int) -> tuple[list[ItemPlan], list[ItemPlan]]`
   - dataclasses `MasterySnapshot`、`RefChoice`、`ItemPlan`、`ReviewRowSnapshot`、`RefDetail`
 
-- [ ] **Step 1: 写纯函数测试（先红）**
+- [x] **Step 1: 写纯函数测试（先红）**
 
 创建 `backend/tests/test_review_service.py`，先写以下内容：
 
@@ -443,7 +443,7 @@ def test_select_capped_tie_breaks_by_mastery_then_kp_id():
     assert [item.kp_id for item in selected] == [1, 2]
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 
@@ -454,7 +454,7 @@ cd backend
 
 Expected: `ImportError` / `NameError`，`review_service` 尚未实现。
 
-- [ ] **Step 3: 实现常量、数据类与纯函数**
+- [x] **Step 3: 实现常量、数据类与纯函数**
 
 创建 `backend/app/services/review_service.py`：
 
@@ -600,7 +600,7 @@ def select_capped(
 
 > `review_interval_days` 在 Task 3 用到；本步 import 不影响纯测试。若 lint 报未使用，放在 Task 3 再加回。
 
-- [ ] **Step 4: 跑纯函数测试**
+- [x] **Step 4: 跑纯函数测试**
 
 Run:
 
@@ -611,7 +611,7 @@ cd backend
 
 Expected: 8 passed。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/review_service.py backend/tests/test_review_service.py
@@ -636,7 +636,7 @@ git commit -m "feat(s5-5): 复习调度纯函数与装填"
   - `mark_item(session, *, user_id, item_id, action, now=None) -> ReviewItemOut`
   - 私有 `_load_mastery_snapshots`、`_load_ref_choices`、`_load_items`、`_load_today_snapshots`、`_load_item_snapshot`、`_ref_details`、`_upsert_item`、`_item_out`、`_empty_today`
 
-- [ ] **Step 1: 写 service 测试（先红）**
+- [x] **Step 1: 写 service 测试（先红）**
 
 在 `backend/tests/test_review_service.py` 追加：
 
@@ -918,7 +918,7 @@ def test_mark_item_rejects_completed_and_missing(monkeypatch):
         )
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 
@@ -929,7 +929,7 @@ cd backend
 
 Expected: `ImportError: cannot import name 'ReviewTodayOut'` / `AttributeError`。
 
-- [ ] **Step 3: 写 schema `schemas/review.py`**
+- [x] **Step 3: 写 schema `schemas/review.py`**
 
 创建 `backend/app/schemas/review.py`：
 
@@ -974,7 +974,7 @@ class ReviewTodayOut(BaseModel):
     truncated_count: int | None = Field(default=None, ge=0)
 ```
 
-- [ ] **Step 4: 在 service 追加 DB 用例**
+- [x] **Step 4: 在 service 追加 DB 用例**
 
 在 `backend/app/services/review_service.py` 顶部补齐 imports：
 
@@ -1412,7 +1412,7 @@ def mark_item(
 
 `MasterySnapshot` 的 `due_at` 由 `_load_mastery_snapshots` 填 `mastery.due_at`；为空时用 `moment` 兜底。
 
-- [ ] **Step 5: 加配置**
+- [x] **Step 5: 加配置**
 
 在 `backend/app/core/config.py` 的 PDF 配置后追加：
 
@@ -1430,7 +1430,7 @@ REVIEW_TIMEZONE=Asia/Shanghai
 REVIEW_DAILY_MINUTES=35
 ```
 
-- [ ] **Step 6: 跑 service 测试**
+- [x] **Step 6: 跑 service 测试**
 
 Run:
 
@@ -1441,7 +1441,7 @@ cd backend
 
 Expected: 纯函数 8 + service 8 全部 passed。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/services/review_service.py backend/app/schemas/review.py \
@@ -1463,7 +1463,7 @@ git commit -m "feat(s5-5): 复习清单 service 与配置"
 - Consumes: `review_service.get_today/refresh_user/mark_item`、`require_role("student")`
 - Produces: `GET /api/v1/review/today`、`POST /api/v1/review/refresh`、`POST /api/v1/review/items/{id}/done|skip|later`
 
-- [ ] **Step 1: 写 API 测试（先红）**
+- [x] **Step 1: 写 API 测试（先红）**
 
 创建 `backend/tests/test_review_api.py`：
 
@@ -1596,7 +1596,7 @@ def test_forbidden_for_teacher(monkeypatch):
     app.dependency_overrides.clear()
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 
@@ -1607,7 +1607,7 @@ cd backend
 
 Expected: 404（路由未注册）。
 
-- [ ] **Step 3: 写路由**
+- [x] **Step 3: 写路由**
 
 创建 `backend/app/api/v1/review.py`：
 
@@ -1693,7 +1693,7 @@ def later(
 api_router.include_router(review.router)
 ```
 
-- [ ] **Step 4: 更新 API.md §9**
+- [x] **Step 4: 更新 API.md §9**
 
 把 `GET /api/v1/review/today` 的占位段替换为：
 
@@ -1732,7 +1732,7 @@ api_router.include_router(review.router)
 - 说明：done/skip 只写 `done_at`，不改掌握度；later 只把 `due_at` 顺延到次日 00:00
 ```
 
-- [ ] **Step 5: 跑 API 测试**
+- [x] **Step 5: 跑 API 测试**
 
 Run:
 
@@ -1743,7 +1743,7 @@ cd backend
 
 Expected: 6 passed。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/api/v1/review.py backend/app/api/router.py backend/tests/test_review_api.py docs/API.md
@@ -1763,7 +1763,7 @@ git commit -m "feat(s5-5): 复习清单 5 个接口"
 - Consumes: `review_service.refresh_user`、`get_session_factory`
 - Produces: `generate_daily(*, now=None, session_factory=None) -> dict[str,int]`；`main(argv=None)`；`python -m app.scheduler [--once]`
 
-- [ ] **Step 1: 写调度器测试（先红）**
+- [x] **Step 1: 写调度器测试（先红）**
 
 创建 `backend/tests/test_review_scheduler.py`：
 
@@ -1860,7 +1860,7 @@ def test_generate_daily_isolates_user_failures(monkeypatch):
     assert factory.sessions[2].rollbacks == 1
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 
@@ -1871,7 +1871,7 @@ cd backend
 
 Expected: `ImportError: cannot import name 'scheduler'`。
 
-- [ ] **Step 3: 实现 scheduler**
+- [x] **Step 3: 实现 scheduler**
 
 创建 `backend/app/scheduler.py`：
 
@@ -1973,7 +1973,7 @@ if __name__ == "__main__":
 
 `user_ids` 必须一次查询取全部，不在循环里查库（AGENTS §4）。
 
-- [ ] **Step 4: 加依赖并安装**
+- [x] **Step 4: 加依赖并安装**
 
 在 `backend/requirements.txt` 末尾追加：
 
@@ -1992,7 +1992,7 @@ cd backend
 
 Expected: `Version: 3.11.3`。
 
-- [ ] **Step 5: 跑调度器测试与 `--once`**
+- [x] **Step 5: 跑调度器测试与 `--once`**
 
 Run:
 
@@ -2004,7 +2004,7 @@ cd backend
 
 Expected: 2 passed；`--once` 输出 JSON（无 mastery 用户时 `{"users": 0, "items": 0, "failed": 0}` 或真实用户数）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/scheduler.py backend/requirements.txt backend/tests/test_review_scheduler.py
@@ -2024,7 +2024,7 @@ git commit -m "feat(s5-5): APScheduler 每日复习清单调度"
 - Consumes: 后端 8000、真实库、`review_service.refresh_user/get_today/mark_item`、`mastery_service.record_attempts`
 - Produces: 7 天清单变化证据 + 真实 HTTP 结果
 
-- [ ] **Step 1: 启动后端并建专用账号**
+- [x] **Step 1: 启动后端并建专用账号**
 
 Run（背景作业）：
 
@@ -2049,7 +2049,7 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
 
 Expected: `login.json` 的 `data.access_token` 与 `data.user.id` 存在；脚本从该文件读取，不写死账号 id/密码。
 
-- [ ] **Step 2: 写 7 天模拟脚本**
+- [x] **Step 2: 写 7 天模拟脚本**
 
 创建 `.sdd/s5-5/review_check.py`，内容如下（完整可执行）：
 
@@ -2155,7 +2155,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: 跑 7 天模拟并核对**
+- [x] **Step 3: 跑 7 天模拟并核对**
 
 Run:
 
@@ -2166,7 +2166,7 @@ PYTHONPATH=. ../.venv/Scripts/python.exe E:/BiShe-AIStudy/.sdd/s5-5/review_check
 
 Expected: 7 天都有记录；每天 `total_minutes <= 35`；done/later 后同日 refresh 不返回该项；HTTP refresh 与 GET 顺序一致。
 
-- [ ] **Step 4: 真 HTTP 与 scheduler `--once`**
+- [x] **Step 4: 真 HTTP 与 scheduler `--once`**
 
 ```bash
 cd backend
@@ -2178,7 +2178,7 @@ curl -s http://127.0.0.1:8000/api/v1/review/today -H "Authorization: Bearer $TOK
 
 用专用 token 依次验证：refresh 幂等、GET 只读、done 重复 409、later 后 `due_at` 为次日 00:00、scheduler 不新增重复行。
 
-- [ ] **Step 5: 写证据**
+- [x] **Step 5: 写证据**
 
 `.sdd/s5-5/acceptance-evidence.md` 记录：环境、专用账号、7 天表（日期/项数/总分钟/截断/完成或稍后）、真实 HTTP 结果、库内行数与唯一键、异常与修复。数字必须来自 `accept.json`。
 
@@ -2192,7 +2192,7 @@ curl -s http://127.0.0.1:8000/api/v1/review/today -H "Authorization: Bearer $TOK
 - Modify: `docs/SCHEMA.md` / `docs/API.md`（若 Task 1/4 未完全同步）
 - Modify: `.sdd/s5-5/acceptance-evidence.md`
 
-- [ ] **Step 1: 全量回归**
+- [x] **Step 1: 全量回归**
 
 ```bash
 cd backend
@@ -2204,7 +2204,7 @@ npm run build
 
 Expected: 后端全绿（S5-4 基线 1373 + 本卡新增）；前端仍 **296 passed / 46 files**，build 退出 0。
 
-- [ ] **Step 2: 更新 PROGRESS**
+- [x] **Step 2: 更新 PROGRESS**
 
 - 阶段行加 S5-5。
 - “最近完成”写 S5-5：表/迁移 `0016_s5_5`、`review_service`、5 接口、scheduler；贴真实测试数。
@@ -2213,17 +2213,17 @@ Expected: 后端全绿（S5-4 基线 1373 + 本卡新增）；前端仍 **296 pa
 - 待办勾选 `[x] S5-5 ...`，下一步改 S5-6。
 - 变更日志加 `### 2026-11-14（S5-5）`。
 
-- [ ] **Step 3: 追加 D-062**
+- [x] **Step 3: 追加 D-062**
 
 在 `docs/DECISIONS.md` 末尾写 S5-5 决策：一 kp 一行、错题优先回退题目、硬上限 35 分钟、done/skip 不写掌握度、无 status、GET 只读、独立 scheduler + advisory lock、APScheduler 版本、note 未启用、ref 无外键。
 
-- [ ] **Step 4: 更新 AGENTS 与计划**
+- [x] **Step 4: 更新 AGENTS 与计划**
 
 - `AGENTS.md §9.2` 加「复习调度（S5-5）」条目，写清 `review_service` 唯一入口、35 分钟上限、done/skip 语义、scheduler 锁、GET 只读。
 - `AGENTS.md §9.6` 在 PDF 导出样例前加「复习清单样例」。
 - `docs/AI协作开发实施计划.md` 的 S5-5 复选框改 `[x]`。
 
-- [ ] **Step 5: 清理与提交**
+- [x] **Step 5: 清理与提交**
 
 ```bash
 git status --short
@@ -2231,7 +2231,7 @@ git add docs/PROGRESS.md docs/DECISIONS.md docs/AI协作开发实施计划.md AG
 git commit -m "docs(s5-5): 复习调度验收记录与口径定稿（D-062）"
 ```
 
-- [ ] **Step 6: 报告**
+- [x] **Step 6: 报告**
 
 汇报：提交列表、测试数、7 天模拟结果、真实 HTTP、已知边界；提醒用户 `git push` 由本人执行。
 

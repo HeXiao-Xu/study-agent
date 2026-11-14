@@ -425,7 +425,7 @@ erDiagram
 | due_at | TIMESTAMPTZ | 否 | — | 到期时间 | — |
 | interval_days | INTEGER | 否 | — | 调度间隔（天），CHECK 1–30 | — |
 | priority | NUMERIC(5,4) | 是 | — | 0.5·(1−M_t) + 0.3·逾期程度 + 0.2·考纲权重；CHECK 0–1 | — |
-| done_at | TIMESTAMPTZ | 是 | — | 完成/跳过时间（done 与 skip 同写此列） | — |
+| done_at | TIMESTAMPTZ | 是 | — | 完成/跳过时间（done 与 skip 同写此列） | idx(user_id, done_at) |
 
 > S5-5 落地口径：**唯一键 `uq_review_items_user_kp (user_id, kp_id)`**——一 kp 一条待办，刷新幂等；不加 `status`：done/skip 都写 `done_at`，later 只改 `due_at` 到次日 00:00；`ref_id` 故意不加外键，资源被硬删后保留行并由接口返回 `ref_available=false`。
 
