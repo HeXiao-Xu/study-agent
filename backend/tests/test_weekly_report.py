@@ -154,3 +154,51 @@ def test_generate_weekly_uses_adapter(monkeypatch):
     assert out.report_md == "本周新增 3 条。"
     assert out.validation.ok is True
     assert out.validation.checked_numbers == ["3"]
+
+def test_generate_weekly_passes_period_to_adapter(monkeypatch):
+    stats = WeeklyStatsOut(
+        totals=WeeklyTotalsOut(
+            new_notes=3,
+            reviews_done=0,
+            new_mistakes=0,
+            mastered_mistakes=0,
+            mistakes_net=0,
+        ),
+        active_days=1,
+        mastery=WeeklyMasteryOut(
+            assessed_kp_count=0,
+            avg_mastery=None,
+            weak_modules=[],
+            weak_kps=[],
+        ),
+        trend=[],
+    )
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(report_service, "build_weekly_stats", lambda *a, **k: stats)
+
+    def fake_generate(context, *, validator, llm_client=None):
+        captured["stats"] = context.stats
+        return weekly_report.WeeklyReportResult(
+            text="本周新增 3 条。",
+            attempts=1,
+            checked_numbers=["3"],
+            invalid_numbers=[],
+        )
+
+    monkeypatch.setattr(weekly_report, "generate_weekly_report", fake_generate)
+    report_service.generate_weekly(session=object(), user_id=50)
+    assert captured["stats"]["period"] == {
+        "from": "2026-11-08",
+        "to": "2026-11-14",
+        "days": 7,
+    }
+
+
+def test_render_prompt_guards_period_count_and_threshold():
+    prompt = weekly_report.render_prompt(
+        weekly_report.WeeklyReportContext(stats=STATS)
+    )
+    assert "period.days" in prompt
+    assert "禁止用 `period.from` 与 `period.to` 相减" in prompt
+    assert "禁止写「共 N 个" in prompt
+    assert "禁止写未给出的阈值" in prompt

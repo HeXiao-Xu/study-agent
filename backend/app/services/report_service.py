@@ -509,9 +509,9 @@ class ReportGenerationError(AppError):
 
 
 def _validation_tuple(
-    text: str, stats: WeeklyStatsOut
+    text: str, stats: Mapping[str, object]
 ) -> tuple[list[str], list[str]]:
-    result = validate_numbers(text, stats.model_dump(mode="json"))
+    result = validate_numbers(text, stats)
     return result.checked_numbers, result.invalid_numbers
 
 
@@ -545,11 +545,13 @@ def generate_weekly(
             ),
         )
 
-    context = weekly_report.WeeklyReportContext(stats=stats.model_dump(mode="json"))
+    context = weekly_report.WeeklyReportContext(
+        stats={"period": period.model_dump(mode="json", by_alias=True), **stats.model_dump(mode="json")}
+    )
     try:
         result = weekly_report.generate_weekly_report(
             context,
-            validator=lambda text: _validation_tuple(text, stats),
+            validator=lambda text: _validation_tuple(text, context.stats),
         )
     except weekly_report.WeeklyReportError as exc:
         raise ReportGenerationError() from exc
