@@ -47,3 +47,6 @@ redis==5.3.1
 # --- S5-3 PDF 导出（Playwright 渲染 + pdfplumber 验收；2026-11-13 用户批准）---
 playwright==1.65.1
 pdfplumber==0.11.10
+
+# --- S5-5 复习调度（APScheduler；2026-11-14 用户批准）---
+apscheduler==3.11.3
