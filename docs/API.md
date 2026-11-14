@@ -1023,10 +1023,17 @@
   - `subjects` 只包含至少有一个 level=2 知识点的学科；当前库只有数学。
 - 错误：401/40100、403/40300、422/42200
 
+### GET /api/v1/reports/weekly
+- 权限：`student`（teacher/parent/admin → 403/40300；只查本人）
+- 类型：同步；只读 Redis 缓存，不重算统计、不调用 LLM
+- 说明：读取当前 UTC 日已生成的周报；缓存键 `report:weekly:v1:{user_id}:{YYYY-MM-DD}`，TTL 48h
+- 出参：`Envelope[WeeklyReportOut | null]`；未生成时 `data=null`，不返回错误
+- 错误：401/40100、403/40300
+
 ### POST /api/v1/reports/weekly
 - 权限：`student`（teacher/parent/admin → 403/40300；只查本人）
 - 类型：同步；可能耗时数秒（LLM），无请求体；不接受客户端传入统计数字
-- 说明：用最近 7 个 UTC 日的结构化统计生成 Markdown 周报，不落库、不缓存。
+- 说明：用最近 7 个 UTC 日的结构化统计生成 Markdown 周报；成功后 best-effort 写入 Redis（键同上，TTL 48h），不落库；缓存故障不影响返回
 - 出参：`Envelope[WeeklyReportOut]`
 
   ```json
@@ -1061,6 +1068,7 @@
 
 - 口径：
   - `period` 为最近 7 个 UTC 日（`from = today-6`，`to = today`）。
+  - 周报缓存按 `period.to`（当前 UTC 日）生效：同一天刷新/重新登录可见；跨天后窗口变化，缓存自然失效，需要重新生成；不保留历史周报。
   - `totals` = 7 天趋势逐项求和；`active_days` = 四项活动至少一项 > 0 的天数。
   - `mastery` 是当前快照：`assessed_kp_count` = 本人 mastery 行数；`avg_mastery` = 全部行 `M_t` 简单平均（无行 null）；`weak_modules`/`weak_kps` 按 `M_t` 升序取最低 3/5，字段 `mastery` 填 `M_t`。
   - 不提供「复习完成率 / 薄弱点变化」；`reviews_done` 只是当前 `done_at` 快照，重开后历史完成数会丢失。
