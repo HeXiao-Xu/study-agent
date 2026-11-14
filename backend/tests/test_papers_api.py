@@ -211,6 +211,21 @@ def test_generate_missing_ratio_message_is_plain() -> None:
     assert response.json()["message"] == "请填写题型占比"
 
 
+def test_generate_accepts_500_kp_ids() -> None:
+    student = _user()
+    client = _client(FakeSession(results=_generate_results(), user=student), student)
+    response = client.post("/api/v1/papers/generate", json=_payload(kp_ids=list(range(1, 501))))
+    assert response.status_code == 200
+
+
+def test_generate_rejects_more_than_500_kp_ids() -> None:
+    student = _user()
+    client = _client(FakeSession(user=student), student)
+    response = client.post("/api/v1/papers/generate", json=_payload(kp_ids=list(range(1, 502))))
+    assert response.status_code == 422
+    assert response.json()["message"] == "知识点最多只能选择 500 个"
+
+
 def test_replace_item_returns_new_item():
     student = _user()
     rows = _candidate_rows()

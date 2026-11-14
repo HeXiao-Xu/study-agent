@@ -55,7 +55,7 @@
 
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
-  | kp_ids | int[] | 是 | 知识点覆盖清单（1–100，去重） |
+  | kp_ids | int[] | 是 | 知识点覆盖清单（1–500，去重） |
   | total_questions | int | 是 | 题量（1–100） |
   | qtype_ratio | object | 是 | 题型配比，键 ∈ 单选/多选/填空/解答，值 ≥0 且至少一个 >0 |
   | difficulty_dist | object | 是 | 难度分布，键 ∈ 1–5，值 ≥0 且至少一个 >0 |
@@ -555,7 +555,7 @@ SEED_MAX = 2**31 - 1
 class PaperConstraintIn(BaseModel):
     """generate / replace 共用约束（API.md §8）。"""
 
-    kp_ids: list[int] = Field(min_length=1, max_length=100)
+    kp_ids: list[int] = Field(min_length=1, max_length=500)
     total_questions: int = Field(ge=1, le=100)
     qtype_ratio: dict[str, float] = Field(min_length=1)
     difficulty_dist: dict[int, float] = Field(min_length=1)

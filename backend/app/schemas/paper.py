@@ -15,7 +15,7 @@ SEED_MAX = 2**31 - 1
 class PaperConstraintIn(BaseModel):
     """generate / replace 共用约束（API.md §8）。"""
 
-    kp_ids: list[int] = Field(min_length=1, max_length=100)
+    kp_ids: list[int] = Field(min_length=1, max_length=500)
     total_questions: int = Field(ge=1, le=100)
     qtype_ratio: dict[str, float] = Field(min_length=1)
     difficulty_dist: dict[int, float] = Field(min_length=1)

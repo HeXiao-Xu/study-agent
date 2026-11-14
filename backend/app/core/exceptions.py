@@ -78,6 +78,8 @@ def _paper_validation_message(error: dict[str, object]) -> str:
             return "请至少保留 1 道题"
         return f"{label}不能为空"
     if kind == "too_long":
+        if field == "kp_ids":
+            return f"知识点最多只能选择 {ctx.get('max_length')} 个"
         return f"{label}数量太多"
     if kind == "greater_than_equal":
         return f"{label}不能小于 {ctx.get('ge')}"

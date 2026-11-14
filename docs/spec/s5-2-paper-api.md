@@ -106,7 +106,7 @@ CHECK 约束名 `ck_papers_status` / `ck_papers_generated_by`，文本由 `in_ch
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
 |---|---|---|---|---|
-| kp_ids | int[] | 是 | 1–100 个，去重 | 覆盖的知识点 |
+| kp_ids | int[] | 是 | 1–500 个，去重 | 覆盖的知识点 |
 | total_questions | int | 是 | 1–100 | 期望题量 |
 | qtype_ratio | object | 是 | 键 ∈ 单选/多选/填空/解答，值 ≥0，至少一个 >0 | 题型配比，服务端归一化 |
 | difficulty_dist | object | 是 | 键 ∈ 1–5，值 ≥0，至少一个 >0 | 难度分布，服务端归一化 |
