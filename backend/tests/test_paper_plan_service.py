@@ -9,8 +9,10 @@ from pydantic import ValidationError
 
 from app.core.exceptions import ForbiddenError, InvalidParamError, NotFoundError
 from app.models.paper import Paper
-from app.schemas.paper import PaperGenerateIn, PaperReplaceIn, PaperSaveIn
+from app.schemas.common import PageData
+from app.schemas.paper import PaperGenerateIn, PaperReplaceIn, PaperSaveIn, PaperSummaryOut
 from app.services import paper_plan_service
+from app.utils.pagination import PageParams
 
 NOW = datetime(2026, 11, 13, 6, 0, tzinfo=timezone.utc)
 
@@ -316,3 +318,29 @@ def test_get_paper_raises_not_found():
     session = FakeSession(paper=None)
     with pytest.raises(NotFoundError):
         paper_plan_service.get_paper(session, user_id=50, paper_id=99)
+
+
+def test_list_papers_filters_owner_and_orders_by_saved_time(monkeypatch) -> None:
+    session = FakeSession()
+    captured: dict[str, object] = {}
+
+    def fake_paginate(session_, stmt, params, *, item_model):  # noqa: ANN001, ANN202
+        captured["sql"] = str(stmt)
+        captured["params"] = params
+        return PageData(
+            items=[PaperSummaryOut.model_validate(_stored_paper())],
+            total=1,
+            page=params.page,
+            page_size=params.page_size,
+        )
+
+    monkeypatch.setattr(paper_plan_service, "paginate_query", fake_paginate)
+    data = paper_plan_service.list_papers(
+        session, user_id=50, params=PageParams(page=1, page_size=10)
+    )
+
+    sql = str(captured["sql"])
+    assert "papers.user_id" in sql
+    assert "ORDER BY papers.created_at DESC, papers.id DESC" in sql
+    assert data.items[0].question_count == 2
+    assert data.total == 1

@@ -14,6 +14,7 @@ from app.models.mistake import Mistake
 from app.models.paper import Paper
 from app.models.question import Question
 from app.models.question_kp import QuestionKp
+from app.schemas.common import PageData
 from app.schemas.paper import (
     OptionOut,
     PaperConstraintIn,
@@ -26,11 +27,13 @@ from app.schemas.paper import (
     PaperReplaceIn,
     PaperReplaceOut,
     PaperSaveIn,
+    PaperSummaryOut,
     PaperViolationOut,
     ScorePartsOut,
 )
 from app.services import mastery_service, paper_service
 from app.services.paper_service import CandidateQuestion, PaperConstraints, PaperItem
+from app.utils.pagination import PageParams, paginate_query
 
 SEED_MAX = 2**31 - 1
 
@@ -436,6 +439,18 @@ def save_draft(session: Session, payload: PaperSaveIn, *, user_id: int) -> Paper
     session.commit()
     session.refresh(paper)
     return PaperOut.model_validate(paper)
+
+
+def list_papers(
+    session: Session, *, user_id: int, params: PageParams
+) -> PageData[PaperSummaryOut]:
+    """只列本人试卷；固定保存时间倒序，同一秒内用 id 兜底稳定顺序。"""
+    stmt = (
+        select(Paper)
+        .where(Paper.user_id == user_id)
+        .order_by(Paper.created_at.desc(), Paper.id.desc())
+    )
+    return paginate_query(session, stmt, params, item_model=PaperSummaryOut)
 
 
 def get_paper(session: Session, *, user_id: int, paper_id: int) -> PaperDetailOut:

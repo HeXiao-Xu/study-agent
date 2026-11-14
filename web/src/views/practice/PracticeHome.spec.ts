@@ -14,6 +14,7 @@ describe('PracticeHome', () => {
       '/review',
       '/papers/generate',
       '/mistakes',
+      '/papers',
     ])
     expect(wrapper.text()).toContain('今日复习')
     expect(wrapper.text()).toContain('智能组卷')

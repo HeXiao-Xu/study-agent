@@ -28,7 +28,7 @@ const entries = [
   <div class="practice-page">
     <PageHeader
       title="练习"
-      description="从复习清单、组卷或错题本进入练习；组卷保存后可直接开始作答。"
+      description="从复习清单、组卷或错题本进入练习；保存的试卷可在「我的试卷」继续作答。"
     />
     <div class="practice-grid">
       <article v-for="entry in entries" :key="entry.title" class="practice-card">
@@ -40,7 +40,7 @@ const entries = [
       </article>
     </div>
     <p class="practice-note">
-      本页不列历史草稿：当前没有 GET /papers 接口，草稿从组卷保存后的页面进入作答。
+      已保存的试卷在 <router-link to="/papers">我的试卷</router-link> 查看，可继续作答或导出 PDF。
     </p>
   </div>
 </template>

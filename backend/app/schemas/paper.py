@@ -178,6 +178,19 @@ class PaperOut(BaseModel):
     created_at: datetime
 
 
+class PaperSummaryOut(BaseModel):
+    """试卷列表行：不返回完整 question_ids，只给题数。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    status: str
+    total_score: int
+    question_count: int
+    created_at: datetime
+
+
 class PaperDetailOut(PaperOut):
     constraint_json: dict[str, Any]
     items: list[PaperItemOut]

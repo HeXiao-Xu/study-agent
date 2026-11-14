@@ -1,5 +1,6 @@
 /** S5-2 组卷接口：生成预览 / 换题 / 保存草稿 / 读回。 */
 import http, { API_PREFIX, type ApiEnvelope } from '@/api/http'
+import type { PageData } from '@/types/common'
 import type {
   Paper,
   PaperAnswerPayload,
@@ -7,12 +8,14 @@ import type {
   PaperAnswers,
   PaperDetail,
   PaperGeneratePayload,
+  PaperListParams,
   PaperPreview,
   PaperReplacePayload,
   PaperReplaceResult,
   PaperSavePayload,
   PaperSubmitPayload,
   PaperSubmitResult,
+  PaperSummary,
 } from '@/types/papers'
 
 export async function generatePaper(payload: PaperGeneratePayload): Promise<PaperPreview> {
@@ -39,6 +42,16 @@ export async function getPaper(id: number): Promise<PaperDetail> {
   const resp = await http.get<ApiEnvelope<PaperDetail>>(`${API_PREFIX}/papers/${id}`)
   return resp.data.data
 }
+
+export async function listPapers(
+  params: PaperListParams,
+): Promise<PageData<PaperSummary>> {
+  const resp = await http.get<ApiEnvelope<PageData<PaperSummary>>>(`${API_PREFIX}/papers`, {
+    params,
+  })
+  return resp.data.data
+}
+
 export async function exportPaperPdf(
   id: number,
   variant: 'questions' | 'answers',

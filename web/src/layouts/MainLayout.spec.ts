@@ -43,6 +43,7 @@ async function mountLayout(path = '/notes', role: UserOut['role'] = 'student') {
           { path: 'knowledge', name: 'knowledge', component: Dummy },
           { path: 'questions', name: 'questions', component: Dummy },
           { path: 'papers/generate', name: 'paper-generate', component: Dummy },
+          { path: 'papers', name: 'paper-list', component: Dummy },
           { path: 'practice', name: 'practice', component: Dummy },
           {
             path: 'qa',
@@ -82,7 +83,7 @@ describe('MainLayout', () => {
 
   it('renders all nav items', async () => {
     const { wrapper } = await mountLayout()
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(12)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(13)
   })
 
   it('导航项不再显示 01/02 这类序号', async () => {
@@ -104,7 +105,7 @@ describe('MainLayout', () => {
   it('教师进入学生专属页时保留导航并在右侧显示无权限', async () => {
     const { wrapper } = await mountLayout('/qa', 'teacher')
 
-    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(12)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(13)
     expect(wrapper.text()).toContain('暂不支持查看')
     expect(wrapper.text()).toContain('智能问答功能仅向学生开放')
     expect(wrapper.find('.dummy-page').exists()).toBe(false)

@@ -23,7 +23,7 @@ S5-1 已交付**纯函数**组卷内核（配额 → 打分 → 贪心 → 校�
 ## 2. 非目标
 
 - 不建 `answers` / `review_items`（S5-4 / S5-5），不做在线作答与掌握度回写。
-- 不做 PDF 导出（S5-3）、不做草稿列表/删除/改名（S5-7）。
+- 不做 PDF 导出（S5-3）；不做删除/改名（S5-7 已补本人试卷列表，不含删除/改名）。
 - 不做异步任务：组卷是纯函数 + 两次批量查询，毫秒级，同步返回即可（API.md 里「异步 ⚠ TODO」就此定死为同步）。
 - 不做「AI 补题」：题不够就报缺口（AI 变式题走 S4-4 独立入口）。
 - 不加依赖、不加环境变量、不改已提交迁移。
@@ -36,9 +36,9 @@ S5-1 已交付**纯函数**组卷内核（配额 → 打分 → 贪心 → 校�
 |---|---|
 | `backend/alembic/versions/0014_s5_2.py` | 建 `papers` 表（`down_revision = "0013_s4_7"`） |
 | `backend/app/models/paper.py` | `Paper` ORM（严格对齐 SCHEMA §6.1） |
-| `backend/app/schemas/paper.py` | 4 个接口的入参/出参 Pydantic 模型 |
-| `backend/app/services/paper_plan_service.py` | DB 层：取候选、生成预览、换题、保存、读取（调用 S5-1 纯函数） |
-| `backend/app/api/v1/papers.py` | 4 个路由，只做参数校验 → service → `Envelope` |
+| `backend/app/schemas/paper.py` | 4 个 S5-2 接口 + S5-7 列表接口的入参/出参 Pydantic 模型 |
+| `backend/app/services/paper_plan_service.py` | DB 层：取候选、生成预览、换题、保存、列表、读取（调用 S5-1 纯函数） |
+| `backend/app/api/v1/papers.py` | 5 个路由，只做参数校验 → service → `Envelope` |
 | `backend/tests/test_paper_plan_service.py` | 服务层单测（FakeSession） |
 | `backend/tests/test_papers_api.py` | 接口单测（TestClient + 依赖覆盖） |
 
@@ -49,9 +49,11 @@ S5-1 已交付**纯函数**组卷内核（配额 → 打分 → 贪心 → 校�
 | 文件 | 职责 |
 |---|---|
 | `web/src/types/papers.ts` | 与后端出参一一对应的 TS 类型 |
-| `web/src/api/papers.ts` | 4 个接口的封装（只经 `http.ts`） |
+| `web/src/api/papers.ts` | 4 个 S5-2 接口 + S5-7 列表接口的封装（只经 `http.ts`） |
 | `web/src/views/papers/Generate.vue` | 约束表单 + 预览表 + 保存 |
+| `web/src/views/papers/PaperListView.vue` | S5-7 我的试卷列表 + 继续作答/导出 |
 | `web/src/views/papers/Generate.spec.ts` | 页面交互单测 |
+| `web/src/views/papers/PaperListView.spec.ts` | 列表页交互单测 |
 | `web/src/api/papers.spec.ts` | API 封装单测 |
 
 **前端修改**：`router/index.ts`（`/papers/generate`，`roles: ['student']`，`nav: 'papers'`）、`layouts/nav.ts`（「组卷」）、`layouts/MainLayout.spec.ts`（导航 9→10 项）。
@@ -76,7 +78,7 @@ S5-1 已交付**纯函数**组卷内核（配额 → 打分 → 贪心 → 校�
 **与 SCHEMA §6.1 的两点落地说明**（写入 SCHEMA §6.1 备注，不改口径）：
 
 1. `total_score` 用 **INTEGER** 而不是 NUMERIC：S5-1 的题分是整数（3/4/4/8），Python 侧求和即整数，用 NUMERIC 只会引入 `Decimal` 转换噪音；与 AGENTS §9.2「分数用整数存储，不用 float」一致。
-2. 索引名 `ix_papers_user_id`（SCHEMA 只标 ⚠「需要索引」，不指定名字）；不额外建 `(user_id, created_at)` 复合索引，草稿列表接口（S5-7）到时按需加。
+2. 索引名 `ix_papers_user_id`（SCHEMA 只标 ⚠「需要索引」，不指定名字）；S5-7 列表按 `user_id` 过滤、`created_at DESC, id DESC` 排序，暂不额外建复合索引。
 
 ### 4.2 枚举（`app/models/enums.py`）
 
@@ -169,13 +171,19 @@ CHECK 约束名 `ck_papers_status` / `ck_papers_generated_by`，文本由 `in_ch
 
 出参 `PaperOut`：`id`、`title`、`status`、`total_score`、`duration_min`、`question_ids`、`created_at`。
 
-### 5.4 `GET /api/v1/papers/{id}`
+### 5.4 `GET /api/v1/papers`
+
+权限 student；仅本人；分页参数 `page`/`page_size`；按 `created_at` 倒序、`id` 倒序兜底。
+
+出参 `PageData[PaperSummaryOut]`：`id`、`title`、`status`、`total_score`、`question_count`、`created_at`；不返回完整 `question_ids`，避免列表响应膨胀。
+
+### 5.5 `GET /api/v1/papers/{id}`
 
 权限 student；本人数据。不存在 → `404/40400`；别人的 → `403/40300`（不泄露存在性，沿用 S2-3）。
 
 出参 `PaperDetailOut`：`PaperOut` 全部字段 + `constraint_json` + `items: PaperItemOut[]`（按保存顺序）+ `missing_question_ids: int[]`（题目被硬删后跳过的 id，不 500、不伪造）。
 
-### 5.5 错误码汇总
+### 5.6 错误码汇总
 
 | 场景 | HTTP / code |
 |---|---|
@@ -212,6 +220,9 @@ replace_item(session, *, user_id, in, now) -> PaperReplaceOut
 save_draft(session, *, user_id, in) -> Paper
     校验题目存在/去重 → 重算总分 → 插行 → commit → refresh
 
+list_papers(session, *, user_id, params) -> PageData[PaperSummaryOut]
+    where user_id → created_at DESC, id DESC → paginate_query
+
 get_paper(session, *, user_id, paper_id) -> PaperDetailOut
     session.get(Paper) → 归属校验 → 按 question_ids 一次 IN 查题 → 跳过缺失
 ```
@@ -221,6 +232,8 @@ get_paper(session, *, user_id, paper_id) -> PaperDetailOut
 ## 7. 前端设计（`views/papers/Generate.vue`）
 
 **路由与导航**：`/papers/generate`，`name: 'paper-generate'`，`meta: { title: '组卷', nav: 'papers', roles: ['student'] }`；`NAV_ITEMS` 在「题库」之后插入「组卷」。`MainLayout.spec.ts` 的导航数从 9 改 10，并断言新项文本与 `to`。
+
+**S5-7 追加**：新增 `/papers`「我的试卷」列表路由（`name: 'paper-list'`、`nav: 'papers-list'`）与导航项，导航现为 13 项；组卷页仍高亮「组卷」。
 
 **页面结构（单页两段，不跳转）**
 

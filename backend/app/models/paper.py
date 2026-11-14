@@ -59,3 +59,7 @@ class Paper(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    @property
+    def question_count(self) -> int:
+        return len(self.question_ids or [])

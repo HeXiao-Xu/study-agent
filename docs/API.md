@@ -874,6 +874,13 @@
 - 规则：候选池重建后剔除已选与原题；先挑「同题型 + 同难度」最高分，再退「同题型任意难度」；没有则 `{replaced:false, item:null, reason}`（200）
 - 出参：`replaced`、`item`（null 或题目项）、`reason`
 
+### GET /api/v1/papers
+- 权限：student（仅本人）
+- 查询参数：`page`（默认 1）、`page_size`（默认 20，1–100）
+- 类型：同步 200；按 `created_at DESC, id DESC` 排序
+- 出参：`{items,total,page,page_size}`；每项 `id / title / status / total_score / question_count / created_at`，不返回完整 `question_ids`
+- 用途：组卷保存后的草稿、已提交试卷统一从「我的试卷」列表找回
+
 ### POST /api/v1/papers
 - 权限：student；201；保存草稿
 - 入参：`title`（1–100）、`constraint`（同 generate 约束）、`question_ids`（1–100、去重、必须存在）、`duration_min?`

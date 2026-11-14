@@ -84,6 +84,20 @@ export interface PaperDetail extends Paper {
   missing_question_ids: number[]
 }
 
+export interface PaperSummary {
+  id: number
+  title: string
+  status: PaperStatus
+  total_score: number
+  question_count: number
+  created_at: string
+}
+
+export interface PaperListParams {
+  page: number
+  page_size: number
+}
+
 export interface PaperConstraintPayload {
   kp_ids: number[]
   total_questions: number

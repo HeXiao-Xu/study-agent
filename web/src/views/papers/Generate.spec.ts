@@ -292,6 +292,18 @@ describe('Generate', () => {
     expect(router.push).toHaveBeenCalledWith('/papers/7/take')
   })
 
+  it('opens my papers list after saving', async () => {
+    papers.generatePaper.mockResolvedValue(preview())
+    papers.savePaper.mockResolvedValue({ id: 7, title: '我的卷', status: '草稿' })
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '我的卷' } as never)
+    const wrapper = await mountView()
+    await generate(wrapper)
+    await wrapper.find('[data-testid="save-button"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="my-papers-button"]').trigger('click')
+    expect(router.push).toHaveBeenCalledWith('/papers')
+  })
+
   it('shows export buttons only after the paper is saved', async () => {
     papers.generatePaper.mockResolvedValue(preview())
     papers.savePaper.mockResolvedValue({ id: 7, title: '我的卷', status: '草稿' })

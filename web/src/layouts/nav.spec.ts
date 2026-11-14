@@ -8,6 +8,7 @@ describe('NAV_ITEMS', () => {
     expect(byName.review).toBe('/review')
     expect(byName.practice).toBe('/practice')
     expect(byName.reports).toBe('/reports')
+    expect(byName['papers-list']).toBe('/papers')
     expect(byName.plan).toBeUndefined()
   })
 })

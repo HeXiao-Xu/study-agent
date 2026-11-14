@@ -19,7 +19,7 @@ from app.schemas.answer import (
     PaperAnswersOut,
     PaperSubmitOut,
 )
-from app.schemas.common import Envelope
+from app.schemas.common import Envelope, PageData
 from app.schemas.paper import (
     PaperDetailOut,
     PaperGenerateIn,
@@ -28,8 +28,10 @@ from app.schemas.paper import (
     PaperReplaceIn,
     PaperReplaceOut,
     PaperSaveIn,
+    PaperSummaryOut,
 )
 from app.services import answer_service, paper_plan_service, pdf_service
+from app.utils.pagination import PageParams, page_params
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -72,6 +74,17 @@ def save_paper(
 ) -> Envelope[PaperOut]:
     """保存草稿：总分由服务端按题目分值重算。"""
     data = paper_plan_service.save_draft(session, payload, user_id=user.id)
+    return Envelope(trace_id=get_trace_id(), data=data)
+
+
+@router.get("", response_model=Envelope[PageData[PaperSummaryOut]])
+def list_papers(
+    params: PageParams = Depends(page_params),
+    session: Session = Depends(get_db),
+    user: User = Depends(require_role("student")),
+) -> Envelope[PageData[PaperSummaryOut]]:
+    """只列本人试卷，按保存时间倒序。"""
+    data = paper_plan_service.list_papers(session, user_id=user.id, params=params)
     return Envelope(trace_id=get_trace_id(), data=data)
 
 

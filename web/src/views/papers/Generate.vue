@@ -407,6 +407,13 @@ onMounted(() => {
           >
             开始作答
           </el-button>
+          <el-button
+            v-if="savedPaperId"
+            data-testid="my-papers-button"
+            @click="router.push('/papers')"
+          >
+            我的试卷
+          </el-button>
           <span v-if="savedPaperId" class="export-hint">导出的为已保存版本</span>
         </div>
       </header>

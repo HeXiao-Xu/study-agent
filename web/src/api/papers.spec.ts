@@ -17,6 +17,7 @@ import {
   generatePaper,
   getPaper,
   getPaperAnswers,
+  listPapers,
   replacePaperItem,
   savePaper,
   savePaperAnswer,
@@ -100,6 +101,31 @@ describe('papers api', () => {
     const detail = await getPaper(7)
     expect(http.get).toHaveBeenCalledWith('/api/v1/papers/7')
     expect(detail.id).toBe(7)
+  })
+
+  it('lists own papers with page params', async () => {
+    const page = {
+      items: [
+        {
+          id: 13,
+          title: '2026-11-14 组卷（8 题）',
+          status: '草稿',
+          total_score: 51,
+          question_count: 8,
+          created_at: '2026-11-14T13:43:16Z',
+        },
+      ],
+      total: 1,
+      page: 2,
+      page_size: 1,
+    }
+    http.get.mockResolvedValue(envelope(page))
+    const result = await listPapers({ page: 2, page_size: 1 })
+    expect(http.get).toHaveBeenCalledWith('/api/v1/papers', {
+      params: { page: 2, page_size: 1 },
+    })
+    expect(result.items[0]!.question_count).toBe(8)
+    expect(result.total).toBe(1)
   })
 
   it('loads saved answers for resume', async () => {

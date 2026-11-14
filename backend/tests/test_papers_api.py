@@ -12,6 +12,8 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.paper import Paper
 from app.models.user import User
+from app.schemas.common import PageData
+from app.services import paper_plan_service
 
 NOW = datetime(2026, 11, 13, 6, 0, tzinfo=timezone.utc)
 
@@ -224,6 +226,48 @@ def test_generate_rejects_more_than_500_kp_ids() -> None:
     response = client.post("/api/v1/papers/generate", json=_payload(kp_ids=list(range(1, 502))))
     assert response.status_code == 422
     assert response.json()["message"] == "知识点最多只能选择 500 个"
+
+
+def test_list_papers_returns_own_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    student = _user()
+    client = _client(FakeSession(user=student), student)
+
+    def fake_list(session, *, user_id, params):  # noqa: ANN001, ANN202
+        assert user_id == 50
+        assert params.page == 2
+        assert params.page_size == 1
+        return PageData(
+            items=[
+                {
+                    "id": 13,
+                    "title": "2026-11-14 组卷（8 题）",
+                    "status": "草稿",
+                    "total_score": 51,
+                    "question_count": 8,
+                    "created_at": NOW.isoformat(),
+                }
+            ],
+            total=1,
+            page=2,
+            page_size=1,
+        )
+
+    monkeypatch.setattr(paper_plan_service, "list_papers", fake_list, raising=False)
+    response = client.get("/api/v1/papers?page=2&page_size=1")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert set(data) == {"items", "total", "page", "page_size"}
+    assert data["items"][0]["title"] == "2026-11-14 组卷（8 题）"
+    assert data["items"][0]["question_count"] == 8
+    assert data["items"][0]["status"] == "草稿"
+
+
+def test_list_papers_forbids_teacher() -> None:
+    teacher = _user("teacher", 9)
+    client = _client(FakeSession(user=teacher), teacher)
+    response = client.get("/api/v1/papers")
+    assert response.status_code == 403
+    assert response.json()["code"] == 40300
 
 
 def test_replace_item_returns_new_item():
