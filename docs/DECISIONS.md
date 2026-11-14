@@ -848,5 +848,6 @@
 - 决策 5（导出不引依赖）：用 ECharts `getDataURL` 取三张图，再用原生 Canvas 合成标题/日期/图表；不引入 `html-to-image`/DOM 截图；不含周报正文，任一图表无数据时禁用导出。
 - 决策 6（练习只做入口）：`/practice` 只给今日复习、智能组卷、错题回顾三个入口，不列历史草稿（无草稿列表接口，避免造只创建不管理的入口）；`/plan` 旧路径重定向 `/review`，导航扩为 12 项。
 - 决策 7（不做手机适配）：用户本轮明确选择桌面优先，任务卡 H5 手机验收项不满足并记录为已知缺口；不改 `body min-width`、侧栏与 `MainLayout`。
-- 验证：前端 **335 passed / 56 files**，`npm run build` 退出 0，后端回归 **1435 passed, 5 warnings**；真实 Chrome 1440×900：复习 6 项/34 分钟后 done/skip/later 剩 3 项且 refresh 仍 3 项；报告 30d 30 点/7d 7 点/3 canvas，90d API 90 点；周报 `generated_by=llm`、`attempts=2`、8 个数字、非法 0；导出 1200×1673 PNG；练习入口三链接；console error 0、无横向溢出。详见 `.sdd/s5-7/acceptance-evidence.md`。
+- 决策 8（无权限展示，S5-7 小修）：教师/管理员访问 `meta.roles=['student']` 的页面时，不再跳独立 `/403`，由 `MainLayout` 在右侧渲染 `StudentOnlyView` 并保留导航；无权限页不发起业务接口请求。`/403` 保留给未登录/用户信息缺失等兜底场景。错题本等后端允许教师访问的页面不在此列。
+- 验证：前端 **338 passed / 56 files**，`npm run build` 退出 0，后端回归 **1435 passed, 5 warnings**；真实 Chrome 1440×900：复习 6 项/34 分钟后 done/skip/later 剩 3 项且 refresh 仍 3 项；报告 30d 30 点/7d 7 点/3 canvas，90d API 90 点；周报 `generated_by=llm`、`attempts=2`、8 个数字、非法 0；导出 1200×1673 PNG；练习入口三链接；console error 0、无横向溢出；教师进 9 个角色受限页均右侧无权限、URL 不跳 `/403`、业务接口请求 0，学生复习页正常。详见 `.sdd/s5-7/acceptance-evidence.md`。
 - 已知边界：不做手机适配；导出图为位图、字体依赖浏览器；周报同步生成可能 7–9 秒；练习页不列草稿；复习动作后不移除已完成项的掌握度信号。
