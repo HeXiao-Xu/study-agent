@@ -347,3 +347,16 @@ def test_refresh_user_does_not_reopen_row_deferred_to_tomorrow(monkeypatch):
 
     assert upserts == []
     assert session.flushed == 1
+
+
+def test_today_snapshot_query_refreshes_identity_map():
+    class CaptureSession:
+        def execute(self, stmt):
+            self.statement = stmt
+            return SimpleNamespace(all=lambda: [])
+
+    session = CaptureSession()
+    review_service._load_today_snapshots(
+        session, user_id=50, next_start=datetime(2026, 11, 14, 16, tzinfo=timezone.utc)
+    )
+    assert session.statement.get_execution_options().get("populate_existing") is True

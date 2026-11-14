@@ -305,6 +305,7 @@ def _load_today_snapshots(
             ReviewItem.done_at.is_(None),
             ReviewItem.due_at < next_start,
         )
+        .execution_options(populate_existing=True)
     ).all()
     return [
         ReviewRowSnapshot(
