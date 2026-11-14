@@ -837,3 +837,16 @@
 - 决策 11（迁移边界）：不建新表，只把 `llm_call_logs.scene` CHECK 扩为包含 `report`（迁移 `0017_s5_6`，`down_revision=0016_s5_5`），降级恢复旧 CHECK；不修改历史迁移。
 - 验证：后端 `pytest -q` → **1435 passed, 5 warnings**（S5-5 基线 1404 + 新增迁移 3/service 13/周报 8/API 7；并更新既有 `test_llm_call_log_model` 的 scene 期望）；前端 **296 passed / 46 files**，`npm run build` 退出 0（本卡未改前端）。真实库 user 50：GET 30d → 1 学科 / 11 模块 / 107 热力节点 / 10 个已评估节点，趋势 30 点仅 11-13 有 3 道新错题；周报 → `generated_by=llm`、`attempts=3`、校验 11 个数字全部有出处，真实 `llm_call_logs` 落 `scene=report`（验收/调试累计 13 条，最终三次 7961/7338/7027 ms）；user 62 空数据 → `empty`、0 次调用且未新增 report 日志；真 HTTP GET/POST 200、无 token 401。**验收中抓到并修掉**：最初 `WeeklyReportContext` 只传 `stats` 漏 `period`，且 Prompt 未明确禁止写列表条数/自造阈值，真实 LLM 输出 `6/5/0.01` 被数字校验拦截；补 period 到 Prompt 与允许集合，并加「周期只用 period.days、不数列表、不造阈值」规则后重跑通过；LLM 仍偶尔写列表条数/日期差，靠 2 次重试兜底。详见 `.sdd/s5-6/acceptance-evidence.md`。
 - 已知边界：`reviews_done` 与 `mastered_mistakes` 都是当前快照回算，会丢历史/受状态回退影响；软删笔记会让历史 `new_notes` 变少；UTC 日界与 S5-5 本地日界不一致；同步周报每次付费、无缓存；中文数字不做校验（Prompt 要求阿拉伯数字）；弱项按 `M_t` 升序取最低 3 个模块/5 个知识点，不做同分去重策略（按 kp_id 稳定排序）。
+
+## D-064 前端复习 / 报告 / 练习页（S5-7）
+
+- 背景：S5-5/S5-6 后端接口已就绪，但学生没有可操作的复习清单、掌握度报告和练习入口；本卡只做前端，不扩接口。
+- 决策 1（薄页面 + 厚纯函数）：`Today.vue`/`Index.vue` 只持有请求、页面状态与 ECharts 实例；进度文案、雷达/热力/趋势 option、导出布局分别放 `useReviewProgress.ts`、`useReportCharts.ts`、`exportReportImage.ts`，便于 jsdom 单测。
+- 决策 2（复习进入即 refresh）：`GET /review/today` 只读，页面 mount 先 `POST /review/refresh` 再渲染；done/skip/later 成功后从列表移除并推进“已处理”进度，**不伪造掌握度变化**；空清单是合法状态，截断只提示不顺延额外项。
+- 决策 3（报告 range 只刷趋势）：雷达/热力为当前快照，切 7/30/90d 只重取趋势；雷达只纳入 `mastery != null` 的模块（不把未评估画成 0），热力 level 2→3→4 组树、未评估灰色，缺父节点时按孤儿回退。
+- 决策 4（周报手动）：周报不随页面加载生成，只有点击按钮才调真实 LLM；`generated_by=empty` 展示固定空文案，不把它当失败。
+- 决策 5（导出不引依赖）：用 ECharts `getDataURL` 取三张图，再用原生 Canvas 合成标题/日期/图表；不引入 `html-to-image`/DOM 截图；不含周报正文，任一图表无数据时禁用导出。
+- 决策 6（练习只做入口）：`/practice` 只给今日复习、智能组卷、错题回顾三个入口，不列历史草稿（无草稿列表接口，避免造只创建不管理的入口）；`/plan` 旧路径重定向 `/review`，导航扩为 12 项。
+- 决策 7（不做手机适配）：用户本轮明确选择桌面优先，任务卡 H5 手机验收项不满足并记录为已知缺口；不改 `body min-width`、侧栏与 `MainLayout`。
+- 验证：前端 **335 passed / 56 files**，`npm run build` 退出 0，后端回归 **1435 passed, 5 warnings**；真实 Chrome 1440×900：复习 6 项/34 分钟后 done/skip/later 剩 3 项且 refresh 仍 3 项；报告 30d 30 点/7d 7 点/3 canvas，90d API 90 点；周报 `generated_by=llm`、`attempts=2`、8 个数字、非法 0；导出 1200×1673 PNG；练习入口三链接；console error 0、无横向溢出。详见 `.sdd/s5-7/acceptance-evidence.md`。
+- 已知边界：不做手机适配；导出图为位图、字体依赖浏览器；周报同步生成可能 7–9 秒；练习页不列草稿；复习动作后不移除已完成项的掌握度信号。

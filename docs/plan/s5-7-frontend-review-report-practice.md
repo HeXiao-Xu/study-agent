@@ -47,7 +47,7 @@
   - `fetchReportOverview(range?: ReportRange): Promise<ReportOverview>`
   - `generateWeeklyReport(): Promise<WeeklyReport>`
 
-- [ ] **Step 1: 写失败的 API 测试**
+- [x] **Step 1: 写失败的 API 测试**
 
 `web/src/api/review.spec.ts`：
 
@@ -200,7 +200,7 @@ describe('reports api', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 ```bash
@@ -210,7 +210,7 @@ npm run test:run -- src/api/review.spec.ts src/api/reports.spec.ts
 
 Expected: FAIL，提示找不到 `./review` / `./reports` 或类型模块。
 
-- [ ] **Step 3: 写类型与 API 客户端**
+- [x] **Step 3: 写类型与 API 客户端**
 
 `web/src/types/review.ts`：
 
@@ -426,7 +426,7 @@ export async function generateWeeklyReport(): Promise<WeeklyReport> {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 ```bash
@@ -436,7 +436,7 @@ npm run test:run -- src/api/review.spec.ts src/api/reports.spec.ts
 
 Expected: 两个文件全部 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/types/review.ts web/src/types/reports.ts web/src/api/review.ts web/src/api/reports.ts web/src/api/review.spec.ts web/src/api/reports.spec.ts
@@ -460,7 +460,7 @@ git commit -m "feat(s5-7): 复习与报告前端契约"
   - `truncatedLabel(count: number | null): string`
   - `reviewRefPath(item): string | null`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/review/useReviewProgress.spec.ts`：
 
@@ -535,7 +535,7 @@ describe('reviewRefPath', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -545,7 +545,7 @@ npm run test:run -- src/views/review/useReviewProgress.spec.ts
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现纯函数**
+- [x] **Step 3: 实现纯函数**
 
 `web/src/views/review/useReviewProgress.ts`：
 
@@ -590,7 +590,7 @@ export function reviewRefPath(
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -600,7 +600,7 @@ npm run test:run -- src/views/review/useReviewProgress.spec.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/review/useReviewProgress.ts web/src/views/review/useReviewProgress.spec.ts
@@ -622,7 +622,7 @@ git commit -m "feat(s5-7): 复习进度纯函数"
   - `PageHeader`、`EmptyState`
 - Produces: `/review` 页面；`data-testid="review-item-{id}"`、`done-{id}`、`skip-{id}`、`later-{id}`、`review-refresh`、`review-progress`。
 
-- [ ] **Step 1: 写失败的页面测试**
+- [x] **Step 1: 写失败的页面测试**
 
 `web/src/views/review/Today.spec.ts`：
 
@@ -779,7 +779,7 @@ describe('Today 复习页', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -789,7 +789,7 @@ npm run test:run -- src/views/review/Today.spec.ts
 
 Expected: FAIL，`Today.vue` 不存在。
 
-- [ ] **Step 3: 实现页面**
+- [x] **Step 3: 实现页面**
 
 `web/src/views/review/Today.vue`：
 
@@ -1149,7 +1149,7 @@ onMounted(() => {
 </style>
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run:
 ```bash
@@ -1159,7 +1159,7 @@ npm run test:run -- src/views/review/Today.spec.ts
 
 Expected: PASS。若 `ElMessage` mock 与组件内部导入不匹配，改为不 mock `element-plus`、只断言文本与 API 调用；不要在测试里等真实弹窗。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/review/Today.vue web/src/views/review/Today.spec.ts
@@ -1185,7 +1185,7 @@ git commit -m "feat(s5-7): 今日复习清单页"
   - `trendOption(trend): Record<string, unknown>`
   - `hasAssessed(subject): boolean`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/reports/useReportCharts.spec.ts`：
 
@@ -1309,7 +1309,7 @@ describe('trendOption', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -1319,7 +1319,7 @@ npm run test:run -- src/views/reports/useReportCharts.spec.ts
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现纯函数**
+- [x] **Step 3: 实现纯函数**
 
 `web/src/views/reports/useReportCharts.ts`：
 
@@ -1469,7 +1469,7 @@ export function trendOption(trend: ReportTrendPoint[]): Record<string, unknown> 
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -1479,7 +1479,7 @@ npm run test:run -- src/views/reports/useReportCharts.spec.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/reports/useReportCharts.ts web/src/views/reports/useReportCharts.spec.ts
@@ -1502,7 +1502,7 @@ git commit -m "feat(s5-7): 报告图表纯函数"
   - `reportFileName(range: string, date: string): string`
   - `downloadReportImage(opts): Promise<void>`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/reports/exportReportImage.spec.ts`：
 
@@ -1541,7 +1541,7 @@ describe('reportFileName', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -1551,7 +1551,7 @@ npm run test:run -- src/views/reports/exportReportImage.spec.ts
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现导出**
+- [x] **Step 3: 实现导出**
 
 `web/src/views/reports/exportReportImage.ts`：
 
@@ -1664,7 +1664,7 @@ export async function downloadReportImage(options: {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -1674,7 +1674,7 @@ npm run test:run -- src/views/reports/exportReportImage.spec.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/reports/exportReportImage.ts web/src/views/reports/exportReportImage.spec.ts
@@ -1697,7 +1697,7 @@ git commit -m "feat(s5-7): 报告图表 PNG 导出"
   - `PageHeader`、`EmptyState`、`MdPreview`
 - Produces: `/reports` 页面；test ids `report-range-7d|30d|90d`、`report-radar`、`report-treemap`、`report-trend`、`weekly-generate`、`weekly-report`、`report-export`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/reports/Index.spec.ts`：
 
@@ -1855,7 +1855,7 @@ describe('Reports 页面', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -1865,7 +1865,7 @@ npm run test:run -- src/views/reports/Index.spec.ts
 
 Expected: FAIL，`Index.vue` 不存在。
 
-- [ ] **Step 3: 实现页面**
+- [x] **Step 3: 实现页面**
 
 `web/src/views/reports/Index.vue` 的脚本必须包含：
 
@@ -2156,7 +2156,7 @@ onBeforeUnmount(() => {
 
 样式至少包含：`.reports-page { display:flex; flex-direction:column; gap:16px }`、`.report-cards` 五列网格、`.report-grid` 两列网格、`.report-panel--wide { grid-column: 1 / -1 }`、`.report-canvas { width:100%; height:280px }`、`.weekly-panel { padding:16px; background:#fff; border:1px solid #eaecf0; border-radius:10px }`。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -2166,7 +2166,7 @@ npm run test:run -- src/views/reports/Index.spec.ts
 
 Expected: PASS。若测试中 `clientWidth` 为 0 导致导出不调用，先给 `report-canvas` mock 元素 `Object.defineProperty(element, 'clientWidth', { value: 600 })`，或在页面测试中只断言按钮可点击；导出核心已由 Task 5 单测覆盖。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/reports/Index.vue web/src/views/reports/Index.spec.ts
@@ -2185,7 +2185,7 @@ git commit -m "feat(s5-7): 学习报告页"
 - Consumes: `PageHeader`。
 - Produces: `/practice` 页面；三张入口卡。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/views/practice/PracticeHome.spec.ts`：
 
@@ -2214,7 +2214,7 @@ describe('PracticeHome', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -2224,7 +2224,7 @@ npm run test:run -- src/views/practice/PracticeHome.spec.ts
 
 Expected: FAIL，组件不存在。
 
-- [ ] **Step 3: 实现页面**
+- [x] **Step 3: 实现页面**
 
 `web/src/views/practice/PracticeHome.vue`：
 
@@ -2310,7 +2310,7 @@ const entries = [
 </style>
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -2320,7 +2320,7 @@ npm run test:run -- src/views/practice/PracticeHome.spec.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/practice/PracticeHome.vue web/src/views/practice/PracticeHome.spec.ts
@@ -2340,7 +2340,7 @@ git commit -m "feat(s5-7): 练习入口页"
 **Interfaces:**
 - Produces: `/review`、`/reports`、`/practice` 路由名与导航项；`/plan` 重定向 `/review`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `web/src/layouts/nav.spec.ts`：
 
@@ -2382,7 +2382,7 @@ describe('S5-7 routes', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run:
 ```bash
@@ -2392,7 +2392,7 @@ npm run test:run -- src/layouts/nav.spec.ts src/router/index.spec.ts
 
 Expected: FAIL，导航项与路由不存在。
 
-- [ ] **Step 3: 实现路由与导航**
+- [x] **Step 3: 实现路由与导航**
 
 `web/src/layouts/nav.ts` 最终 `NAV_ITEMS`：
 
@@ -2442,7 +2442,7 @@ export const NAV_ITEMS: NavItem[] = [
 
 删除原来的 `plan` ComingSoonView 路由（同一个 path 不要重复注册）。
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run:
 ```bash
@@ -2452,7 +2452,7 @@ npm run test:run -- src/layouts/nav.spec.ts src/router/index.spec.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/router/index.ts web/src/layouts/nav.ts web/src/layouts/nav.spec.ts web/src/router/index.spec.ts
@@ -2473,7 +2473,7 @@ git commit -m "feat(s5-7): 复习报告练习路由与导航"
 - Consumes: 前 8 个任务的页面与测试。
 - Produces: 可交付的 S5-7 记录与真实验收证据。
 
-- [ ] **Step 1: 跑全量前端测试与构建**
+- [x] **Step 1: 跑全量前端测试与构建**
 
 Run:
 ```bash
@@ -2484,7 +2484,7 @@ npm run build
 
 Expected: 所有测试 PASS；`build` 退出 0（仅允许既有 chunk-size 警告）。
 
-- [ ] **Step 2: 跑后端回归**
+- [x] **Step 2: 跑后端回归**
 
 Run:
 ```bash
@@ -2494,7 +2494,7 @@ cd backend
 
 Expected: 仍为 S5-6 的 1435 passed（前端改动不应影响后端）。
 
-- [ ] **Step 3: 真实页面验收**
+- [x] **Step 3: 真实页面验收**
 
 启动后端（8000）与前端 dev（5173），用学生 50：
 
@@ -2510,7 +2510,7 @@ Expected: 仍为 S5-6 的 1435 passed（前端改动不应影响后端）。
 
 把真实请求状态、页面截图路径/文字观察、测试计数写入 `.sdd/s5-7/acceptance-evidence.md`。不要写假数据。
 
-- [ ] **Step 4: 更新文档**
+- [x] **Step 4: 更新文档**
 
 `docs/PROGRESS.md`：
 - 当前状态加 S5-7 完成摘要（页面路径、API 复用、测试计数、已知缺口：未做手机适配、练习页无草稿列表）。
@@ -2523,14 +2523,14 @@ Expected: 仍为 S5-6 的 1435 passed（前端改动不应影响后端）。
 `docs/plan/s5-7-frontend-review-report-practice.md`：
 - 将已完成步骤的 `- [ ]` 改为 `- [x]`。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add docs/PROGRESS.md docs/AI协作开发实施计划.md docs/plan/s5-7-frontend-review-report-practice.md
 git commit -m "docs(s5-7): 同步进度与验收"
 ```
 
-- [ ] **Step 6: 最终检查**
+- [x] **Step 6: 最终检查**
 
 Run:
 ```bash
