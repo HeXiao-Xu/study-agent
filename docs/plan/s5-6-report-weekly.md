@@ -1,6 +1,6 @@
 # S5-6 学习报告（雷达 / 热力 / 趋势 + 周报）Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 交付 `GET /reports/mastery` 的模块雷达/知识点 Treemap/多日趋势，以及 `POST /reports/weekly` 的严格数字校验 LLM 周报；不新增报告表，只扩 `llm_call_logs.scene` CHECK。
 
@@ -42,7 +42,7 @@
 - Consumes: `in_check()`、`LLMCallLog` 现有模型、迁移 head `0016_s5_5`
 - Produces: `LLMCallScene.REPORT = "report"`；迁移 head `0017_s5_6`；API/SCHEMA 契约
 
-- [ ] **Step 1: 先改契约文档**
+- [x] **Step 1: 先改契约文档**
 
 把 `docs/API.md §9` 的占位内容替换为 spec §4.1/§4.2 的两段接口契约，至少包含：
 - `GET /api/v1/reports/mastery`：入参 `range`、出参 `ReportOverviewOut` 的 JSON 示例、口径/错误码。
@@ -51,7 +51,7 @@
 
 在 `docs/SCHEMA.md §8.4` 的 `llm_call_logs.scene` 说明中追加 `report`，并注明由 `0017_s5_6` 扩展 CHECK。
 
-- [ ] **Step 2: 写迁移/枚举契约测试（先红）**
+- [x] **Step 2: 写迁移/枚举契约测试（先红）**
 
 创建 `backend/tests/test_report_migration.py`：
 
@@ -90,7 +90,7 @@ def test_migration_chain_head_is_s5_6():
     assert script.get_current_head() == "0017_s5_6"
 ```
 
-- [ ] **Step 3: 跑测试确认红**
+- [x] **Step 3: 跑测试确认红**
 
 Run:
 ```bash
@@ -99,7 +99,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（`LLMCallScene.REPORT` 不存在，head 仍是 `0016_s5_5`）。
 
-- [ ] **Step 4: 实现枚举与迁移**
+- [x] **Step 4: 实现枚举与迁移**
 
 `backend/app/models/enums.py` 的 `LLMCallScene` 末尾追加：
 
@@ -142,7 +142,7 @@ def downgrade() -> None:
 
 把三个旧 head 测试的期望从 `0016_s5_5` 改为 `0017_s5_6`（函数名可改为 `..._is_s5_6`），不要删除测试。
 
-- [ ] **Step 5: 跑测试确认绿**
+- [x] **Step 5: 跑测试确认绿**
 
 Run:
 ```bash
@@ -151,7 +151,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 cd study-agent
@@ -172,7 +172,7 @@ git commit -m "feat(s5-6): report scene 与迁移 0017"
 - Consumes: `stats_service.build_window/fill_days`、`InvalidParamError`
 - Produces: `ReportRangeOut`、`ReportModuleOut`、`ReportHeatmapNodeOut`、`ReportSubjectOut`、`ReportTrendPointOut`、`ReportOverviewOut`、`WeeklyPeriodOut`、`WeeklyTotalsOut`、`WeeklyMasteryOut`、`WeeklyStatsOut`、`NumberValidationOut`、`WeeklyReportOut`；`report_service.build_window`、`fill_days`、`build_trend`
 
-- [ ] **Step 1: 写窗口/趋势测试（先红）**
+- [x] **Step 1: 写窗口/趋势测试（先红）**
 
 创建 `backend/tests/test_report_service.py`：
 
@@ -224,7 +224,7 @@ def test_build_trend_fills_zero_and_computes_net():
     ]
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 ```bash
@@ -233,7 +233,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（`report_service`/schema 不存在）。
 
-- [ ] **Step 3: 创建 schema**
+- [x] **Step 3: 创建 schema**
 
 创建 `backend/app/schemas/report.py`：
 
@@ -358,7 +358,7 @@ class WeeklyReportOut(BaseModel):
     validation: NumberValidationOut
 ```
 
-- [ ] **Step 4: 写 service 的窗口/趋势最小实现**
+- [x] **Step 4: 写 service 的窗口/趋势最小实现**
 
 创建 `backend/app/services/report_service.py`：
 
@@ -416,7 +416,7 @@ def build_trend(
     return points
 ```
 
-- [ ] **Step 5: 跑测试确认绿**
+- [x] **Step 5: 跑测试确认绿**
 
 Run:
 ```bash
@@ -425,7 +425,7 @@ cd study-agent/backend
 ```
 Expected: 3 tests PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 cd study-agent
@@ -445,7 +445,7 @@ git commit -m "feat(s5-6): 报告 schema 与 UTC 趋势补零"
 - Consumes: `KnowledgePoint`、`Subject`、`Mastery`、`Note`、`ReviewItem`、`Mistake`、`mastery_service.decayed_mastery`
 - Produces: `KpNode`、`build_subjects(nodes, subjects, mastery_raw, mastery_t)`、`get_overview(session, *, user_id, range_key=..., now=None)`
 
-- [ ] **Step 1: 写模块/热力/GET 测试（先红）**
+- [x] **Step 1: 写模块/热力/GET 测试（先红）**
 
 在 `tests/test_report_service.py` 追加：
 
@@ -568,7 +568,7 @@ def test_get_overview_builds_trend_and_filters_user():
     assert "mastery.user_id = 50" in compiled
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 ```bash
@@ -577,7 +577,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（`KpNode`/`build_subjects`/`get_overview` 不存在）。
 
-- [ ] **Step 3: 加节点/聚合/查询实现**
+- [x] **Step 3: 加节点/聚合/查询实现**
 
 在 `report_service.py` 追加 imports 与代码：
 
@@ -846,7 +846,7 @@ def get_overview(
 
 注意：`_mastery_maps` 的 `NOW` 必须是从 `window.end` 传入；测试中的 `mastery.last_practice_at=NOW` 时 `M_t=0.6`。`Decimal` import 只用于类型/测试，若 lint 不用可删。
 
-- [ ] **Step 4: 跑测试确认绿**
+- [x] **Step 4: 跑测试确认绿**
 
 Run:
 ```bash
@@ -855,7 +855,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 cd study-agent
@@ -875,7 +875,7 @@ git commit -m "feat(s5-6): 模块雷达、热力节点与 GET 聚合"
 - Consumes: `_ReportContext`（Task 3 的查询）、`ReportOverviewOut`
 - Produces: `NumberValidation`、`extract_numbers(text)`、`allowed_numbers(stats)`、`validate_numbers(text, stats)`、`build_weekly_stats(session, *, user_id, now=None)`、`EMPTY_REPORT_MD`
 
-- [ ] **Step 1: 写数字校验/周报统计测试（先红）**
+- [x] **Step 1: 写数字校验/周报统计测试（先红）**
 
 在 `tests/test_report_service.py` 追加：
 
@@ -965,7 +965,7 @@ def test_build_weekly_stats_sums_and_weak_points():
     assert len(out.trend) == 7
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 ```bash
@@ -974,7 +974,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（新符号不存在）。
 
-- [ ] **Step 3: 实现统计与校验**
+- [x] **Step 3: 实现统计与校验**
 
 在 `report_service.py` 追加 imports：
 
@@ -1215,7 +1215,7 @@ def _weekly_stats(context: _ReportContext, *, now: datetime) -> WeeklyStatsOut:
 
 `build_weekly_stats` 调 `_weekly_stats(context, now=moment)`。`raw` 未使用时可写成 `_raw, effective`。
 
-- [ ] **Step 4: 跑测试确认绿**
+- [x] **Step 4: 跑测试确认绿**
 
 Run:
 ```bash
@@ -1224,7 +1224,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS（含 Task 3 的 GET 测试）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 cd study-agent
@@ -1247,7 +1247,7 @@ git commit -m "feat(s5-6): 周报统计与数字校验"
 - Consumes: `LLMClient/LLMMessage/LLMError/get_llm_client`、Jinja2、`validate_numbers`
 - Produces: `WeeklyReportContext`、`WeeklyReportResult`、`WeeklyReportError`、`render_prompt(context)`、`generate_weekly_report(context, *, validator, llm_client=None, max_retries=2)`；`report_service.ReportGenerationError`、`generate_weekly(session, *, user_id, now=None)`
 
-- [ ] **Step 1: 写 Prompt/适配器/service 测试（先红）**
+- [x] **Step 1: 写 Prompt/适配器/service 测试（先红）**
 
 创建 `backend/tests/test_weekly_report.py`：
 
@@ -1394,7 +1394,7 @@ def test_generate_weekly_uses_adapter(monkeypatch):
     assert out.validation.checked_numbers == ["3"]
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 ```bash
@@ -1403,7 +1403,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（模块/函数不存在）。
 
-- [ ] **Step 3: 写 Prompt 文件**
+- [x] **Step 3: 写 Prompt 文件**
 
 创建 `backend/app/ai/prompts/weekly_report_v1.md`：
 
@@ -1422,7 +1422,7 @@ Expected: FAIL（模块/函数不存在）。
 {{ stats_json }}
 ```
 
-- [ ] **Step 4: 写适配器**
+- [x] **Step 4: 写适配器**
 
 创建 `backend/app/ai/report/__init__.py`（空文件即可）。
 
@@ -1546,7 +1546,7 @@ def generate_weekly_report(
     )
 ```
 
-- [ ] **Step 5: 在 service 加生成用例**
+- [x] **Step 5: 在 service 加生成用例**
 
 在 `report_service.py` 顶部加：
 
@@ -1622,7 +1622,7 @@ def generate_weekly(
 
 注意：空数据分支也用同一个 `moment` 计算 `period`，不要依赖 `stats.trend` 长度；`timedelta` 已在 imports 中。
 
-- [ ] **Step 6: 跑测试确认绿**
+- [x] **Step 6: 跑测试确认绿**
 
 Run:
 ```bash
@@ -1631,7 +1631,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 cd study-agent
@@ -1652,7 +1652,7 @@ git commit -m "feat(s5-6): 周报 Prompt、LLM 适配器与生成用例"
 - Consumes: `report_service.get_overview/generate_weekly`、`require_role("student")`、`Envelope`、`get_trace_id`
 - Produces: 两个 API；`api_router` 挂载 `/api/v1/reports`
 
-- [ ] **Step 1: 写 API 测试（先红）**
+- [x] **Step 1: 写 API 测试（先红）**
 
 创建 `backend/tests/test_reports_api.py`：
 
@@ -1834,7 +1834,7 @@ def test_weekly_generation_error_returns_500(monkeypatch: pytest.MonkeyPatch) ->
         app.dependency_overrides.clear()
 ```
 
-- [ ] **Step 2: 跑测试确认红**
+- [x] **Step 2: 跑测试确认红**
 
 Run:
 ```bash
@@ -1843,7 +1843,7 @@ cd study-agent/backend
 ```
 Expected: FAIL（404 / 模块不存在）。
 
-- [ ] **Step 3: 写路由**
+- [x] **Step 3: 写路由**
 
 创建 `backend/app/api/v1/reports.py`：
 
@@ -1926,7 +1926,7 @@ from app.api.v1 import (
 api_router.include_router(reports.router)
 ```
 
-- [ ] **Step 4: 跑测试确认绿**
+- [x] **Step 4: 跑测试确认绿**
 
 Run:
 ```bash
@@ -1935,7 +1935,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 跑相邻回归**
+- [x] **Step 5: 跑相邻回归**
 
 Run:
 ```bash
@@ -1944,7 +1944,7 @@ cd study-agent/backend
 ```
 Expected: 全部 PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 cd study-agent
@@ -1967,7 +1967,7 @@ git commit -m "feat(s5-6): 学习报告两个接口"
 - Consumes: 前 6 个任务的代码与测试
 - Produces: 进度/决策/验收证据；迁移 head 0017；最终全量绿
 
-- [ ] **Step 1: 迁移到 head 并跑全量测试**
+- [x] **Step 1: 迁移到 head 并跑全量测试**
 
 Run:
 ```bash
@@ -1978,7 +1978,7 @@ cd study-agent/backend
 ```
 Expected: `0017_s5_6 (head)`；pytest 全绿（计数以实际输出为准，不得写未实测数字）。
 
-- [ ] **Step 2: 启动 API 做真实 HTTP 验收**
+- [x] **Step 2: 启动 API 做真实 HTTP 验收**
 
 Run:
 ```bash
@@ -2010,7 +2010,7 @@ curl -s -X POST "http://127.0.0.1:8000/api/v1/reports/weekly" \
 
 空数据：用 user 62（或专用无数据学生）POST，确认 `generated_by=empty`、`attempts=0`，且没有新增 `scene='report'` 日志。
 
-- [ ] **Step 3: 前端回归（不改前端）**
+- [x] **Step 3: 前端回归（不改前端）**
 
 Run:
 ```bash
@@ -2020,7 +2020,7 @@ npm run build
 ```
 Expected: `test:run` 全绿；build exit 0。若环境不允许跑前端，必须在证据里如实写「未跑」并说明原因，不能写通过。
 
-- [ ] **Step 4: 写验收证据**
+- [x] **Step 4: 写验收证据**
 
 创建 `.sdd/s5-6/acceptance-evidence.md`，至少记录：
 - 迁移 head 输出；
@@ -2030,7 +2030,7 @@ Expected: `test:run` 全绿；build exit 0。若环境不允许跑前端，必�
 - 空数据响应；
 - 前端 test/build 输出（若跑）。
 
-- [ ] **Step 5: 更新文档**
+- [x] **Step 5: 更新文档**
 
 - `docs/PROGRESS.md`：S5-6 完成、测试计数、验收结论、已知边界（UTC、reviews_done 快照、无历史薄弱点变化、无报告表）。
 - `docs/DECISIONS.md`：新增 D-063，记录 D1–D11 与数字校验/空数据策略。
@@ -2038,7 +2038,7 @@ Expected: `test:run` 全绿；build exit 0。若环境不允许跑前端，必�
 - `docs/AI协作开发实施计划.md` §S5-6：勾选已完成项。
 - 若 API/SCHEMA 在 Task 1 已改，复核与实现一致；不一致以契约文档为准并修正实现，不反向改契约。
 
-- [ ] **Step 6: 提交文档与证据**
+- [x] **Step 6: 提交文档与证据**
 
 ```bash
 cd study-agent

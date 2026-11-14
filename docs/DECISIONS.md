@@ -820,3 +820,20 @@
 - 决策 9（时间口径）：统一 `Asia/Shanghai`，所有「今天」用本地日界，DB 仍存 UTC；`M_t` 用 S4-7 `decayed_mastery`，间隔用 `review_interval_days`，不重复实现公式。排期只支持全局时区，不做 per-user 时区。
 - 验证：后端 1404 passed（新增迁移 5 / service 18 / API 6 / scheduler 2）；真实库 8 个 kp 连续 7 天模拟，每日 6 项 / 33–34 分钟 / 顺延 2 项，done/later 后同日 refresh 不返回该项；同一 session 内 Core upsert 后靠 `populate_existing=True` 防 identity map 旧值；真 HTTP refresh 与 GET 一致、重复 done 409、later 次日 00:00、他人 404、`scheduler --once` 2 用户 9 项且 8 行无重复。详见 `.sdd/s5-5/acceptance-evidence.md`。
 - 已知边界：硬上限会截断弱项（顺延不是丢弃）；done 与 skip 库内不可区分；`note` ref 未启用；`ref_id` 无外键；完成动作不改掌握度；单全局时区；调度器逐用户串行，用户量大时需分片/队列化；`GET /review/today` 只读，S5-7 必须记得先 refresh。
+
+## D-063 学习报告与周报（S5-6）
+
+- 背景：S5-5 已有每日复习清单，但学生看不到「自己弱在哪、最近在变好还是变差」；任务卡要求雷达/热力/趋势 + 周报，且周报数字必须有出处。
+- 决策 1（两个接口）：`GET /api/v1/reports/mastery?range=7d|30d|90d`（默认 30d）返回雷达/热力/趋势；`POST /api/v1/reports/weekly` 同步生成周报。周报**不建表、不落库、不缓存**，避免把 LLM 生成结果当权威数据。
+- 决策 2（range 只影响趋势）：雷达与热力是**当前掌握度快照**，不随 7/30/90 天变化；只有趋势按窗口取数。避免用户误以为「换窗口掌握度也变了」。
+- 决策 3（雷达）：只取 level=2 模块，按 `kp_id ASC` 固定返回全部模块；模块掌握度 = 模块自身及全部后代中**已评估**知识点的 `M_t` 简单均值（不按考纲权重加权），保留 3 位；无已评估行 `mastery=null`，不冒充 0。
+- 决策 4（热力）：返回 level 2–4 全量节点扁平列表；level2 的 `parent_id` 归一为 `null`，level3/4 用真实父 id；未评估节点 `mastery/mastery_t/color_value=null` 且 `assessed=false`；有评估时 `color_value=round(1−M_t,3)`，供前端 Treemap 直接取色。
+- 决策 5（趋势五项）：`new_notes`（当天新建且未软删）、`reviews_done`（当天 `review_items.done_at`，done/skip 都算）、`new_mistakes`、`mastered_mistakes`（当前已掌握且 `last_review_at` 落在当天）、`mistakes_net=new_mistakes−mastered_mistakes`；按 UTC 日界补零。日界与 S5-5 复习调度的本地日界不同，这是已知不一致，不为报告改调度口径。
+- 决策 6（周报同步 + 滚动 7 天）：`POST /reports/weekly` 无请求体、不接受客户端传数字，服务端按最近 7 个 UTC 日重算统计；同步返回 Markdown。每次调用都会真实消耗一次 LLM，不做缓存（统计随时变化，缓存会给出过期数字）。
+- 决策 7（不造历史指标）：不提供「复习完成率」「薄弱点变化」等需要事件历史的指标。`reviews_done` 只反映当前 `review_items.done_at` 快照，重开会丢历史；`mastered_mistakes` 按当前状态 + `last_review_at` 回算，不是事件流水。spec/API 已写明，不用假数据补齐。
+- 决策 8（数字校验）：周报 Prompt 明确「只能使用输入中出现的阿拉伯数字，不得计算/四舍五入/换算百分比/编造」，并禁止 Markdown 有序列表；代码用正则提取数字（忽略行首 `1.`/`1)` 列表标记，保留负号与小数），允许集合 = `stats` 全部数值叶子 + 日期字符串拆出的年/月/日 + `days`；按 Decimal 精确比较。失败带非法数字重试，最多 2 次（共 3 次调用），仍失败抛 `ReportGenerationError` → 500/50000「周报生成失败」，不返回半合格报告。
+- 决策 9（空数据分支）：五项 totals 全 0 且 `assessed_kp_count=0` 时直接返回固定文案「本周暂无学习记录，先完成一次练习或复习再来查看周报。」，`generated_by="empty"`、`attempts=0`，**不调用 LLM**；避免为空白数据付费编故事。
+- 决策 10（响应分组）：按 `subjects` 分组返回，不做 `subject_id` 过滤；当前库只有数学，但结构允许后续多学科。权限只允许 student 且只查本人，teacher/parent/admin 一律 403/40300。
+- 决策 11（迁移边界）：不建新表，只把 `llm_call_logs.scene` CHECK 扩为包含 `report`（迁移 `0017_s5_6`，`down_revision=0016_s5_5`），降级恢复旧 CHECK；不修改历史迁移。
+- 验证：后端 `pytest -q` → **1433 passed, 5 warnings**（S5-5 基线 1404 + 新增迁移 3/service 13/周报 6/API 7；并更新既有 `test_llm_call_log_model` 的 scene 期望）；前端 **296 passed / 46 files**，`npm run build` 退出 0（本卡未改前端）。真实库 user 50：GET 30d → 1 学科 / 11 模块 / 107 热力节点 / 10 个已评估节点，趋势 30 点仅 11-13 有 3 道新错题；周报 → `generated_by=llm`、`attempts=1`、校验 9 个数字全部有出处，真实 `llm_call_logs` 落 `scene=report`（7521/8587 ms 两次）；user 62 空数据 → `empty`、0 次调用且未新增 report 日志；真 HTTP GET/POST 200、无 token 401。详见 `.sdd/s5-6/acceptance-evidence.md`。
+- 已知边界：`reviews_done` 与 `mastered_mistakes` 都是当前快照回算，会丢历史/受状态回退影响；软删笔记会让历史 `new_notes` 变少；UTC 日界与 S5-5 本地日界不一致；同步周报每次付费、无缓存；中文数字不做校验（Prompt 要求阿拉伯数字）；弱项按 `M_t` 升序取最低 3 个模块/5 个知识点，不做同分去重策略（按 kp_id 稳定排序）。

@@ -740,7 +740,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 - **坑**：清单过长自己都做不完。**总量控制这个规则别省**
 
 #### S5-6 学习报告（雷达/热力/趋势 + 周报）
-- **产出**：`services/report_service.py`、`api/v1/reports.py`、`prompts/weekly_report_v1.md`
+- **产出**：`services/report_service.py`、`api/v1/reports.py`、`ai/report/weekly_report.py`、`ai/prompts/weekly_report_v1.md`
 - **提示词要点**：模块级聚合掌握度出雷达图；知识点热力图（Treemap）；30 天趋势折线；周报由 LLM 生成但**Prompt 里明确"只能使用输入中给出的数字，不得推断或编造任何数值"**，生成后做数字校验（正则提取数字，检查是否都在输入中）
 - **验收**：周报里的每个数字都能在统计数据里找到出处
 - **坑**：报告是**展示的门面**，演示必看。数字校验这一步是加分设计
@@ -1038,7 +1038,7 @@ backend/  web/  docs/  deploy/  scripts/  eval/
 [x] S5-3 PDF 导出
 [x] S5-4 在线作答与掌握度回写
 [x] S5-5 复习调度 + 每日清单
-[ ] S5-6 学习报告 + 周报
+[x] S5-6 学习报告 + 周报
 [ ] S5-7 前端复习/报告/练习页
 
 ## 阶段 6：Agent（M5）

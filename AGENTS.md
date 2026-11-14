@@ -104,6 +104,7 @@ eval/{datasets,configs,results}
 
 - 在线作答（S5-4）：`services/answer_service.py` 是唯一入口；判分纯函数（单选/多选字母集合归一化；填空/解答自评 0/0.5/1，`score=题分×自评`）与 DB 用例分离；自动保存用部分唯一索引 `uq_answers_user_paper_question` + `INSERT ... ON CONFLICT DO UPDATE`，只写草稿不判分；交卷**单事务**：`SELECT ... FOR UPDATE` 锁 papers → answers upsert → `mastery_service.record_attempts`（复用 S4-7，不重复实现公式）→ `mistake_service.record_wrong_answer`（非满分且有作答、只 flush 不 commit、不自动诊断）→ `papers.status=已提交`；已提交只读，PUT/交卷 409；`answers.score` 为 `NUMERIC(6,2)`（半对例外）；交卷响应 `mastery_before` 必须在 `record_attempts` 前快照（ORM 原地改值）
 - 复习调度（S5-5）：`services/review_service.py` 是唯一入口；一 kp 一行 `review_items`（`UNIQUE(user_id,kp_id)`，无 status）；候选 = `M_t<0.4` 或 `mastery.due_at < 次日本地 00:00`；`priority=0.5(1−M_t)+0.3·min(1,逾期/interval)+0.2·考纲权重`，硬上限 35 分钟、弱项不豁免、装不下顺延次日并回 `truncated_count`；done/skip 只写 `done_at` 不改掌握度，later 只改 `due_at`，当天完成/已顺延同日 refresh 不重开；错题优先（待订正>已订正、最近复习倒序），无错题回退 `question_kps.weight` 最高题；`ref_id` 无外键，资源删除 `ref_available=false`；`GET /review/today` 只读，生成只走 `POST /review/refresh` 或 `python -m app.scheduler`（00:05 Asia/Shanghai + `pg_try_advisory_lock(5505)` + 逐用户 commit + `--once`）；时间统一本地日界、DB 存 UTC（D-062）
+- 学习报告（S5-6）：`services/report_service.py` 是唯一入口；`GET /reports/mastery` 的 range 只影响趋势，雷达/热力是当前快照；雷达 = level2 模块子树已评估 `M_t` 简单均值（无评估 `null`），热力 = level2–4 全量节点（未评估 `null`、`color_value=1−M_t`）；趋势五项按 UTC 补零；`POST /reports/weekly` 同步滚动 7 天、不落库，空数据固定文案不调 LLM；数字校验只允许 stats 中出现的数字，失败带非法数字重试 2 次后 500/50000；`scene=report`，迁移 `0017_s5_6` 只扩 CHECK；不提供复习完成率/薄弱点变化（D-063）
 
 ### 9.3 AI 层（阶段 1 的高压线）
 - ai/ 之外禁止 import openai/httpx 客户端；业务层只 import ai/ 的适配器
@@ -158,6 +159,7 @@ eval/{datasets,configs,results}
 - 在线作答样例：backend/app/models/answer.py + backend/app/services/answer_service.py + backend/app/api/v1/papers.py + web/src/views/papers/Take.vue（判分纯函数与 DB 用例分离；部分唯一索引 upsert 自动保存；交卷 `FOR UPDATE` + 单事务；`record_attempts` 复用 S4-7；错题复用重置；before 先快照；已提交只读；前端单页 + 题号面板 + 800ms 自动保存）
 - 复习调度样例：backend/app/models/review_item.py + backend/app/services/review_service.py + backend/app/api/v1/review.py + backend/app/scheduler.py（纯函数 `local_bounds/overdue_days/overdue_ratio/review_priority/estimated_minutes/is_candidate/select_capped` + DB 用例 `refresh_user/get_today/mark_item`；`UNIQUE(user_id,kp_id)` upsert、错题优先回退题目、35 分钟装填、`ref_available` 容错、`--once` 与 advisory lock；见 D-062）
 - PDF 导出样例：backend/app/services/pdf_service.py + backend/app/templates/paper_pdf.html + backend/app/static/katex（`build_context`/`render_html`/`build_header_footer` 纯函数、`render_pdf` 单渲染线程、`export_pdf` 注入 renderer；`variant=questions|answers`；空卷 409、渲染失败 500/50000；KaTeX 走本地静态资源；导出不落库不缓存）
+- 学习报告样例：backend/app/schemas/report.py + backend/app/services/report_service.py + backend/app/ai/report/weekly_report.py + backend/app/ai/prompts/weekly_report_v1.md + backend/app/api/v1/reports.py + backend/tests/test_report_service.py（`build_window/build_trend` 纯函数、`build_subjects` 雷达/热力、`get_overview/build_weekly_stats/generate_weekly` DB 用例；数字校验 `extract_numbers/allowed_numbers/validate_numbers`；LLM 适配器 Jinja2 StrictUndefined + `scene=report` + 2 次重试；空数据固定文案不调 LLM；见 D-063）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）
