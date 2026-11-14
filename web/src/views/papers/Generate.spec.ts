@@ -129,6 +129,17 @@ describe('Generate', () => {
     expect((score.element as HTMLInputElement).value).toBe('60')
   })
 
+  it('explains ratios with plain labels and estimated counts', async () => {
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-testid="qtype-count-单选"]').text()).toContain('40%')
+    expect(wrapper.get('[data-testid="qtype-count-单选"]').text()).toContain('4 题')
+    expect(wrapper.get('[data-testid="qtype-count-多选"]').text()).toBe('不出')
+    expect(wrapper.get('[data-testid="difficulty-label-2"]').text()).toBe('简单')
+    expect(wrapper.get('[data-testid="difficulty-count-2"]').text()).toBe('约 5 题')
+    expect(wrapper.text()).toContain('合计不需要等于 1')
+    expect(wrapper.text()).toContain('1 最简单，5 最难')
+  })
+
   it('warns and does not call the API without kp selection', async () => {
     const warning = vi.spyOn(ElMessage, 'warning')
     const wrapper = await mountView()

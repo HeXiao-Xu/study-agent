@@ -11,6 +11,8 @@ import { exportPaperPdf, generatePaper, replacePaperItem, savePaper } from '@/ap
 import type { KpNode, SubjectOut } from '@/types/kp'
 import type { PaperConstraintPayload, PaperItem, PaperPreview, PaperQuestionType } from '@/types/papers'
 
+import { DIFFICULTY_LABELS, difficultyCounts, qtypeCounts } from './paperForm'
+
 const QTYPES: PaperQuestionType[] = ['单选', '多选', '填空', '解答']
 const router = useRouter()
 
@@ -40,6 +42,19 @@ const showAnswer = ref(false)
 const items = computed<PaperItem[]>(() => preview.value?.items ?? [])
 const displayTotal = computed(() => items.value.reduce((sum, item) => sum + item.score, 0))
 const canSave = computed(() => items.value.length > 0 && !saving.value)
+const qtypePreview = computed(() => qtypeCounts(form.qtype_ratio, form.total_questions))
+const difficultyPreview = computed(() =>
+  difficultyCounts(form.difficulty_dist, form.total_questions),
+)
+const qtypeWeightSum = computed(() =>
+  QTYPES.reduce((sum, qtype) => sum + Math.max(0, Number(form.qtype_ratio[qtype]) || 0), 0),
+)
+
+function qtypePercent(qtype: PaperQuestionType): number | null {
+  const weight = Math.max(0, Number(form.qtype_ratio[qtype]) || 0)
+  if (weight <= 0 || qtypeWeightSum.value <= 0) return null
+  return Math.round((weight / qtypeWeightSum.value) * 100)
+}
 
 function onTreeCheck(_node: KpNode, info: { checkedKeys: number[] }): void {
   checkedKpIds.value = [...info.checkedKeys]
@@ -275,7 +290,7 @@ onMounted(() => {
         <span class="hint">分钟（可清空）</span>
       </el-form-item>
 
-      <el-form-item label="题型配比">
+      <el-form-item label="题型占比">
         <div class="ratio-row">
           <label v-for="qtype in QTYPES" :key="qtype" class="ratio-item">
             <span>{{ qtype }}</span>
@@ -287,15 +302,27 @@ onMounted(() => {
               :precision="1"
               size="small"
             />
+            <span class="ratio-explain" :data-testid="`qtype-count-${qtype}`">
+              {{
+                qtypePercent(qtype) === null
+                  ? '不出'
+                  : `约 ${qtypePercent(qtype)}% · ${qtypePreview[qtype] ?? 0} 题`
+              }}
+            </span>
           </label>
         </div>
-        <span class="hint">0 表示不出该题型；至少一个大于 0</span>
+        <span class="hint">
+          数字是相对权重，合计不需要等于 1；0 表示不出；最终题量可能因总分容差微调。
+        </span>
       </el-form-item>
 
       <el-form-item label="难度分布">
         <div class="difficulty-grid">
           <div v-for="(value, index) in form.difficulty_dist" :key="index" class="difficulty-item">
-            <span class="difficulty-label">d{{ index + 1 }}</span>
+            <span class="difficulty-index">d{{ index + 1 }}</span>
+            <span class="difficulty-label" :data-testid="`difficulty-label-${index + 1}`">
+              {{ DIFFICULTY_LABELS[index] }}
+            </span>
             <el-slider
               :model-value="value"
               :max="100"
@@ -306,8 +333,14 @@ onMounted(() => {
                   setDifficulty(index, Array.isArray(next) ? (next[0] ?? 0) : next)
               "
             />
+            <span class="difficulty-count" :data-testid="`difficulty-count-${index + 1}`">
+              约 {{ difficultyPreview[index + 1] ?? 0 }} 题
+            </span>
           </div>
         </div>
+        <span class="hint">
+          权重越高该难度题越多，不需要加到 100；1 最简单，5 最难；题库不足时向相邻难度借题。
+        </span>
       </el-form-item>
 
       <el-form-item label="排除近期">
@@ -500,15 +533,41 @@ onMounted(() => {
   align-items: flex-start;
 }
 
+.ratio-explain {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .difficulty-item {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  width: 220px;
+  width: 300px;
+}
+
+.difficulty-item :deep(.el-slider) {
+  flex: 1;
+  min-width: 80px;
+}
+
+.difficulty-index {
+  width: 18px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .difficulty-label {
-  width: 24px;
+  width: 42px;
+  font-size: 13px;
+}
+
+.difficulty-count {
+  width: 56px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .hint {
