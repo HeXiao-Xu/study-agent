@@ -7,13 +7,15 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import Date, func, literal_column, select
 from sqlalchemy.orm import Session
 
+from app.ai.report import weekly_report
+from app.core.exceptions import CODE_INTERNAL, AppError
 from app.models.enums import MistakeStatus
 from app.models.knowledge_point import KnowledgePoint
 from app.models.mastery import Mastery
@@ -498,4 +500,68 @@ def build_weekly_stats(
     return _weekly_stats(
         _context(session, user_id=user_id, range_key="7d", now=moment),
         now=moment,
+    )
+
+
+class ReportGenerationError(AppError):
+    def __init__(self, message: str = "周报生成失败") -> None:
+        super().__init__(message, code=CODE_INTERNAL, http_status=500)
+
+
+def _validation_tuple(
+    text: str, stats: WeeklyStatsOut
+) -> tuple[list[str], list[str]]:
+    result = validate_numbers(text, stats.model_dump(mode="json"))
+    return result.checked_numbers, result.invalid_numbers
+
+
+def generate_weekly(
+    session: Session,
+    *,
+    user_id: int,
+    now: datetime | None = None,
+) -> WeeklyReportOut:
+    moment = now or datetime.now(timezone.utc)
+    stats = build_weekly_stats(session, user_id=user_id, now=moment)
+    period = WeeklyPeriodOut(
+        from_=moment.date() - timedelta(days=6),
+        to=moment.date(),
+        days=7,
+    )
+    if (
+        stats.totals.new_notes == 0
+        and stats.totals.reviews_done == 0
+        and stats.totals.new_mistakes == 0
+        and stats.totals.mastered_mistakes == 0
+        and stats.mastery.assessed_kp_count == 0
+    ):
+        return WeeklyReportOut(
+            period=period,
+            generated_by="empty",
+            report_md=EMPTY_REPORT_MD,
+            stats=stats,
+            validation=NumberValidationOut(
+                ok=True, attempts=0, checked_numbers=[], invalid_numbers=[]
+            ),
+        )
+
+    context = weekly_report.WeeklyReportContext(stats=stats.model_dump(mode="json"))
+    try:
+        result = weekly_report.generate_weekly_report(
+            context,
+            validator=lambda text: _validation_tuple(text, stats),
+        )
+    except weekly_report.WeeklyReportError as exc:
+        raise ReportGenerationError() from exc
+    return WeeklyReportOut(
+        period=period,
+        generated_by="llm",
+        report_md=result.text,
+        stats=stats,
+        validation=NumberValidationOut(
+            ok=True,
+            attempts=result.attempts,
+            checked_numbers=result.checked_numbers,
+            invalid_numbers=[],
+        ),
     )
