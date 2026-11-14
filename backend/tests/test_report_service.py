@@ -178,3 +178,88 @@ def test_get_overview_builds_trend_and_filters_user():
     assert "review_items.user_id = 50" in compiled
     assert "mistakes.user_id = 50" in compiled
     assert "mastery.user_id = 50" in compiled
+
+
+from app.services.report_service import (
+    EMPTY_REPORT_MD,
+    NumberValidation,
+    allowed_numbers,
+    build_weekly_stats,
+    extract_numbers,
+    validate_numbers,
+)
+
+
+def test_extract_numbers_ignores_markdown_list_markers():
+    assert extract_numbers("1. 本周新增 3 条\n2) 复习 0 次") == ["3", "0"]
+
+
+def test_extract_numbers_keeps_negative_and_decimal():
+    assert extract_numbers("净增 -2，掌握度 0.351，日期 2026-11-14") == [
+        "-2",
+        "0.351",
+        "2026",
+        "11",
+        "14",
+    ]
+
+
+def test_validate_numbers_allows_stats_and_date_parts():
+    stats = {
+        "period": {"from": "2026-11-08", "to": "2026-11-14", "days": 7},
+        "totals": {"new_notes": 3, "mistakes_net": -2},
+        "mastery": {"avg_mastery": 0.351},
+    }
+    result = validate_numbers("2026-11-14 新增 3 条，净增 -2，掌握度 0.351。", stats)
+    assert result.ok is True
+    assert result.invalid_numbers == []
+    assert "3" in result.checked_numbers
+
+
+def test_validate_numbers_rejects_invented_number():
+    stats = {
+        "period": {"from": "2026-11-08", "to": "2026-11-14", "days": 7},
+        "totals": {"new_notes": 3},
+    }
+    result = validate_numbers("本周新增 999 条。", stats)
+    assert result.ok is False
+    assert result.invalid_numbers == ["999"]
+
+
+def test_validate_numbers_rejects_report_without_numbers():
+    result = validate_numbers("本周学习很认真。", {"totals": {"new_notes": 0}})
+    assert result.ok is False
+
+
+def test_allowed_numbers_includes_nested_values_and_dates():
+    values = allowed_numbers(
+        {"period": {"from": "2026-11-08", "days": 7}, "totals": {"new_notes": 3}}
+    )
+    assert {str(value) for value in values} >= {"2026", "11", "8", "7", "3"}
+
+
+def test_build_weekly_stats_sums_and_weak_points():
+    from decimal import Decimal
+
+    session = FakeReportSession(
+        nodes=[
+            (115, 7, None, "集合", 2, Decimal("0.8")),
+            (200, 7, 115, "集合运算", 3, Decimal("0.5")),
+        ],
+        subjects=[(7, "高中数学")],
+        mastery=[(200, Decimal("0.6"), Decimal("2"), NOW)],
+        notes=[(date(2026, 11, 12), 2)],
+        reviews=[(date(2026, 11, 13), 1)],
+        mistakes=[(date(2026, 11, 13), 3)],
+        mastered=[],
+    )
+    out = build_weekly_stats(session, user_id=50, now=NOW)
+    assert out.totals.new_notes == 2
+    assert out.totals.reviews_done == 1
+    assert out.totals.new_mistakes == 3
+    assert out.totals.mistakes_net == 3
+    assert out.active_days == 2
+    assert out.mastery.assessed_kp_count == 1
+    assert out.mastery.weak_modules[0].mastery == 0.6
+    assert out.mastery.weak_kps[0].kp_id == 200
+    assert len(out.trend) == 7

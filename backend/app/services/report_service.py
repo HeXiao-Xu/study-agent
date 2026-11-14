@@ -4,9 +4,11 @@
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import Date, func, literal_column, select
@@ -20,12 +22,20 @@ from app.models.note import Note
 from app.models.review_item import ReviewItem
 from app.models.subject import Subject
 from app.schemas.report import (
+    NumberValidationOut,
     ReportHeatmapNodeOut,
     ReportModuleOut,
     ReportOverviewOut,
     ReportRangeOut,
     ReportSubjectOut,
     ReportTrendPointOut,
+    WeeklyMasteryOut,
+    WeeklyPeriodOut,
+    WeeklyReportOut,
+    WeeklyStatsOut,
+    WeeklyTotalsOut,
+    WeeklyWeakKpOut,
+    WeeklyWeakModuleOut,
 )
 from app.services import mastery_service, stats_service
 
@@ -285,13 +295,19 @@ def _load_trend(
     )
 
 
-def get_overview(
+@dataclass(frozen=True, slots=True)
+class _ReportContext:
+    overview: ReportOverviewOut
+    mastery_rows: list[tuple]
+
+
+def _context(
     session: Session,
     *,
     user_id: int,
-    range_key: str = DEFAULT_RANGE,
-    now: datetime | None = None,
-) -> ReportOverviewOut:
+    range_key: str,
+    now: datetime | None,
+) -> _ReportContext:
     window = build_window(range_key, now=now)
     moment = window.end
     nodes = _load_nodes(session)
@@ -305,8 +321,9 @@ def get_overview(
         if subject_ids
         else []
     )
-    raw, effective = _mastery_maps(_load_mastery(session, user_id=user_id), now=moment)
-    return ReportOverviewOut(
+    mastery_rows = _load_mastery(session, user_id=user_id)
+    raw, effective = _mastery_maps(mastery_rows, now=moment)
+    overview = ReportOverviewOut(
         range=ReportRangeOut(
             key=window.key, from_=window.dates[0], to=window.dates[-1]
         ),
@@ -317,4 +334,168 @@ def get_overview(
             mastery_t=effective,
         ),
         trend=_load_trend(session, user_id=user_id, window=window),
+    )
+    return _ReportContext(overview=overview, mastery_rows=mastery_rows)
+
+
+def get_overview(
+    session: Session,
+    *,
+    user_id: int,
+    range_key: str = DEFAULT_RANGE,
+    now: datetime | None = None,
+) -> ReportOverviewOut:
+    return _context(
+        session, user_id=user_id, range_key=range_key, now=now
+    ).overview
+
+
+EMPTY_REPORT_MD = "本周暂无学习记录，先完成一次练习或复习再来查看周报。"
+_NUMBER_RE = re.compile(r"(?<![\d.])-?\d+(?:\.\d+)?(?![\d.])")
+_LIST_MARKER_RE = re.compile(r"^\s*\d+[.)]\s+", re.MULTILINE)
+_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+WEAK_MODULE_LIMIT = 3
+WEAK_KP_LIMIT = 5
+
+
+@dataclass(frozen=True, slots=True)
+class NumberValidation:
+    checked_numbers: list[str]
+    invalid_numbers: list[str]
+
+    @property
+    def ok(self) -> bool:
+        return bool(self.checked_numbers) and not self.invalid_numbers
+
+
+def extract_numbers(text: str) -> list[str]:
+    cleaned = _LIST_MARKER_RE.sub("", text)
+    result: list[str] = []
+    seen: set[str] = set()
+    for token in _NUMBER_RE.findall(cleaned):
+        if token not in seen:
+            seen.add(token)
+            result.append(token)
+    return result
+
+
+def _add_allowed(value: object, allowed: set[Decimal]) -> None:
+    if isinstance(value, bool):
+        return
+    if isinstance(value, (int, float, Decimal)):
+        allowed.add(Decimal(str(value)))
+        return
+    if isinstance(value, str):
+        for match in _DATE_RE.finditer(value):
+            for part in match.groups():
+                allowed.add(Decimal(str(int(part))))
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _add_allowed(item, allowed)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _add_allowed(item, allowed)
+
+
+def allowed_numbers(stats: Mapping[str, object]) -> set[Decimal]:
+    allowed: set[Decimal] = set()
+    _add_allowed(stats, allowed)
+    period = stats.get("period")
+    if isinstance(period, dict):
+        days = period.get("days")
+        if isinstance(days, int) and not isinstance(days, bool):
+            allowed.add(Decimal(days))
+    return allowed
+
+
+def _as_decimal(token: str) -> Decimal | None:
+    try:
+        return Decimal(token)
+    except InvalidOperation:
+        return None
+
+
+def validate_numbers(text: str, stats: Mapping[str, object]) -> NumberValidation:
+    checked = extract_numbers(text)
+    allowed = allowed_numbers(stats)
+    invalid: list[str] = []
+    for token in checked:
+        value = _as_decimal(token)
+        if value is None or value not in allowed:
+            invalid.append(token)
+    return NumberValidation(checked_numbers=checked, invalid_numbers=invalid)
+
+
+def _weekly_stats(context: _ReportContext, *, now: datetime) -> WeeklyStatsOut:
+    trend = context.overview.trend
+    totals = WeeklyTotalsOut(
+        new_notes=sum(point.new_notes for point in trend),
+        reviews_done=sum(point.reviews_done for point in trend),
+        new_mistakes=sum(point.new_mistakes for point in trend),
+        mastered_mistakes=sum(point.mastered_mistakes for point in trend),
+        mistakes_net=sum(point.mistakes_net for point in trend),
+    )
+    active_days = sum(
+        1
+        for point in trend
+        if point.new_notes
+        + point.reviews_done
+        + point.new_mistakes
+        + point.mastered_mistakes
+        > 0
+    )
+    _raw, effective = _mastery_maps(context.mastery_rows, now=now)
+
+    weak_modules: list[WeeklyWeakModuleOut] = []
+    weak_kps: list[WeeklyWeakKpOut] = []
+    for subject in context.overview.subjects:
+        for module in subject.modules:
+            if module.mastery is not None:
+                weak_modules.append(
+                    WeeklyWeakModuleOut(
+                        subject_id=subject.subject_id,
+                        kp_id=module.kp_id,
+                        kp_name=module.kp_name,
+                        mastery=module.mastery,
+                    )
+                )
+        for node in subject.heatmap:
+            if node.mastery_t is not None:
+                weak_kps.append(
+                    WeeklyWeakKpOut(
+                        subject_id=subject.subject_id,
+                        kp_id=node.kp_id,
+                        kp_name=node.kp_name,
+                        level=node.level,
+                        mastery=node.mastery_t,
+                    )
+                )
+    weak_modules.sort(key=lambda item: (item.mastery, item.kp_id))
+    weak_kps.sort(key=lambda item: (item.mastery, item.kp_id))
+    avg = round(sum(effective.values()) / len(effective), 3) if effective else None
+    return WeeklyStatsOut(
+        totals=totals,
+        active_days=active_days,
+        mastery=WeeklyMasteryOut(
+            assessed_kp_count=len(context.mastery_rows),
+            avg_mastery=avg,
+            weak_modules=weak_modules[:WEAK_MODULE_LIMIT],
+            weak_kps=weak_kps[:WEAK_KP_LIMIT],
+        ),
+        trend=trend,
+    )
+
+
+def build_weekly_stats(
+    session: Session,
+    *,
+    user_id: int,
+    now: datetime | None = None,
+) -> WeeklyStatsOut:
+    moment = now or datetime.now(timezone.utc)
+    return _weekly_stats(
+        _context(session, user_id=user_id, range_key="7d", now=moment),
+        now=moment,
     )
