@@ -136,10 +136,22 @@ const router = createRouter({
           meta: { title: '学习报告', nav: 'reports', roles: ['student'] },
         },
         {
+          path: 'agent/tasks',
+          name: 'agent-tasks',
+          component: () => import('@/views/agent/TaskList.vue'),
+          meta: { title: 'Agent 任务', nav: 'agent-tasks', roles: ['student'] },
+        },
+        {
+          path: 'agent/tasks/:id(\\d+)',
+          name: 'agent-task-detail',
+          component: () => import('@/views/agent/TaskDetail.vue'),
+          meta: { title: '任务详情', nav: 'agent-tasks', roles: ['student'] },
+        },
+        {
           path: 'agent/mindmap/:taskId(\\d+)?',
           name: 'agent-mindmap',
           component: () => import('@/views/agent/WeeklyMindmap.vue'),
-          meta: { title: '学习导图', nav: 'mindmap', roles: ['student'] },
+          meta: { title: '学习导图', nav: 'agent-tasks', roles: ['student'] },
         },
         {
           path: 'practice',

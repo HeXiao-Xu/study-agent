@@ -338,7 +338,7 @@ git commit -m "feat(s6-5): Agent 任务类型、列表/确认 API 与状态映�
 **Interfaces:**
 - Produces: `/agent/tasks`（nav `agent-tasks`）、表格/筛选/分页/2 s 轮询
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 import { flushPromises, mount } from '@vue/test-utils'
@@ -405,12 +405,12 @@ describe('TaskList', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd web && npm run test:run -- src/views/agent/TaskList.spec.ts`
 Expected: FAIL（组件不存在）
 
-- [ ] **Step 3: 实现 TaskList**
+- [x] **Step 3: 实现 TaskList**
 
 - 结构：`page-head`（标题/说明/刷新/生成学习导图）、筛选 `el-select`（status/task_type）+ `el-button` 查询、`el-table` + `el-pagination`、空态、error alert。
 - 数据：`items/total/page/pageSize/filters`；`load()` 调 `listAgentTasks`，失败设 error。
@@ -429,13 +429,13 @@ Expected: FAIL（组件不存在）
 - 路由：`agent/tasks`（name `agent-tasks`）、`agent/tasks/:id(\\d+)`（name `agent-task-detail`），student；放在 mindmap 路由旁。
 - MainLayout 导航数量仍 14，文案断言若存在「学习导图」需改为「Agent 任务」；搜索测试里的文案。
 
-- [ ] **Step 4: 跑测试 + 构建**
+- [x] **Step 4: 跑测试 + 构建**
 
 Run: `cd web && npm run test:run -- src/views/agent/TaskList.spec.ts src/layouts/MainLayout.spec.ts`
 Run: `cd web && npm run build`
 Expected: PASS / build 0
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/agent/TaskList.vue web/src/views/agent/TaskList.spec.ts \
@@ -455,7 +455,7 @@ git commit -m "feat(s6-5): Agent 任务列表页与导航"
 - Consumes: `getAgentTask`、`confirmAgentTask`、`statusLabel/statusType`、`asWeeklyMindmapResult`
 - Produces: `/agent/tasks/:id` 详情页、确认弹窗与轮询
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 const api = vi.hoisted(() => ({ getAgentTask: vi.fn(), confirmAgentTask: vi.fn() }))
@@ -500,12 +500,12 @@ it('confirms a waiting task', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd web && npm run test:run -- src/views/agent/TaskDetail.spec.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现详情页**
+- [x] **Step 3: 实现详情页**
 
 - 头部：返回 `/agent/tasks`、`任务 #id`、类型标签、状态 tag、步骤/token/时间。
 - `load(id)`、`poll()` 1 s；终态/waiting 停止；失败设 error。
@@ -536,14 +536,14 @@ Expected: FAIL
 - waiting_confirm：alert + `data-testid="confirm-approve"`/`confirm-reject` 打开弹窗；弹窗备注（≤500）、提交调 `confirmAgentTask(id,{approved,comment})`；成功后关闭并 `load` 恢复轮询；失败清 loading 由 http 统一提示。
 - 轮询在终态停止；卸载清理。
 
-- [ ] **Step 4: 跑测试 + 全量前端**
+- [x] **Step 4: 跑测试 + 全量前端**
 
 Run: `cd web && npm run test:run -- src/views/agent/TaskDetail.spec.ts`
 Run: `cd web && npm run test:run`
 Run: `cd web && npm run build`
 Expected: 全绿 / build 0
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/views/agent/TaskDetail.vue web/src/views/agent/TaskDetail.spec.ts

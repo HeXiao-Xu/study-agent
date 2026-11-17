@@ -16,7 +16,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: '错题本', name: 'mistakes', path: '/mistakes' },
   { label: '复习', name: 'review', path: '/review' },
   { label: '报告', name: 'reports', path: '/reports' },
-  { label: '学习导图', name: 'mindmap', path: '/agent/mindmap' },
+  { label: 'Agent 任务', name: 'agent-tasks', path: '/agent/tasks' },
   { label: '图谱', name: 'graph', path: '/graph' },
   { label: '统计', name: 'stats', path: '/stats' },
 ]
