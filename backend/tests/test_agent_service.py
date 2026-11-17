@@ -70,7 +70,7 @@ def test_create_unknown_type_raises_422(monkeypatch):
     monkeypatch.setattr(agent_service.task_service, "create_task", lambda *a, **k: None)
     with pytest.raises(InvalidParamError):
         agent_service.create_agent_task(
-            FakeSession(), owner=_owner(), task_type="weekly_mindmap", task_input={}, queue=FakeQueue()
+            FakeSession(), owner=_owner(), task_type="mistake_paper", task_input={}, queue=FakeQueue()
         )
 
 
@@ -148,3 +148,15 @@ def test_confirm_writes_decision_and_requeues(monkeypatch):
 def test_run_terminal_task_is_noop():
     task = _task("succeeded")
     assert agent_service.run_agent_task(FakeSession(task), 71) == {"status": "succeeded"}
+
+def test_create_weekly_mindmap_allowed(monkeypatch):
+    monkeypatch.setattr(agent_service.task_service, "create_task", lambda *a, **k: None)
+    task = agent_service.create_agent_task(
+        FakeSession(),
+        owner=_owner(),
+        task_type="weekly_mindmap",
+        task_input={"days": 7},
+        queue=FakeQueue(),
+    )
+    assert task.task_type == "weekly_mindmap"
+    assert task.input_json["days"] == 7

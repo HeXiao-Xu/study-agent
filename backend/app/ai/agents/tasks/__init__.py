@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from app.ai.agents.engine import AgentTaskSpec
 from app.ai.agents.tasks.demo import DemoTaskSpec
+from app.ai.agents.tasks.weekly_mindmap import WeeklyMindmapTaskSpec
 
 TASK_SPECS: dict[str, type[AgentTaskSpec]] = {
     DemoTaskSpec.task_type: DemoTaskSpec,
+    WeeklyMindmapTaskSpec.task_type: WeeklyMindmapTaskSpec,
 }
 
 
@@ -13,4 +15,9 @@ def get_task_spec(task_type: str) -> type[AgentTaskSpec] | None:
     return TASK_SPECS.get(task_type)
 
 
-__all__ = ["TASK_SPECS", "get_task_spec", "DemoTaskSpec"]
+__all__ = [
+    "TASK_SPECS",
+    "get_task_spec",
+    "DemoTaskSpec",
+    "WeeklyMindmapTaskSpec",
+]

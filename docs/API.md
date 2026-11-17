@@ -1086,7 +1086,7 @@
 
 ## 10. Agent
 
-> S6-2 定稿：状态机 + 步骤持久化。当前只开放 `demo` 任务类型（验收用 3 步假任务）；`weekly_mindmap` / `mistake_paper` 在 S6-3/S6-4 注册后开放。
+> S6-2/S6-3 定稿：状态机 + 步骤持久化。任务类型：`demo`（验收用工具计划）与 `weekly_mindmap`（周笔记导图）；`mistake_paper` 不做（组卷已由 S5-1/S5-2 实现，用户 2026-11-17 决定）。
 > 通用约束（方案 6.7）：最大步数 12（按 `agent_steps` 行数计）；单任务 token 预算默认 20000；工具入参 JSON Schema 校验；写操作必须经人工确认；全程步骤日志 + 引用收集。
 
 ### POST /api/v1/agent/tasks
@@ -1096,8 +1096,15 @@
 
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
-  | task_type | string | 是 | S6-2 仅 `demo`；未知类型 422/42200「任务类型尚未启用：x」 |
-  | input | object | 是 | 任务输入，结构随 type；`demo` 见下 |
+  | task_type | string | 是 | `demo`（S6-2 验收）或 `weekly_mindmap`（S6-3）；`mistake_paper` 未启用，422/42200「任务类型尚未启用：x」 |
+  | input | object | 是 | 任务输入，结构随 type；`demo` / `weekly_mindmap` 见下 |
+
+  `weekly_mindmap` 的 `input`：
+  ```json
+  {"days": 7, "subject_id": null}
+  ```
+  - `days` 1–30（默认 7）；`subject_id` 可选，只统计该学科笔记。
+  - 结果写入 `result`（见 GET），不新建笔记。
 
   `demo` 的 `input`：
   ```json
@@ -1130,7 +1137,10 @@
 - 出参：`Envelope[AgentTaskDetailOut]` = 上面的字段 + `input` + `result` + `steps[]`
   - step：`{step_no, thought, tool_name, tool_input, tool_output, latency_ms, status}`
   - 步骤按 `step_no ASC`；执行中也可查，步骤会持续增加。
-  - `result`：成功时为任务产物（`summary/artifacts/citations`）；`waiting_confirm` 时为中间产物 `{artifacts,citations,awaiting_confirm:true}`；失败时为已产出的部分 + `error`。
+  - `result`：成功时为任务产物；`demo` = `{summary,artifacts,citations}`；`weekly_mindmap` =
+    `{task_type:"weekly_mindmap",days,note_count,kp_count,summary_md,mermaid,fallback_text,citations:[{note_id,note_title}],degraded,cluster_prompt_version}`；
+    `waiting_confirm` 时为中间产物 `{artifacts,citations,awaiting_confirm:true}`；失败时为已产出的部分 + `error`。
+  - `weekly_mindmap` 空窗口：`note_count=0`、`mermaid=""`，前端显示固定空态；LLM 聚类失败时 `degraded=true`，导图按知识点降级。
 - 错误：404/40400、403/40300
 
 ### POST /api/v1/agent/tasks/{id}/confirm

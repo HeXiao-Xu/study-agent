@@ -408,7 +408,7 @@ git commit -m "feat(s6-3): 周导图 LLM 聚类适配器与 Prompt"
 - Produces: `WeeklyMindmapTaskSpec(task_input, *, llm_client=None, now=None)`：`task_type="weekly_mindmap"`、`requires_confirm=False`、`build_plan/extend_plan/finalize`
 - Produces: 结果 JSON（`task_type/days/note_count/kp_count/summary_md/mermaid/fallback_text/citations/degraded/cluster_prompt_version`）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """S6-3 weekly_mindmap：日期窗口、三阶段扩展、摘要/引用/空窗口/降级。"""
@@ -499,12 +499,12 @@ def test_finalize_summary_and_citations_from_cluster():
     assert result["citations"] == [{"note_id": 54, "note_title": "函数"}]
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_task_weekly_mindmap.py -q`
 Expected: FAIL（`WeeklyMindmapTaskSpec` 不存在）
 
-- [ ] **Step 3: 实现 `WeeklyMindmapTaskSpec`**
+- [x] **Step 3: 实现 `WeeklyMindmapTaskSpec`**
 
 - 输入 `WeeklyInput(days 1–30=7, subject_id≥1|None)`；`validate_input` 抛 `InvalidParamError`。
 - `build_plan`：UTC 日期窗口 + `limit=50`；`purpose=f"取过去 {days} 天笔记"`。
@@ -521,7 +521,7 @@ Expected: FAIL（`WeeklyMindmapTaskSpec` 不存在）
 - 注册 `TASK_SPECS["weekly_mindmap"]=WeeklyMindmapTaskSpec`；`demo` 保留。
 - `docs/API.md §10` 更新任务类型说明与 weekly result 字段。
 
-- [ ] **Step 4: 补 service 测试**
+- [x] **Step 4: 补 service 测试**
 
 `test_agent_service.py`：
 ```python
@@ -541,12 +541,12 @@ def test_create_mistake_paper_still_rejected():
         )
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_task_weekly_mindmap.py tests/test_agent_service.py tests/test_agent_api.py tests/test_agent_engine_extension.py -q`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/ai/agents/tasks backend/tests/test_agent_task_weekly_mindmap.py \
