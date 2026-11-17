@@ -577,7 +577,7 @@ git commit -m "feat(s6-3): weekly_mindmap 任务类型与注册"
 - Produces: `renderMermaid(code): Promise<string>`、`parseSvgSize(svg): {width,height}`、`downloadSvgAsPng(svg, filename): Promise<void>`
 - Produces: `/agent/mindmap/:taskId?`、导航「学习导图」
 
-- [ ] **Step 1: 先写前端失败测试**
+- [x] **Step 1: 先写前端失败测试**
 
 `src/api/agent.spec.ts`：mock `@/api/http`，断言 POST `/api/v1/agent/tasks`、GET `/api/v1/agent/tasks/7`。
 `src/views/agent/mermaid.spec.ts`：`vi.mock('mermaid', ...)`，断言 initialize 一次、render 返回 svg、失败透传。
@@ -601,17 +601,17 @@ vi.mock('./exportMindmap', async () => ({ ...(await vi.importActual('./exportMin
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: routeParams }), useRouter: () => ({ replace: vi.fn() }) }))
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd web && npm run test:run -- src/api/agent.spec.ts src/views/agent`
 Expected: FAIL（页面/模块不存在）
 
-- [ ] **Step 3: 实现 API 与类型**
+- [x] **Step 3: 实现 API 与类型**
 
 - `types/agent.ts`：`AgentTaskSummary`、`AgentStep`、`WeeklyMindmapResult`、`AgentTaskDetail`（字段与 API.md 一致；`result` 使用 `WeeklyMindmapResult | null`）。
 - `api/agent.ts`：POST/GET，沿用 `ApiEnvelope` 解包。
 
-- [ ] **Step 4: 实现 Mermaid 与导出**
+- [x] **Step 4: 实现 Mermaid 与导出**
 
 `mermaid.ts`：
 
@@ -651,20 +651,20 @@ export function parseSvgSize(svgText: string): { width: number; height: number }
 export async function downloadSvgAsPng(svgText: string, filename: string): Promise<void> { ... }
 ```
 
-- [ ] **Step 5: 实现页面**
+- [x] **Step 5: 实现页面**
 
 - `WeeklyMindmap.vue`：按 spec §4.2；轮询 `setTimeout` 1s；`onBeforeUnmount` clear；`renderMermaid` 异常置 `renderFailed`；`ElMessage` 错误；`v-html` 渲染 SVG；摘要 `<pre>`；引用 `<ul>`；空态/失败/降级提示；导出按钮调用 `downloadSvgAsPng(svg, `学习导图-${taskId}-${date}.png`)`。
 - 路由：`path: 'agent/mindmap/:taskId(\\d+)?'`，`meta: { title: '学习导图', nav: 'mindmap', roles: ['student'] }`。
 - 导航：`{ label: '学习导图', name: 'mindmap', path: '/agent/mindmap' }`（放在「报告」/「图谱」之间）。
 
-- [ ] **Step 6: 跑前端测试与构建**
+- [x] **Step 6: 跑前端测试与构建**
 
 Run: `cd web && npm run test:run -- src/api/agent.spec.ts src/views/agent`
 Run: `cd web && npm run test:run`（全量）
 Run: `cd web && npm run build`
 Expected: 全绿；记录前端测试文件/用例数与构建包体（mermaid chunk 体积）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add web/package.json web/package-lock.json web/src/api/agent.ts web/src/api/agent.spec.ts \
