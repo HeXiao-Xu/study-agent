@@ -151,3 +151,25 @@ class ReviewRefType(StrEnum):
 
 
 REVIEW_REF_TYPES: tuple[str, ...] = tuple(item.value for item in ReviewRefType)
+
+
+class AgentTaskStatus(StrEnum):
+    """agent_tasks.status（SCHEMA §8.1/§10.13，S6-2 定稿）。"""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    WAITING_CONFIRM = "waiting_confirm"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class AgentStepStatus(StrEnum):
+    """agent_steps.status（SCHEMA §8.2/§10.18，S6-2 定稿）。"""
+
+    OK = "ok"
+    ERROR = "error"
+    WAITING_CONFIRM = "waiting_confirm"
+
+
+AGENT_TASK_STATUSES: tuple[str, ...] = tuple(item.value for item in AgentTaskStatus)
+AGENT_STEP_STATUSES: tuple[str, ...] = tuple(item.value for item in AgentStepStatus)

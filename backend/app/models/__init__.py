@@ -1,5 +1,7 @@
 """模型包：显式导入供 Alembic target_metadata 发现。"""
 from app.core.db import Base
+from app.models.agent_step import AgentStep
+from app.models.agent_task import AgentTask
 from app.models.async_task import AsyncTask
 from app.models.conversation import Conversation
 from app.models.file import File
@@ -25,6 +27,8 @@ from app.models.user_relation import UserRelation
 
 __all__ = [
     "Base",
+    "AgentStep",
+    "AgentTask",
     "AsyncTask",
     "Conversation",
     "File",

@@ -507,11 +507,15 @@ erDiagram
 | input_json | JSONB | 否 | — | 任务输入 | — |
 | status | TEXT | 否 | 'pending' | §10.13 | — |
 | result_json | JSONB | 是 | — | 任务结果 | — |
+| state_json | JSONB | 是 | — | 图状态快照（S6-2：挂起/恢复，每节点写） | — |
 | error | TEXT | 是 | — | 失败原因 | — |
 | steps_count | INTEGER | 是 | — | 步骤数 | — |
 | token_cost | INTEGER | 是 | — | token 消耗（预算上限控制，方案 6.7） | — |
 | started_at | TIMESTAMPTZ | 是 | — | 开始时间 | — |
 | finished_at | TIMESTAMPTZ | 是 | — | 结束时间 | — |
+| created_at | TIMESTAMPTZ | 否 | now() | 创建时间（S6-2） | — |
+
+> S6-2 增列：`state_json`、`created_at`（迁移 `0018_s6_2`）；`agent_steps` 列不变。
 
 ### 8.2 agent_steps
 
@@ -525,7 +529,7 @@ erDiagram
 | tool_input_json | JSONB | 是 | — | 工具入参 | — |
 | tool_output_json | JSONB | 是 | — | 工具出参 | — |
 | latency_ms | INTEGER | 是 | — | 耗时 | — |
-| status | TEXT | 是 | — | 步骤状态（取值 TODO，S6-2 定） | — |
+| status | TEXT | 否 | — | 步骤状态：ok / error / waiting_confirm（S6-2 定） | — |
 
 ### 8.3 prompt_templates
 
@@ -596,11 +600,12 @@ erDiagram
 | 10.10 | answers.self_rated | 0 / 0.5 / 1 ✅ | 方案 5.2 + 6.6 |
 | 10.11 | review_items.ref_type | note / question / mistake ✅ | 方案 5.2 |
 | 10.12 | messages.role | user / assistant / system ✅ | 方案 5.2 |
-| 10.13 | agent_tasks.status | pending / running / waiting_confirm / succeeded / failed ✅；task_type 首批：weekly_mindmap / mistake_paper（见 API 草案） | 方案 5.2 + 附录 B |
+| 10.13 | agent_tasks.status | pending / running / waiting_confirm / succeeded / failed ✅；task_type：demo（S6-2 验收）、weekly_mindmap / mistake_paper（S6-3/S6-4） | 方案 5.2 + 附录 B |
 | 10.14 | llm_call_logs.scene | qa / query_rewrite / kp_align / embed / mistake / gen / graph / agent / report（S4-5 加 graph，S5-6 加 report） | 本卡 S3-7 + S4-5 + S5-6 |
 | 10.15 | async_tasks.status | pending / running / succeeded / failed（S2-7 定稿；失败重试回 pending） | 本卡 S2-7 |
 | 10.16 | llm_call_logs.status | success / failed（S3-7 定稿；流式被关闭记 failed） | 本卡 S3-7 |
 | 10.17 | knowledge_edges.review_status（`EdgeReviewStatus`） | pending / approved / rejected ✅（S4-5） | 本卡 S4-5 |
+| 10.18 | agent_steps.status | ok / error / waiting_confirm ✅（S6-2，TEXT + CHECK） | 本卡 S6-2 |
 
 > `MistakeStatus` / `CauseType` 常量定义在 `backend/app/models/enums.py`；CHECK 文本由 `in_check()` 生成，与迁移 `0010_s4_2` 的 `ck_mistakes_status` / `ck_mistake_analyses_cause_type` 一致（S4-2 实测 DDL）。
 

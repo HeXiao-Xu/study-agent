@@ -61,4 +61,4 @@ def test_user_fk_cascades_and_is_indexed():
 def test_migration_chain_head_is_s5_6():
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_current_head() == "0017_s5_6"
+    assert script.get_current_head() == "0018_s6_2"

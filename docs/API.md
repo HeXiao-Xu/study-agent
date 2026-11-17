@@ -1086,27 +1086,68 @@
 
 ## 10. Agent
 
+> S6-2 定稿：状态机 + 步骤持久化。当前只开放 `demo` 任务类型（验收用 3 步假任务）；`weekly_mindmap` / `mistake_paper` 在 S6-3/S6-4 注册后开放。
+> 通用约束（方案 6.7）：最大步数 12（按 `agent_steps` 行数计）；单任务 token 预算默认 20000；工具入参 JSON Schema 校验；写操作必须经人工确认；全程步骤日志 + 引用收集。
+
 ### POST /api/v1/agent/tasks
-- 权限：student
-- 类型：异步任务
+- 权限：student（其他角色 403/40300）
+- 类型：异步（**202**；写 `agent_tasks` 与 `async_tasks`，入 ARQ `agent.run`）
 - 入参：
 
   | 字段 | 类型 | 必填 | 说明 |
   |---|---|---|---|
-  | type | string | 是 | "weekly_mindmap" \| "mistake_paper" |
-  | input | object | 是 | 任务输入（结构随 type 定，TODO S6-3/S6-4） |
+  | task_type | string | 是 | S6-2 仅 `demo`；未知类型 422/42200「任务类型尚未启用：x」 |
+  | input | object | 是 | 任务输入，结构随 type；`demo` 见下 |
 
-- 约束（方案 6.7）：最大步数 12；单任务 token 预算上限；工具入参 JSON Schema 校验；写操作必须经人工确认；全程步骤日志 + 引用收集
+  `demo` 的 `input`：
+  ```json
+  {
+    "steps": [
+      {"tool": "calculator", "input": {"expression": "2**10"}, "purpose": "计算 2 的 10 次方"},
+      {"tool": "make_mindmap", "input": {"title": "函数", "nodes": [{"id": "1", "name": "函数"}]}}
+    ],
+    "require_confirm": false,
+    "token_budget": 20000
+  }
+  ```
+  - `steps` 1–5 条；`tool` 必须是 S6-1 已注册工具（未知工具 422）；`input` 为对象；`purpose` ≤200 字。
+  - `require_confirm=true` 时，所有工具步骤完成后任务挂起为 `waiting_confirm`。
+  - `token_budget` 可省略（默认 `AGENT_TOKEN_BUDGET`），给定时 ≥100。
+
+- 出参：`Envelope[AgentTaskOut]`
+  ```json
+  {"code":0,"message":"ok","trace_id":"...","data":{
+    "id": 71, "task_type": "demo", "status": "pending", "steps_count": 0,
+    "token_cost": 0, "error": null,
+    "created_at": "2026-11-17T07:00:00Z", "started_at": null, "finished_at": null
+  }}
+  ```
+- 错误：422/42200（输入不合法/未知工具/步数越界）；500/50000「任务队列不可用」（agent 任务同时置 `failed`）
 
 ### GET /api/v1/agent/tasks/{id}
-- 权限：student（仅本人任务）
-- 类型：同步
-- 出参：任务状态 + 步骤列表（agent_steps，支持回放）
+- 权限：student（仅本人；他人 403/40300，不存在 404/40400）
+- 类型：同步，可轮询
+- 出参：`Envelope[AgentTaskDetailOut]` = 上面的字段 + `input` + `result` + `steps[]`
+  - step：`{step_no, thought, tool_name, tool_input, tool_output, latency_ms, status}`
+  - 步骤按 `step_no ASC`；执行中也可查，步骤会持续增加。
+  - `result`：成功时为任务产物（`summary/artifacts/citations`）；`waiting_confirm` 时为中间产物 `{artifacts,citations,awaiting_confirm:true}`；失败时为已产出的部分 + `error`。
+- 错误：404/40400、403/40300
 
 ### POST /api/v1/agent/tasks/{id}/confirm
-- 权限：student
-- 类型：同步
-- 说明：人工确认（human-in-the-loop），任务从 waiting_confirm 继续
+- 权限：student（仅本人）
+- 类型：异步（**202**；写确认决策并重新入 ARQ）
+- 前置：任务状态必须为 `waiting_confirm`，否则 409/40900「当前状态不需要确认」
+- 入参：
+
+  | 字段 | 类型 | 必填 | 说明 |
+  |---|---|---|---|
+  | approved | boolean | 是 | true=继续；false=拒绝并让任务失败 |
+  | comment | string\|null | 否 | ≤500 字，写入确认步骤 thought |
+  | edits | object\|null | 否 | S6-2 只存不执行；S6-4 消费（换题/调难度） |
+
+- 出参：`Envelope[AgentTaskOut]`（status 回到 `pending`）
+- 行为：恢复执行从 `confirm` 节点继续，不重跑已完成的工具；`approved=false` 最终 `failed` + `error="用户拒绝确认"`
+- 错误：404/40400、403/40300、409/40900、500/50000（入队失败时状态恢复为 `waiting_confirm`）
 
 ## 11. 运维
 
