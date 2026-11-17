@@ -9,6 +9,8 @@ export async function renderMermaid(code: string): Promise<string> {
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'default',
+      // 关掉 HTML 标签：foreignObject 会让 canvas 被标记为 tainted，导出 PNG 失败
+      htmlLabels: false,
       fontFamily: 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
     })
     initialized = true

@@ -60,8 +60,12 @@ export async function downloadSvgAsPng(
     const link = document.createElement('a')
     link.href = pngUrl
     link.download = filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
     link.click()
-    URL.revokeObjectURL(pngUrl)
+    link.remove()
+    // 立即 revoke 会让部分浏览器来不及开始下载
+    setTimeout(() => URL.revokeObjectURL(pngUrl), 1000)
   } finally {
     URL.revokeObjectURL(sourceUrl)
   }
