@@ -1131,6 +1131,14 @@
   ```
 - 错误：422/42200（输入不合法/未知工具/步数越界）；500/50000「任务队列不可用」（agent 任务同时置 `failed`）
 
+### GET /api/v1/agent/tasks（S6-5）
+- 权限：student（其他角色 403/40300）
+- 类型：同步分页
+- 入参：`page` ≥1（默认 1）、`page_size` 1–100（默认 10）；`status` ∈ `pending/running/waiting_confirm/succeeded/failed`（可选）；`task_type` 可选（1–50 字）；`sort_by` ∈ `created_at/id`（默认 `created_at`）、`order` ∈ `asc/desc`（默认 `desc`）
+- 出参：`Envelope[PageData[AgentTaskOut]]` = `{items,total,page,page_size}`；`items[]` 字段同创建返回
+- 口径：只查本人；固定 `created_at DESC, id DESC` 兜底；筛选条件全部下推 SQL
+- 错误：401/40100、403/40300、422/42200（非法 status/排序字段）
+
 ### GET /api/v1/agent/tasks/{id}
 - 权限：student（仅本人；他人 403/40300，不存在 404/40400）
 - 类型：同步，可轮询

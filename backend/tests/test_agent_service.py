@@ -160,3 +160,33 @@ def test_create_weekly_mindmap_allowed(monkeypatch):
     )
     assert task.task_type == "weekly_mindmap"
     assert task.input_json["days"] == 7
+
+
+def test_list_agent_tasks_scopes_user_and_sort(monkeypatch):
+    from sqlalchemy.dialects import postgresql
+
+    from app.schemas.common import PageData
+    from app.utils.pagination import PageParams, SortParams
+
+    captured = {}
+
+    def fake_page(session, stmt, page, *, item_model):  # noqa: ANN001
+        captured["sql"] = str(stmt.compile(dialect=postgresql.dialect()))
+        captured["item_model"] = item_model
+        return PageData(items=[], total=0, page=page.page, page_size=page.page_size)
+
+    monkeypatch.setattr(agent_service, "paginate_query", fake_page)
+    agent_service.list_agent_tasks(
+        object(),
+        user_id=50,
+        status="running",
+        task_type="demo",
+        page=PageParams(page=2, page_size=5),
+        sort=SortParams(),
+    )
+    sql = captured["sql"]
+    assert "agent_tasks.user_id =" in sql
+    assert "agent_tasks.status =" in sql
+    assert "agent_tasks.task_type =" in sql
+    assert "ORDER BY agent_tasks.created_at DESC" in sql
+    assert "agent_tasks.id DESC" in sql

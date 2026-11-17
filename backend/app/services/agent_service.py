@@ -40,12 +40,25 @@ from app.core.exceptions import (
 from app.models.agent_step import AgentStep
 from app.models.agent_task import AgentTask
 from app.models.user import User
+from app.schemas.agent import AgentTaskOut
+from app.schemas.common import PageData
 from app.services import task_service
 from app.tasks.queue import TaskQueue
+from app.utils.pagination import (
+    PageParams,
+    SortParams,
+    apply_sort,
+    paginate_query,
+)
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL = {STATUS_SUCCEEDED, STATUS_FAILED}
+
+_AGENT_TASK_SORTABLE = {
+    "created_at": AgentTask.created_at,
+    "id": AgentTask.id,
+}
 
 
 def _now() -> datetime:
@@ -163,6 +176,33 @@ def get_agent_task(
     return task, steps
 
 
+def list_agent_tasks(
+    session: Session,
+    *,
+    user_id: int,
+    status: str | None,
+    task_type: str | None,
+    page: PageParams,
+    sort: SortParams,
+) -> PageData[AgentTaskOut]:
+    """本人 Agent 任务分页列表；筛选全部下推 SQL。"""
+    stmt = select(AgentTask).where(AgentTask.user_id == user_id)
+    if status:
+        stmt = stmt.where(AgentTask.status == status)
+    if task_type:
+        stmt = stmt.where(AgentTask.task_type == task_type)
+    stmt = apply_sort(
+        stmt,
+        sort_by=sort.sort_by or "created_at",
+        order=sort.order if sort.sort_by else "desc",
+        allowed=_AGENT_TASK_SORTABLE,
+        default_sort="created_at",
+    )
+    # 同秒创建时用 id 兜底，避免翻页重复/漏行（S4-1/S4-5 同类坑）
+    stmt = stmt.order_by(AgentTask.id.desc())
+    return paginate_query(session, stmt, page, item_model=AgentTaskOut)
+
+
 def confirm_agent_task(
     session: Session,
     *,
@@ -275,6 +315,7 @@ __all__ = [
     "DbStepRecorder",
     "create_agent_task",
     "get_agent_task",
+    "list_agent_tasks",
     "confirm_agent_task",
     "run_agent_task",
 ]

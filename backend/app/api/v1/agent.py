@@ -1,7 +1,9 @@
-"""S6-2 Agent 任务接口（API.md §10）：创建 202 / 查询 / 确认 202。"""
+"""S6-2/S6-5 Agent 任务接口（API.md §10）：创建 202 / 列表 / 查询 / 确认 202。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -15,11 +17,16 @@ from app.schemas.agent import (
     AgentTaskDetailOut,
     AgentTaskOut,
 )
-from app.schemas.common import Envelope
+from app.schemas.common import Envelope, PageData
 from app.services import agent_service
 from app.tasks.queue import TaskQueue, get_task_queue
+from app.utils.pagination import PageParams, SortParams, page_params, sort_params
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+
+AgentTaskStatusIn = Literal[
+    "pending", "running", "waiting_confirm", "succeeded", "failed"
+]
 
 
 def _detail(task, steps) -> AgentTaskDetailOut:  # noqa: ANN001
@@ -63,6 +70,30 @@ def create_agent_task(
         queue=queue,
     )
     return Envelope(trace_id=get_trace_id(), data=AgentTaskOut.model_validate(task))
+
+
+@router.get(
+    "/tasks",
+    response_model=Envelope[PageData[AgentTaskOut]],
+    summary="Agent 任务分页列表",
+)
+def list_agent_tasks(
+    status: AgentTaskStatusIn | None = Query(default=None),
+    task_type: str | None = Query(default=None, min_length=1, max_length=50),
+    page: PageParams = Depends(page_params),
+    sorting: SortParams = Depends(sort_params),
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+) -> Envelope[PageData[AgentTaskOut]]:
+    data = agent_service.list_agent_tasks(
+        session,
+        user_id=current_user.id,
+        status=status,
+        task_type=task_type,
+        page=page,
+        sort=sorting,
+    )
+    return Envelope(trace_id=get_trace_id(), data=data)
 
 
 @router.get(
