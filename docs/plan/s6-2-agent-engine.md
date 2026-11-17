@@ -230,7 +230,7 @@ git commit -m "feat(s6-2): agent_tasks/agent_steps 表与迁移 0018"
 - Produces: `AgentTaskSpec` 协议（`task_type/requires_confirm/validate_input/build_plan/finalize`）、`TASK_SPECS: dict[str, type[AgentTaskSpec]]`、`DemoTaskSpec`
 - Produces: `new_state(...)`（初始状态）、`jsonable(value)`
 
-- [ ] **Step 1: 写图失败测试**
+- [x] **Step 1: 写图失败测试**
 
 ```python
 """S6-2 图引擎：3 步成功、重试、预算、步数、挂起/恢复。"""
@@ -407,12 +407,12 @@ def test_demo_requires_confirm_and_plan():
     assert spec.build_plan({})[0]["tool"] == "calculator"
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_graph.py tests/test_agent_task_spec_demo.py -q`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 写 `state.py`**
+- [x] **Step 3: 写 `state.py`**
 
 - 常量：`STATUS_RUNNING/WAITING_CONFIRM/SUCCEEDED/FAILED`。
 - `AgentState(TypedDict, total=False)` 字段与 spec §5.1 完全一致（含 `last_output`、`error`）。
@@ -420,7 +420,7 @@ Expected: FAIL（模块不存在）
 - `new_state(*, user_id, task_input, token_budget, max_steps) -> AgentState`：填充空 plan/artifacts/citations、`current_index=0`、`retry_count=0`、`token_cost=0`、`step_count=0`、`status="running"`、`resume_from=None`。
 - `jsonable(value)`：`json.loads(json.dumps(value, ensure_ascii=False, default=str))`；用于 `state_json`/步骤出参落库。
 
-- [ ] **Step 4: 写 `engine.py`**
+- [x] **Step 4: 写 `engine.py`**
 
 关键签名：
 
@@ -462,7 +462,7 @@ class AgentEngine:
   - `finalize`：失败 → `status=failed`、`error=fatal_error or "任务执行失败"`、`result` 保留 artifacts/citations、记 error；成功 → `result=spec.finalize(state)`、`status=succeeded`、记 ok。
 - 路由函数按 spec §5.2；`confirm` 无决策时返回 `"end"` 映射到 `END`。
 
-- [ ] **Step 5: 写 `tasks/demo.py` 与注册表**
+- [x] **Step 5: 写 `tasks/demo.py` 与注册表**
 
 ```python
 class DemoInput(ToolInput):  # 或 BaseModel(extra="forbid")
@@ -499,12 +499,12 @@ TASK_SPECS = {"demo": DemoTaskSpec}
 
 `tasks/__init__.py` 导出 `TASK_SPECS`、`get_task_spec(name)`（未知返回 None）。
 
-- [ ] **Step 6: 跑图测试**
+- [x] **Step 6: 跑图测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_graph.py tests/test_agent_task_spec_demo.py -q`
 Expected: PASS
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/ai/agents backend/tests/test_agent_graph.py backend/tests/test_agent_task_spec_demo.py
@@ -530,7 +530,7 @@ git commit -m "feat(s6-2): LangGraph 状态机与 demo 任务类型"
 - Produces: `run_agent_task(session, agent_task_id) -> dict`
 - Produces: `DbStepRecorder`
 
-- [ ] **Step 1: 写 service 失败测试**
+- [x] **Step 1: 写 service 失败测试**
 
 ```python
 """S6-2 Agent service：创建/查询/确认/入队失败与终态幂等。"""
@@ -677,12 +677,12 @@ def test_agent_run_handler_returns_service_status(monkeypatch):
 
 > 注：`register` 在 import 时执行；测试模块名与 handler 名不要冲突。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_service.py tests/test_agent_task.py -q`
 Expected: FAIL
 
-- [ ] **Step 3: 实现 `agent_service.py`**
+- [x] **Step 3: 实现 `agent_service.py`**
 
 - 常量与状态：`TASK_RUN_AGENT = "agent.run"`；`TERMINAL = {succeeded, failed}`。
 - `create_agent_task`：
@@ -714,7 +714,7 @@ Expected: FAIL
   7) 捕获 `AgentStepLimitError` → failed/error=f"超过最大步数 {max}"、finished；捕获其他异常 → logger.exception、rollback、重新取 task、failed/error="任务执行失败"、finished；返回 `{"status": task.status}`。
 - `DbStepRecorder.record`：`session.add(AgentStep(... jsonable(...)))`；更新 task `steps_count/state_json/token_cost/status/result_json/error/finished_at`；`session.commit()`（允许 Agent handler 自行 commit，与 S2-8 parse worker 同一例外，需注释原因）。
 
-- [ ] **Step 4: 实现 ARQ handler**
+- [x] **Step 4: 实现 ARQ handler**
 
 ```python
 @register(TASK_RUN_AGENT)
@@ -727,12 +727,12 @@ def agent_run_task(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
 
 `tasks/__init__.py` 增加 `from app.tasks import agent_run as _agent_run` 与 `__all__` 项。
 
-- [ ] **Step 5: 跑测试 + 图回归**
+- [x] **Step 5: 跑测试 + 图回归**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_service.py tests/test_agent_task.py tests/test_agent_graph.py tests/test_task_registry.py -q`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/services/agent_service.py backend/app/tasks backend/tests/test_agent_service.py \
@@ -754,7 +754,7 @@ git commit -m "feat(s6-2): Agent 任务 service 与 ARQ 执行入口"
 - Produces: `AgentTaskCreateIn`、`AgentConfirmIn`、`AgentTaskOut`、`AgentTaskDetailOut`、`AgentStepOut`
 - Produces: `POST /api/v1/agent/tasks`（202）、`GET /api/v1/agent/tasks/{id}`、`POST /api/v1/agent/tasks/{id}/confirm`（202）
 
-- [ ] **Step 1: 写 API 失败测试**
+- [x] **Step 1: 写 API 失败测试**
 
 ```python
 """S6-2 Agent API：202/200、权限、409/422、Envelope。"""
@@ -853,12 +853,12 @@ def test_invalid_payload_422():
     assert resp.json()["code"] == 42200
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_api.py -q`
 Expected: FAIL（404 或导入失败）
 
-- [ ] **Step 3: 写 schemas 与路由**
+- [x] **Step 3: 写 schemas 与路由**
 
 - `AgentTaskCreateIn`：`task_type: str (1..50)`、`input: dict = Field(default_factory=dict)`。
 - `AgentConfirmIn`：`approved: bool`、`comment: str|None(max_length=500)`、`edits: dict|None`。
@@ -883,12 +883,12 @@ Expected: FAIL（404 或导入失败）
   ```
 - `api/router.py` 导入并 `include_router(agent.router)`（放在 review/reports 附近即可）。
 
-- [ ] **Step 4: 跑 API 测试 + 全量回归**
+- [x] **Step 4: 跑 API 测试 + 全量回归**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_api.py tests/test_agent_service.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/schemas/agent.py backend/app/api/v1/agent.py backend/app/api/router.py \

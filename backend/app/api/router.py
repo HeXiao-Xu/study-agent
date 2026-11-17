@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     admin,
+    agent,
     auth,
     files,
     kp,
@@ -34,6 +35,7 @@ api_router.include_router(qa.router)
 api_router.include_router(papers.router)
 api_router.include_router(review.router)
 api_router.include_router(reports.router)
+api_router.include_router(agent.router)
 api_router.include_router(admin.router)
 
 __all__ = ["api_router"]

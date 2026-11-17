@@ -3,6 +3,7 @@
 这里显式导入内置任务模块：注册表靠 import 副作用填充，
 worker/runner 只 import 本包时也必须能看到全部内置任务。
 """
+from app.tasks import agent_run as _agent_run  # noqa: F401  注册 agent.run
 from app.tasks import analyze_mistake as _analyze_mistake  # noqa: F401  注册 mistake.analyze
 from app.tasks import build_graph as _build_graph  # noqa: F401  注册 graph.build
 from app.tasks import demo as _demo  # noqa: F401  注册 demo.sleep
@@ -14,6 +15,7 @@ from app.tasks import parse_document as _parse_document  # noqa: F401  注册 pa
 from app.tasks import question_extract as _question_extract  # noqa: F401  注册 question.extract
 
 __all__ = [
+    "_agent_run",
     "_analyze_mistake",
     "_build_graph",
     "_demo",
