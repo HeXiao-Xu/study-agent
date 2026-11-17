@@ -683,14 +683,14 @@ git commit -m "feat(s6-3): 学习导图页、Mermaid 渲染与 PNG 导出"
 - Modify: `AGENTS.md` §9.6
 - Create: `.sdd/s6-3/acceptance-evidence.md`
 
-- [ ] **Step 1: 文档**
+- [x] **Step 1: 文档**
 
 - `AGENT_WEEKLY.md`：任务流程、动态规划、结果 JSON、前端页/导出、空窗口/降级、边界。
 - D-067：Mermaid 依赖、结果只落 result_json、S6-4 跳过、动态规划、LLM 降级、7 天真实库缺口、验收数字。
 - PROGRESS：S6-3 完成、S6-4 标「用户决定不做（组卷已有 S5-1/S5-2）」、下一步 S6-5。
 - AGENTS §9.6 追加 weekly 任务/前端页锚点。
 
-- [ ] **Step 2: 全量测试**
+- [x] **Step 2: 全量测试**
 
 ```bash
 cd backend && ../.venv/Scripts/python.exe -m pytest -q
@@ -699,7 +699,7 @@ cd ../web && npm run test:run && npm run build
 
 Expected: 后端全绿（S6-2 基线 1543）、前端全绿、build 退出 0；记录精确数字与 mermaid chunk 体积。
 
-- [ ] **Step 3: 后端真实库验收**
+- [x] **Step 3: 后端真实库验收**
 
 启动 Redis/ARQ/uvicorn（同 S6-2）后，用 user 18 的真实 token：
 
@@ -718,7 +718,7 @@ Expected: 后端全绿（S6-2 基线 1543）、前端全绿、build 退出 0；�
 3. 若真实 LLM 降级，记录 `degraded=true` 与原因；不修饰。
 4. 越权/非法：teacher 403、days=0 422、`mistake_paper` 422。
 
-- [ ] **Step 4: 前端 Chrome 验收**
+- [x] **Step 4: 前端 Chrome 验收**
 
 - 启动 `npm run dev`（5173），用真实 token 登录（既有 localStorage 注入/登录方式）。
 - 打开 `/agent/mindmap`：选 30 天生成 → 状态轮询 → 导图 SVG 可见；点「导出 PNG」→ 下载文件非空、尺寸合理。
@@ -726,11 +726,11 @@ Expected: 后端全绿（S6-2 基线 1543）、前端全绿、build 退出 0；�
 - 渲染失败降级：可用 dev 注入坏 mermaid（或在页面 mock）验证 `fallback_text` 出现；记录方式。
 - 1440×900 无横向溢出、console error 0。
 
-- [ ] **Step 5: 验收证据**
+- [x] **Step 5: 验收证据**
 
 `.sdd/s6-3/acceptance-evidence.md`：pytest/vitest/build 数字、真实 7d/30d 结果、Chrome 截图文件名、未满足项（7 天真实数据缺口）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add docs/AGENT_WEEKLY.md docs/DECISIONS.md docs/PROGRESS.md AGENTS.md

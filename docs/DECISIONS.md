@@ -887,3 +887,21 @@
   - 同类型任务 confirm rejected → `failed` + `error=用户拒绝确认`（6 条 steps）；
   - 他人 GET 403/40300、重复 confirm 409、未知类型/非法工具 422；DB 实测 3 个任务 / 22 条步骤。
 - 已知边界：token 预算统计不全；并发双执行无行锁/租约；`agent_steps` 无时间戳；任务列表/取消/SSE 未做；`edits` 不执行；崩溃重跑可能重复一次只读工具。
+
+## D-067 周笔记导图（S6-3）
+
+- 背景：S6-2 只有状态机与 demo，没有真实任务。本卡实现方案任务 A：过去 N 天笔记 → 知识点子图 → LLM 聚类 → Mermaid 导图 + 带引用摘要 + 前端渲染/导出。用户 2026-11-17 同时决定 **S6-4 不做**：错题组卷已由 S5-1/S5-2 实现，没必要让 Agent 重复一遍；`mistake_paper` 不注册。
+- 决策 1（动态规划）：S6-2 的 plan 是一次性静态列表，无法表达「先看笔记再决定取哪些知识点子图」。给 `AgentTaskSpec` 加 `extend_plan(state) -> PlanExtension(steps,token_cost,thought)`，在 observe 成功后按已有 artifacts/plan 追加下一步；不新增图节点、不额外占步骤。扩展必须幂等：只看 state（plan 已含工具 + artifacts），不依赖实例字段，崩溃恢复也成立。新增步骤仍受 12 行上限约束（`act` guard 抛 `AgentStepLimitError`）。
+- 决策 2（list_notes 扩出参）：聚类需要内容与知识点，但 S6-1 的 `list_notes` 只给元数据。扩出参 `preview`（content_text 前 200 字）、`kp_ids/kp_names`（note_kps，最多 10，confirmed 优先、kp_id 稳定排序），两条 IN 批查；旧字段不变、空列表不发查询。不新增工具，保持 11 个工具清单。
+- 决策 3（三段流程）：`list_notes`（N 天，limit 50）→ 按笔记 kp 频次取 top3 追加 `get_kp_subgraph(depth=1)` → 聚类并追加 `make_mindmap` → finalize。3 子图 + 导图恰好 12 行；空笔记/无 kp 时自动跳过对应阶段。
+- 决策 4（LLM 聚类与降级）：新 Prompt `weekly_mindmap_v1.md`，`scene="agent"`、max_tokens 2200、严格 JSON、最多 2 次重试；Pydantic + 代码过滤非法 note_id/kp_id；一条合法引用都没有视为失败。重试耗尽不把任务判失败，改用按 `kp_names`（无 kp 按「学习笔记」）分组的确定性树，`degraded=true`，摘要注明降级。token 用量通过 `PlanExtension.token_cost` 累加到任务 `token_cost`。
+- 决策 5（结果落点）：只写 `agent_tasks.result_json`（`task_type/days/note_count/kp_count/summary_md/mermaid/fallback_text/citations/degraded/cluster_prompt_version`），**不新建笔记、不改 note_kps**，避免引入写操作确认流程。空窗口返回 `note_count=0` + 固定文案 + `mermaid=""`。
+- 决策 6（前端与依赖）：用户批准安装 `mermaid@^11`（实际 11.17.2）。新增导航「学习导图」（导航 13→14 项）与 `/agent/mindmap/:taskId?`：无 id 选天数生成，有 id 轮询；成功渲染 SVG、摘要、引用；渲染失败显示 `fallback_text`；导出用 SVG→Canvas→PNG，不引额外截图库。Mermaid 必须 `htmlLabels:false`：默认 `foreignObject` 会让 Canvas tainted，`toBlob` 抛 SecurityError（验收中实际踩到并修复）；下载链接需挂到 DOM 且延迟 revoke。
+- 决策 7（数据诚实）：真实库 user 18 只有 4 篇笔记（10-27/29），7 天窗口为空。不造数据：7 天验收只证明空态；另用 30 天窗口的真实 4 篇笔记验收导图，证据里明确「任务卡 7 天口径未满足」。
+- 验证：后端 `pytest -q` → **1564 passed, 5 warnings**（S6-2 基线 1543 + 21 条 S6-3 测试）；前端 **370 passed / 62 files**，`npm run build` 退出 0（mermaid chunk 约 647 kB）。真实 ARQ/uvicorn/Chrome：
+  - 7 天任务成功、4 步、`note_count=0`、固定空文案、无导图；
+  - 30 天任务成功、10 步、4 篇笔记/2 个知识点、`degraded=false`、4 条引用、Mermaid 正常；真实 LLM `scene=agent` 15.1 s / 2296 tokens / 约 ¥0.0026；
+  - Chrome 1440×900 打开任务 5：SVG 可见，导出 PNG 220,037 B；任务 4 空态正常；页面表单生成 30 天任务成功（任务 7），summary 459 字/4 引用、无横向溢出、console error 0；
+  - 错误口径：days=0 422、`mistake_paper` 422、teacher 403。
+  - 验收环境问题：一个 10:58 启动的旧 ARQ worker 仍在跑，抢到任务 6 并因旧注册表报「未知任务类型：agent.run」；杀掉旧 worker 后重跑任务 7 成功。属验收环境污染，不是产品缺陷，任务 6 已清理为 failed 并记录原因。证据见 `.sdd/s6-3/acceptance-evidence.md`。
+- 已知边界：7 天真实数据缺口；最多 3 个知识点子图；LLM 降级无语义结论；导图不可历史检索；Mermaid 包体积大；PNG 字体依赖浏览器；`mistake_paper` 不做。
