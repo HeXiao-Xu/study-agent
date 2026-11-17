@@ -22,7 +22,7 @@ out = invoke_tool("get_mastery", ctx, {"kp_ids": [117, 120]})
 | # | 工具 | 用途 | 主要入参 | 主要出参 | 外部依赖 |
 |---|---|---|---|---|---|
 | 1 | `search_notes` | 个人知识库混合检索，返回可引用片段 | `query`、`subject_id/folder/start_date/end_date/chunk_types`、`top_k`、`retrieval` | 命中列表（note_id/标题/页码/正文截 1200 字） | Embedding/Rerank（真实库验收 677 ms） |
-| 2 | `list_notes` | 按时间/标签/学科列笔记元数据 | `start_date/end_date`、`tags`、`subject_id`、`limit` | 标题/标签/文件夹/时间（不含正文） | 无 |
+| 2 | `list_notes` | 按时间/标签/学科列笔记元数据 | `start_date/end_date`、`tags`、`subject_id`、`limit` | 标题/标签/文件夹/时间 + 前 200 字预览 + kp_ids/kp_names（不含正文） | 无 |
 | 3 | `get_kp_subgraph` | 取知识点 N 跳前置/相关/包含关系 | `kp_id`、`depth`（1–3） | 节点（含本人 `M_t`）+ 已审核边 | 图谱 snapshot |
 | 4 | `list_mistakes` | 按知识点/状态/时间筛本人错题 | `kp_ids`、`status`、日期、`limit` | 题干片段/状态/题型/难度/知识点/错因 | 无 |
 | 5 | `get_mastery` | 批量取本人掌握度 `M_t` 与到期时间 | `kp_ids`（1–50） | `assessed/unassessed/missing` 三类 + 每 kp 状态 | 无 |

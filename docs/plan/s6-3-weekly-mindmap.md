@@ -187,7 +187,7 @@ git commit -m "feat(s6-3): 状态机支持 observe 后动态追加步骤"
 - Produces: `NoteBrief.preview: str | None`、`NoteBrief.kp_ids: list[int]`、`NoteBrief.kp_names: list[str]`
 - Consumes: `Note.content_text`、`NoteKp`、`KnowledgePoint`
 
-- [ ] **Step 1: 改造失败测试**
+- [x] **Step 1: 改造失败测试**
 
 在 `test_agent_tool_list_notes.py` 增加 FakeSession：
 
@@ -238,24 +238,24 @@ def test_list_notes_skips_extra_queries_when_empty(monkeypatch):
     assert session.calls == 0
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_tool_list_notes.py -q`
 Expected: FAIL（`preview` 字段不存在/查询次数不符）
 
-- [ ] **Step 3: 实现两条批查**
+- [x] **Step 3: 实现两条批查**
 
 - `_load_previews(session, ids) -> dict[int,str]`：`select(Note.id, Note.content_text).where(Note.id.in_(ids))`，映射 `content_text[:200]`。
 - `_load_kps(session, ids) -> dict[int, list[tuple[int,str]]]`：`select(NoteKp.note_id, KnowledgePoint.id, KnowledgePoint.name).join(...).where(note_id.in_(ids)).order_by(NoteKp.note_id, NoteKp.weight.desc(), KnowledgePoint.id)`；每篇最多 10 个。
 - `NoteBrief` 加三字段，默认 `None/[]/[]`；`_to_brief(item, preview, kps)` 填充。
 - `list_notes` 在 `items` 非空时执行两条查询；空列表直接返回。
 
-- [ ] **Step 4: 跑测试 + 工具回归**
+- [x] **Step 4: 跑测试 + 工具回归**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_tool_list_notes.py tests/test_agent_tools_schema_export.py -q`
 Expected: PASS（schema 输出会变化，需重新生成 `backend/data/agent_tools.json` 并提交）
 
-- [ ] **Step 5: 重新导出 schema 并提交**
+- [x] **Step 5: 重新导出 schema 并提交**
 
 ```bash
 cd .. && .venv/Scripts/python.exe scripts/export_agent_tools.py

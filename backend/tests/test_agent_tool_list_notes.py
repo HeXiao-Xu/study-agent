@@ -1,4 +1,4 @@
-"""S6-1 list_notes：日期窗口、标签过滤与元数据映射。"""
+"""S6-1/S6-3 list_notes：日期窗口、标签过滤、元数据与知识点/预览增量。"""
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -10,8 +10,27 @@ from app.schemas.common import PageData
 from app.schemas.notes import NoteSummary
 
 
-def _ctx() -> ToolContext:
-    return ToolContext(session=object(), user=SimpleNamespace(id=50))  # type: ignore[arg-type]
+class _Rows:
+    def __init__(self, rows):  # noqa: ANN001
+        self._rows = rows
+
+    def all(self):  # noqa: ANN201
+        return self._rows
+
+
+class _Session:
+    def __init__(self, *, previews=(), kps=()):  # noqa: ANN001
+        self.previews = list(previews)
+        self.kps = list(kps)
+        self.calls = 0
+
+    def execute(self, statement):  # noqa: ANN001, ANN201
+        self.calls += 1
+        return _Rows(self.previews if self.calls == 1 else self.kps)
+
+
+def _ctx(session=None) -> ToolContext:  # noqa: ANN001
+    return ToolContext(session=session or _Session(), user=SimpleNamespace(id=50))  # type: ignore[arg-type]
 
 
 def _note(note_id: int, tags: list[str] | None = None) -> NoteSummary:
@@ -75,3 +94,30 @@ def test_list_notes_without_dates_passes_none(monkeypatch):
     assert captured["created_from"] is None
     assert captured["created_to"] is None
     assert out.items == []
+
+
+def test_list_notes_adds_preview_and_knowledge_points(monkeypatch):
+    monkeypatch.setattr(
+        tool,
+        "list_notes_service",
+        lambda *a, **k: PageData(items=[_note(1)], total=1, page=1, page_size=20),
+    )
+    session = _Session(
+        previews=[(1, "函数内容" * 100)],
+        kps=[(1, 137, "函数的单调性"), (1, 138, "函数的极值")],
+    )
+    out = tool.list_notes(_ctx(session), tool.ListNotesIn())
+    assert out.items[0].preview == ("函数内容" * 100)[:200]
+    assert out.items[0].kp_ids == [137, 138]
+    assert out.items[0].kp_names == ["函数的单调性", "函数的极值"]
+
+
+def test_list_notes_skips_extra_queries_when_empty(monkeypatch):
+    session = _Session()
+    monkeypatch.setattr(
+        tool,
+        "list_notes_service",
+        lambda *a, **k: PageData(items=[], total=0, page=1, page_size=20),
+    )
+    tool.list_notes(_ctx(session), tool.ListNotesIn())
+    assert session.calls == 0

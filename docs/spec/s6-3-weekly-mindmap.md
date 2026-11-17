@@ -70,7 +70,7 @@ class PlanExtension:
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `preview` | string\|null | `notes.content_text` 前 200 字（给聚类用，避免拉全文） |
-| `kp_ids` | int[] | 该笔记挂载的知识点（`note_kps`，最多 10 个，按 weight 倒序） |
+| `kp_ids` | int[] | 该笔记挂载的知识点（`note_kps`，最多 10 个；confirmed 优先、kp_id 稳定排序） |
 | `kp_names` | string[] | 对应知识点名 |
 
 实现：现有分页查询后，新增两条 `IN` 批查（`notes.content_text`、`note_kps join knowledge_points`），禁止逐条查库；两个查询都不改 `note_service.list_notes` 的契约。空列表不发查询。

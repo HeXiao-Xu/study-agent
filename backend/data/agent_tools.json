@@ -119,7 +119,7 @@
       "type": "function",
       "function": {
         "name": "list_notes",
-        "description": "用途：按时间范围/标签/学科列出本人笔记的元数据，用于「上周写了哪些笔记」。参数 start_date/end_date 为 ISO 日期（含当天），tags 最多 10 个，limit 取 1–50。只返回标题、标签、文件夹与时间，不返回正文；需要正文时改用 search_notes。多个标签时先按第一个标签分页再在内存过滤，filtered_total 可能小于 total。",
+        "description": "用途：按时间范围/标签/学科列出本人笔记的元数据，用于「上周写了哪些笔记」。参数 start_date/end_date 为 ISO 日期（含当天），tags 最多 10 个，limit 取 1–50。只返回标题、标签、文件夹、时间、内容前 200 字预览与知识点（kp_ids/kp_names），不返回正文；需要正文时改用 search_notes。多个标签时先按第一个标签分页再在内存过滤，filtered_total 可能小于 total。",
         "parameters": {
           "additionalProperties": false,
           "properties": {
@@ -890,6 +890,32 @@
               "format": "date-time",
               "title": "Updated At",
               "type": "string"
+            },
+            "preview": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Preview"
+            },
+            "kp_ids": {
+              "items": {
+                "type": "integer"
+              },
+              "title": "Kp Ids",
+              "type": "array"
+            },
+            "kp_names": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Kp Names",
+              "type": "array"
             }
           },
           "required": [
