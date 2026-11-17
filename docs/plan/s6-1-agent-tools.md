@@ -1323,31 +1323,31 @@ git commit -m "feat(s6-1): 工具 schema 导出与独立 CLI"
 - Modify: `AGENTS.md` §9.6（追加工具层锚点）
 - Create: `.sdd/s6-1/acceptance-evidence.md`（区分实测数字与未做项）
 
-- [ ] **Step 1: 写 `docs/AGENT_TOOLS.md`**
+- [x] **Step 1: 写 `docs/AGENT_TOOLS.md`**
 
 内容：11 个工具表（名称/用途/入参/出参/是否写库）、`ToolContext` 契约、schema 再生成命令、CLI 调用示例、错误语义、已知边界（全学科 snapshot、复用 `gen` 场景、导出只给链接、计划不写库）。
 
-- [ ] **Step 2: 追加 D-065**
+- [x] **Step 2: 追加 D-065**
 
 标题 `## D-065 Agent 工具集（S6-1）`；记录：11 vs 10、纯函数口径、只读草稿、schema 与 CLI、service 三处增量、复用 `gen`、验收数字与已知边界。
 
-- [ ] **Step 3: 更新 PROGRESS**
+- [x] **Step 3: 更新 PROGRESS**
 
 - 当前状态加 S6-1 完成；任务清单 `[x] S6-1`；下一步改 `S6-2 LangGraph 状态机 + 步骤持久化`；贴真实验收数字与 11 个工具逐个调用结果摘要。
 
-- [ ] **Step 4: 更新 AGENTS §9.6 锚点**
+- [x] **Step 4: 更新 AGENTS §9.6 锚点**
 
 追加一条：
 ```
 - Agent 工具样例：backend/app/ai/agents/tools/{base,registry,schema_export}.py + calculator.py（Pydantic 入参/出参、`ToolSpec` 注册、`invoke_tool` 统一错误壳、schema 导出脚本 + CLI；工具只读，写操作留 S6-2 确认）
 ```
 
-- [ ] **Step 5: 全量测试**
+- [x] **Step 5: 全量测试**
 
 Run: `cd backend && python -m pytest -q`
 Expected: 全绿；记录精确数字（基线 1458 passed, 5 warnings）。
 
-- [ ] **Step 6: 真实库逐个调用（user 50）**
+- [x] **Step 6: 真实库逐个调用（user 50）**
 
 ```bash
 cd study-agent
@@ -1366,11 +1366,11 @@ python scripts/agent_tools.py call --user-id 50 generate_questions '{"kp_id":197
 ```
 Expected：全部返回 JSON；`search_notes`/`generate_questions` 走真实外部调用（记录耗时/条数）；`export_paper_pdf` 用真实存在的本人试卷 id（不存在就换 id 并如实记录）。
 
-- [ ] **Step 7: 写验收证据**
+- [x] **Step 7: 写验收证据**
 
 `.sdd/s6-1/acceptance-evidence.md`：pytest 数字、schema 11 条、每个工具的命令与关键出参（不贴学生隐私正文）、失败与修复记录。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add docs/AGENT_TOOLS.md docs/DECISIONS.md docs/PROGRESS.md AGENTS.md .sdd/s6-1
