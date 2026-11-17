@@ -10,7 +10,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import CODE_INTERNAL, AppError, InvalidParamError, NotFoundError
+from app.core.exceptions import (
+    CODE_INTERNAL,
+    AppError,
+    ForbiddenError,
+    InvalidParamError,
+    NotFoundError,
+)
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -45,6 +51,8 @@ class ToolContext:
     session: Session
     user: User
     now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # 写工具必须由确认流程显式放行；当前 11 个工具全只读（S6-6）
+    allow_write: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,9 +101,15 @@ def invoke_tool(name: str, ctx: ToolContext, payload: dict[str, Any]) -> ToolOut
     spec = TOOLS.get(name)
     if spec is None:
         raise NotFoundError("工具不存在")
+    if spec.write and not ctx.allow_write:
+        logger.warning("agent_tool_write_blocked tool=%s", name)
+        raise ForbiddenError("写操作需要人工确认")
     try:
         data = spec.input_model.model_validate(payload)
     except ValidationError as exc:
+        logger.warning(
+            "agent_tool_input_invalid tool=%s error=%s", name, _first_error(exc)
+        )
         raise ToolInputError(f"工具参数不合法：{_first_error(exc)}") from exc
     try:
         return spec.handler(ctx, data)

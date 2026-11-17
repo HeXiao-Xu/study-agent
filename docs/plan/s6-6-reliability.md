@@ -185,7 +185,7 @@ git commit -m "feat(s6-6): 任务超时/限步/预算保留与失败日志"
 - Produces: `ToolContext.allow_write: bool = False`
 - Produces: `invoke_tool` 对 write 工具未授权 403/40300；校验失败 WARNING 日志
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_invalid_tool_input_does_not_call_handler(monkeypatch):
@@ -231,12 +231,12 @@ def test_write_tool_requires_allow_write(monkeypatch):
 
 需导入 `dataclasses`、`ToolSpec`、`CalculatorIn/Out`、`ForbiddenError`。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_tools_registry.py -q`
 Expected: FAIL（`allow_write`/403 未实现）
 
-- [ ] **Step 3: 实现门禁**
+- [x] **Step 3: 实现门禁**
 
 - `ToolContext` 加 `allow_write: bool = False`。
 - `invoke_tool` 取到 spec 后：
@@ -248,12 +248,12 @@ Expected: FAIL（`allow_write`/403 未实现）
 - 入参校验失败时 `logger.warning("agent_tool_input_invalid tool=%s error=%s", name, ...)` 后再抛 `ToolInputError`。
 - 现有 11 个工具 `write=False` 不变；页面/服务不传 `allow_write`。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_tools_registry.py tests/test_agent_tool_calculator.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/ai/agents/tools backend/tests/test_agent_tools_registry.py
