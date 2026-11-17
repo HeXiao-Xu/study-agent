@@ -136,7 +136,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { createAgentTask, getAgentTask } from '@/api/agent'
-import type { AgentTaskDetail } from '@/types/agent'
+import { asWeeklyMindmapResult, type AgentTaskDetail } from '@/types/agent'
 
 import { downloadSvgAsPng, mindmapFileName } from './exportMindmap'
 import { renderMermaid } from './mermaid'
@@ -160,7 +160,7 @@ const taskId = computed<number | null>(() => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 })
 
-const result = computed(() => task.value?.result ?? null)
+const result = computed(() => asWeeklyMindmapResult(task.value?.result ?? null))
 
 const statusLabel = computed(() => {
   const status = task.value?.status

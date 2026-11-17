@@ -1,4 +1,4 @@
-/** S6-3 Agent 任务与周导图结果类型（与 API.md §10 保持一致）。 */
+/** S6-3/S6-5 Agent 任务与周导图结果类型（与 API.md §10 保持一致）。 */
 export interface AgentStep {
   step_no: number
   thought: string | null
@@ -39,8 +39,37 @@ export interface WeeklyMindmapResult {
   cluster_prompt_version: string
 }
 
+export interface DemoAgentResult {
+  summary: string
+  artifacts: Record<string, unknown>
+  citations: unknown[]
+}
+
+export type AgentTaskResult =
+  | WeeklyMindmapResult
+  | DemoAgentResult
+  | Record<string, unknown>
+  | null
+
 export interface AgentTaskDetail extends AgentTaskSummary {
   input: Record<string, unknown>
-  result: WeeklyMindmapResult | null
+  result: AgentTaskResult
   steps: AgentStep[]
+}
+
+export interface AgentTaskPage {
+  items: AgentTaskSummary[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export function asWeeklyMindmapResult(
+  result: AgentTaskResult,
+): WeeklyMindmapResult | null {
+  if (!result || typeof result !== 'object') return null
+  const candidate = result as { task_type?: unknown }
+  return candidate.task_type === 'weekly_mindmap'
+    ? (result as WeeklyMindmapResult)
+    : null
 }

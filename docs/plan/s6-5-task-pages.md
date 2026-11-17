@@ -250,7 +250,7 @@ git commit -m "feat(s6-5): Agent 任务分页列表接口"
 - Produces: `AgentTaskPage`、`AgentTaskResult`、`asWeeklyMindmapResult(result)`、`statusLabel(status)`、`statusType(status)`
 - Produces: `listAgentTasks(params)`、`confirmAgentTask(id, decision)`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `status.spec.ts`：
 
@@ -297,12 +297,12 @@ it('confirms a task', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd web && npm run test:run -- src/views/agent/status.spec.ts src/api/agent.spec.ts`
 Expected: FAIL（模块/方法不存在）
 
-- [ ] **Step 3: 实现类型/API/状态**
+- [x] **Step 3: 实现类型/API/状态**
 
 - `AgentTaskResult = WeeklyMindmapResult | DemoAgentResult | Record<string, unknown> | null`；`AgentTaskDetail.result: AgentTaskResult`。
 - `asWeeklyMindmapResult(result: AgentTaskResult): WeeklyMindmapResult | null`：`result && result.task_type === 'weekly_mindmap'` 时断言。
@@ -311,12 +311,12 @@ Expected: FAIL（模块/方法不存在）
 - `api/agent.ts` 加 list/confirm；参数对象去掉 undefined 字段再传？axios 会忽略 undefined query；直接传即可。
 - `WeeklyMindmap.vue`：`result = computed(() => asWeeklyMindmapResult(task.value?.result ?? null))`。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd web && npm run test:run -- src/api/agent.spec.ts src/views/agent/status.spec.ts src/views/agent/WeeklyMindmap.spec.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/types/agent.ts web/src/api/agent.ts web/src/api/agent.spec.ts \

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ApiEnvelope } from '@/api/http'
-import type { AgentTaskDetail, AgentTaskSummary } from '@/types/agent'
+import type { AgentTaskDetail, AgentTaskPage, AgentTaskSummary } from '@/types/agent'
 
 const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('@/api/http', () => ({ default: http, API_PREFIX: '/api/v1' }))
 
-import { createAgentTask, getAgentTask } from './agent'
+import { confirmAgentTask, createAgentTask, getAgentTask, listAgentTasks } from './agent'
 
 function envelope<T>(data: T) {
   const body: ApiEnvelope<T> = { code: 0, message: 'ok', trace_id: 't', data }
@@ -27,6 +27,38 @@ describe('agent api', () => {
       input: { days: 7 },
     })
     expect(data.id).toBe(7)
+  })
+
+
+  it('lists tasks with filters', async () => {
+    http.get.mockResolvedValue(
+      envelope<AgentTaskPage>({ items: [], total: 0, page: 2, page_size: 10 }),
+    )
+    await listAgentTasks({
+      page: 2,
+      page_size: 10,
+      status: 'failed',
+      task_type: 'weekly_mindmap',
+    })
+    expect(http.get).toHaveBeenCalledWith('/api/v1/agent/tasks', {
+      params: {
+        page: 2,
+        page_size: 10,
+        status: 'failed',
+        task_type: 'weekly_mindmap',
+      },
+    })
+  })
+
+  it('confirms a task', async () => {
+    http.post.mockResolvedValue(
+      envelope<AgentTaskSummary>({ id: 5, status: 'pending' } as AgentTaskSummary),
+    )
+    await confirmAgentTask(5, { approved: true, comment: '可以' })
+    expect(http.post).toHaveBeenCalledWith('/api/v1/agent/tasks/5/confirm', {
+      approved: true,
+      comment: '可以',
+    })
   })
 
   it('gets task detail by id', async () => {
