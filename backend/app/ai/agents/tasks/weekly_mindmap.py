@@ -145,6 +145,7 @@ class WeeklyInput(BaseModel):
 
     days: int = Field(default=7, ge=1, le=30)
     subject_id: int | None = Field(default=None, ge=1)
+    token_budget: int | None = Field(default=None, ge=100)
 
 
 class WeeklyMindmapTaskSpec:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, TypedDict
 
 STATUS_RUNNING = "running"
@@ -32,6 +33,7 @@ class AgentState(TypedDict, total=False):
     token_cost: int
     max_steps: int
     step_count: int
+    deadline_at: float | None
     last_error: str | None
     fatal_error: str | None
     status: str
@@ -47,6 +49,7 @@ def new_state(
     task_input: dict[str, Any],
     token_budget: int,
     max_steps: int,
+    timeout_seconds: float | None = None,
 ) -> AgentState:
     return AgentState(
         user_id=user_id,
@@ -62,6 +65,7 @@ def new_state(
         token_cost=0,
         max_steps=max_steps,
         step_count=0,
+        deadline_at=(time.time() + timeout_seconds if timeout_seconds else None),
         last_error=None,
         fatal_error=None,
         status=STATUS_RUNNING,

@@ -18,6 +18,7 @@ from app.ai.agents.engine import (
     AgentEngine,
     AgentState,
     AgentStepLimitError,
+    AgentTaskTimeoutError,
     RunContext,
     StepRecorder,
 )
@@ -71,6 +72,8 @@ class DbStepRecorder(StepRecorder):
     def __init__(self, session: Session, task: AgentTask) -> None:
         self.session = session
         self.task = task
+        # 超时/限步异常时图状态不会返回，靠最后一条已提交快照取已有产物
+        self.last_state: dict[str, Any] = {}
 
     def record(
         self,
@@ -97,6 +100,7 @@ class DbStepRecorder(StepRecorder):
             )
         )
         snapshot = jsonable(state)
+        self.last_state = snapshot
         self.task.steps_count = step_no
         self.task.state_json = snapshot
         self.task.token_cost = int(snapshot.get("token_cost") or 0)
@@ -246,10 +250,27 @@ def confirm_agent_task(
     return task
 
 
-def _mark_failed(session: Session, task: AgentTask, message: str) -> None:
+def _partial_result(state: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not state:
+        return None
+    return {
+        "artifacts": state.get("artifacts") or {},
+        "citations": state.get("citations") or [],
+    }
+
+
+def _mark_failed(
+    session: Session,
+    task: AgentTask,
+    message: str,
+    *,
+    result: dict[str, Any] | None = None,
+) -> None:
     task.status = STATUS_FAILED
     task.error = message
     task.finished_at = _now()
+    if result is not None and task.result_json is None:
+        task.result_json = result
     session.commit()
 
 
@@ -279,11 +300,16 @@ def run_agent_task(session: Session, agent_task_id: int) -> dict[str, Any]:
         state["error"] = None
     else:
         budget = int(task.input_json.get("token_budget") or settings.agent_token_budget)
+        timeout_seconds = int(
+            task.input_json.get("task_timeout_seconds")
+            or settings.agent_task_timeout_seconds
+        )
         state = new_state(
             user_id=task.user_id,
             task_input=task.input_json,
             token_budget=budget,
             max_steps=settings.agent_max_steps,
+            timeout_seconds=timeout_seconds,
         )
     task.status = STATUS_RUNNING
     if task.started_at is None:
@@ -299,13 +325,32 @@ def run_agent_task(session: Session, agent_task_id: int) -> dict[str, Any]:
     try:
         engine.run(state)
     except AgentStepLimitError as exc:
-        _mark_failed(session, task, str(exc))
+        logger.warning("agent_task_step_limit task_id=%s error=%s", agent_task_id, exc)
+        _mark_failed(
+            session,
+            task,
+            str(exc),
+            result=_partial_result(recorder.last_state),
+        )
+    except AgentTaskTimeoutError as exc:
+        logger.warning("agent_task_timeout_failed task_id=%s error=%s", agent_task_id, exc)
+        _mark_failed(
+            session,
+            task,
+            str(exc),
+            result=_partial_result(recorder.last_state),
+        )
     except Exception:  # noqa: BLE001 - 图异常统一收敛为任务失败，堆栈进日志
         logger.exception("agent_task_failed task_id=%s", agent_task_id)
         session.rollback()
         task = session.get(AgentTask, agent_task_id)
         if task is not None:
-            _mark_failed(session, task, "任务执行失败")
+            _mark_failed(
+                session,
+                task,
+                "任务执行失败",
+                result=_partial_result(recorder.last_state),
+            )
     session.refresh(task)
     return {"status": task.status}
 

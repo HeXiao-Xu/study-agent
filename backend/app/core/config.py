@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     # --- Agent 状态机（S6-2）---
     agent_max_steps: int = Field(default=12, ge=1, le=50)
     agent_token_budget: int = Field(default=20000, ge=100)
+    # 单任务墙钟上限；超时任务 failed 但保留已有产物（S6-6）
+    agent_task_timeout_seconds: int = Field(default=600, ge=10, le=3600)
 
     # --- 异步任务（S2-7，ARQ Worker）---
     task_max_tries: int = 3

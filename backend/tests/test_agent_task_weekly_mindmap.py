@@ -246,3 +246,10 @@ def test_weekly_mindmap_runs_through_engine_in_eight_steps():
     assert final["result"]["citations"] == [{"note_id": 54, "note_title": "函数"}]
     assert final["token_cost"] == 50
     assert len(steps) == 8
+
+
+def test_weekly_accepts_token_budget_but_rejects_too_small():
+    data = WeeklyMindmapTaskSpec.validate_input({"days": 7, "token_budget": 100})
+    assert data["token_budget"] == 100
+    with pytest.raises(InvalidParamError):
+        WeeklyMindmapTaskSpec.validate_input({"days": 7, "token_budget": 99})

@@ -37,6 +37,10 @@ class AgentStepLimitError(Exception):
     """步骤数达到上限；由 service 把任务置 failed。"""
 
 
+class AgentTaskTimeoutError(Exception):
+    """任务墙钟超时；由 service 把任务置 failed 并保留已有产物。"""
+
+
 @dataclass(frozen=True)
 class PlanExtension:
     """observe 成功后由任务定义追加的后续步骤（S6-3）。
@@ -134,8 +138,22 @@ class AgentEngine:
 
     def _guard(self, node: Callable[[AgentState], dict[str, Any]]):  # noqa: ANN201
         def wrapped(state: AgentState) -> dict[str, Any]:
+            deadline = state.get("deadline_at")
+            if deadline is not None and time.time() > float(deadline):
+                logger.warning(
+                    "agent_task_timeout task_id=%s deadline=%s",
+                    state.get("user_id"),
+                    deadline,
+                )
+                raise AgentTaskTimeoutError("任务执行超时")
             max_steps = int(state.get("max_steps") or 0)
             if int(state.get("step_count") or 0) >= max_steps:
+                logger.warning(
+                    "agent_step_limit task_id=%s step_count=%s max_steps=%s",
+                    state.get("user_id"),
+                    state.get("step_count"),
+                    max_steps,
+                )
                 raise AgentStepLimitError(f"超过最大步数 {max_steps}")
             return node(state)
 
@@ -172,6 +190,12 @@ class AgentEngine:
         budget = int(state.get("token_budget") or 0)
         cost = int(update.get("token_cost", state.get("token_cost") or 0))
         if budget > 0 and cost >= budget:
+            logger.warning(
+                "agent_budget_exhausted task_id=%s cost=%s budget=%s",
+                state.get("user_id"),
+                cost,
+                budget,
+            )
             update["fatal_error"] = "token 预算不足，已终止并保留现有产物"
             return True
         return False
@@ -205,6 +229,13 @@ class AgentEngine:
         try:
             output = self.ctx.invoke(tool, dict(step.get("input") or {}))
         except AppError as exc:
+            logger.warning(
+                "agent_tool_failed tool=%s step_no=%s code=%s error=%s",
+                tool,
+                index + 1,
+                exc.code,
+                exc.message,
+            )
             latency = int(round((time.perf_counter() - started) * 1000))
             update = {"last_error": exc.message, "last_output": None}
             self._record(
@@ -215,6 +246,24 @@ class AgentEngine:
                 tool_name=tool,
                 tool_input=dict(step.get("input") or {}),
                 tool_output={"error": exc.message, "code": exc.code},
+                latency_ms=latency,
+            )
+            return update
+        except TimeoutError:
+            logger.warning(
+                "agent_tool_timeout tool=%s step_no=%s", tool, index + 1
+            )
+            latency = int(round((time.perf_counter() - started) * 1000))
+            message = "工具执行超时"
+            update = {"last_error": message, "last_output": None}
+            self._record(
+                state,
+                update,
+                thought=f"工具 {tool} 超时：{message}",
+                status="error",
+                tool_name=tool,
+                tool_input=dict(step.get("input") or {}),
+                tool_output={"error": message, "code": 50000},
                 latency_ms=latency,
             )
             return update
@@ -309,11 +358,27 @@ class AgentEngine:
     def _reflect(self, state: AgentState) -> dict[str, Any]:
         retries = int(state.get("retry_count") or 0)
         if retries >= MAX_TOOL_RETRIES:
+            logger.warning(
+                "agent_tool_retry_exhausted tool=%s step_no=%s error=%s",
+                (state.get("plan") or [{}])[int(state.get("current_index") or 0)].get("tool")
+                if (state.get("plan") or [])
+                else None,
+                int(state.get("current_index") or 0) + 1,
+                state.get("last_error"),
+            )
             update = {
                 "fatal_error": f"工具连续失败已达重试上限：{state.get('last_error')}"
             }
             self._record(state, update, thought="重试次数用尽，终止任务", status="error")
             return update
+        logger.warning(
+            "agent_tool_retry tool=%s step_no=%s retry=%s",
+            (state.get("plan") or [{}])[int(state.get("current_index") or 0)].get("tool")
+            if (state.get("plan") or [])
+            else None,
+            int(state.get("current_index") or 0) + 1,
+            retries + 1,
+        )
         update = {"retry_count": retries + 1, "last_error": None}
         self._record(
             state,

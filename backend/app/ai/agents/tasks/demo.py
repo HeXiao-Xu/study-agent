@@ -31,6 +31,8 @@ class DemoInput(BaseModel):
     steps: list[DemoStep] = Field(min_length=1, max_length=MAX_STEPS)
     require_confirm: bool = False
     token_budget: int | None = Field(default=None, ge=100)
+    # 仅 demo 验收用：覆盖任务 deadline（秒），正式任务走 AGENT_TASK_TIMEOUT_SECONDS
+    task_timeout_seconds: int | None = Field(default=None, ge=1, le=3600)
 
 
 class DemoTaskSpec:
