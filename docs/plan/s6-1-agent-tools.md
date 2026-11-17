@@ -739,7 +739,7 @@ git commit -m "feat(s6-1): 工具所需 service 增量（批量掌握度/题目�
   - `get_mastery.get_mastery(ctx, data) -> GetMasteryOut`
   - `search_questions.search_questions(ctx, data) -> SearchQuestionsOut`
 
-- [ ] **Step 1: 写 6 个工具的失败测试（只列关键断言）**
+- [x] **Step 1: 写 6 个工具的失败测试（只列关键断言）**
 
 `test_agent_tool_search_notes.py`：
 
@@ -810,26 +810,26 @@ def test_list_notes_passes_date_window_and_converts_end_inclusive(monkeypatch):
 
 `test_agent_tool_search_questions.py`：fake `list_questions_service` 返回两题（一 verified=False、一 True），断言 `exclude_done_since` 等于 `ctx.now - 14 天`、输出 verified 优先、`answer_md` 不出现在字段里、stem 截 2000。
 
-- [ ] **Step 2: 运行 6 个测试文件确认失败**
+- [x] **Step 2: 运行 6 个测试文件确认失败**
 
 Run: `cd backend && python -m pytest tests/test_agent_tool_search_notes.py tests/test_agent_tool_list_notes.py tests/test_agent_tool_get_kp_subgraph.py tests/test_agent_tool_list_mistakes.py tests/test_agent_tool_get_mastery.py tests/test_agent_tool_search_questions.py -q`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 `search_notes.py`**
+- [x] **Step 3: 实现 `search_notes.py`**
 
 - `SearchNotesIn` 字段按 spec 5.1；`model_validator` 校验 `end_date >= start_date`。
 - 导入 `from app.services.retrieval_service import search_chunks`（测试 monkeypatch 此名字）。
 - handler 组装 `RetrievalScopeIn(...)`（仅在有 scope 字段时传对象），调 `search_chunks(..., debug=False)`；映射 hits：`content[:1200]`、`truncated=len(content)>1200`。
 - 输出字段按 spec 5.1。
 
-- [ ] **Step 4: 实现 `list_notes.py`**
+- [x] **Step 4: 实现 `list_notes.py`**
 
 - 导入 `from app.services.note_service import list_notes as list_notes_service`。
 - 日期窗口：`created_from = datetime.combine(start, time.min, timezone.utc)`；`created_to = datetime.combine(end + timedelta(days=1), time.min, timezone.utc) - timedelta(microseconds=1)`。
 - 多标签：`tag = tags[0]`，取回后 `items = [i for i in items if set(tags).issubset(set(i.tags or []))]`；`total` 保留服务端值，输出加 `filtered_total=len(items)` 字段（spec §5.2 说明）。
 - 调 `list_notes_service(session=ctx.session, owner=ctx.user, params=PageParams(1, limit), sorting=SortParams("created_at", "desc"), subject_id=..., tag=tag, created_from=..., created_to=...)`。
 
-- [ ] **Step 5: 实现 `get_kp_subgraph.py`**
+- [x] **Step 5: 实现 `get_kp_subgraph.py`**
 
 - `session.get(KnowledgePoint, kp_id)` → 不存在 `NotFoundError("知识点不存在")`；取 `subject_id`。
 - `snapshot = graph_service.snapshot(session=ctx.session, subject_id=..., user_id=ctx.user.id, now=ctx.now)`。
@@ -837,19 +837,19 @@ Expected: FAIL（模块不存在）
 - 节点映射 `mastery` 来自 snapshot 节点；`exam_weight` 原样。
 - 单测直接测 `_bfs_subgraph`（不 mock）+ handler（monkeypatch `graph_service.snapshot`）。
 
-- [ ] **Step 6: 实现 `list_mistakes.py`**
+- [x] **Step 6: 实现 `list_mistakes.py`**
 
 - 导入 `from app.services.mistake_service import list_mistakes as list_mistakes_service`。
 - `MistakeFilters(kp_ids=..., status=..., created_from=..., created_to=...)`；`PageParams(1, limit)`、`SortParams("created_at", "desc")`。
 - 映射 `PageData.items`（`MistakeSummaryOut`）→ 出参；`total` 原样。
 
-- [ ] **Step 7: 实现 `get_mastery.py`**
+- [x] **Step 7: 实现 `get_mastery.py`**
 
 - 调 `mastery_service.mastery_details(ctx.session, user_id=ctx.user.id, kp_ids=data.kp_ids, now=ctx.now)`。
 - `found = {s.kp_id for s in states}`；`missing = [kp for kp in data.kp_ids if kp not in found]`；`unassessed = [s.kp_id for s in states if not s.assessed]`。
 - 输出按入参 id 顺序（service 已保证）。
 
-- [ ] **Step 8: 实现 `search_questions.py`**
+- [x] **Step 8: 实现 `search_questions.py`**
 
 - 导入 `from app.services.question_service import list_questions as list_questions_service`。
 - `exclude_done_since = None if days == 0 else ctx.now - timedelta(days=days)`。
@@ -858,7 +858,7 @@ Expected: FAIL（模块不存在）
 - 映射：`stem_md` 截 2000 + `truncated`；`stem_excerpt` 用前 120 字；options 转 `[{key,text}]`；不取 `answer_md/analysis_md`。
 - 页内稳定排序：`sorted(items, key=lambda x: (not x.verified, -x.question_id))`。
 
-- [ ] **Step 9: 更新 `registry.py` 并跑测试**
+- [x] **Step 9: 更新 `registry.py` 并跑测试**
 
 `registry.py`：
 
@@ -879,7 +879,7 @@ TOOLS = {module.SPEC.name: module.SPEC for module in _TOOL_MODULES}
 Run: `cd backend && python -m pytest tests/test_agent_tool_search_notes.py tests/test_agent_tool_list_notes.py tests/test_agent_tool_get_kp_subgraph.py tests/test_agent_tool_list_mistakes.py tests/test_agent_tool_get_mastery.py tests/test_agent_tool_search_questions.py tests/test_agent_tools_registry.py -q`
 Expected: PASS（registry 测试需同步改为 8 个工具的期望顺序）
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add backend/app/ai/agents/tools backend/tests/test_agent_tool_*.py

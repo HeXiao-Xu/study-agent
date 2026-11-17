@@ -27,8 +27,17 @@ def _ctx() -> ToolContext:
     return ToolContext(session=_FakeSession(), user=_User())  # type: ignore[arg-type]
 
 
-def test_registry_starts_with_two_pure_tools():
-    assert TOOL_ORDER == ["make_mindmap", "calculator"]
+def test_registry_has_eight_tools_after_read_layer():
+    assert TOOL_ORDER == [
+        "search_notes",
+        "list_notes",
+        "get_kp_subgraph",
+        "list_mistakes",
+        "get_mastery",
+        "search_questions",
+        "make_mindmap",
+        "calculator",
+    ]
     assert set(TOOLS) == set(TOOL_ORDER)
 
 

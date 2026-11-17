@@ -1,0 +1,109 @@
+"""S6-1 list_notes：本人笔记元数据列表（不返回正文）。"""
+from __future__ import annotations
+
+from datetime import date, datetime, time, timedelta, timezone
+
+from pydantic import Field, field_validator, model_validator
+
+from app.ai.agents.tools.base import ToolContext, ToolInput, ToolOutput, ToolSpec
+from app.services.note_service import NoteSummary
+from app.services.note_service import list_notes as list_notes_service
+from app.utils.pagination import PageParams, SortParams
+
+
+class ListNotesIn(ToolInput):
+    start_date: date | None = None
+    end_date: date | None = None
+    tags: list[str] = Field(default_factory=list, max_length=10)
+    subject_id: int | None = Field(default=None, ge=1)
+    limit: int = Field(default=20, ge=1, le=50)
+
+    @field_validator("tags")
+    @classmethod
+    def _clean_tags(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in value:
+            tag = raw.strip()
+            if tag and tag not in cleaned:
+                cleaned.append(tag)
+        return cleaned
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "ListNotesIn":
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("end_date 不能早于 start_date")
+        return self
+
+
+class NoteBrief(ToolOutput):
+    note_id: int
+    title: str
+    subject_id: int | None = None
+    tags: list[str] | None = None
+    folder: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ListNotesOut(ToolOutput):
+    total: int
+    filtered_total: int
+    items: list[NoteBrief]
+
+
+def _utc_midnight(day: date) -> datetime:
+    return datetime.combine(day, time.min, timezone.utc)
+
+
+def list_notes(ctx: ToolContext, data: ListNotesIn) -> ListNotesOut:
+    created_from = _utc_midnight(data.start_date) if data.start_date else None
+    created_to = (
+        _utc_midnight(data.end_date + timedelta(days=1)) - timedelta(microseconds=1)
+        if data.end_date
+        else None
+    )
+    tag = data.tags[0] if data.tags else None
+    page = list_notes_service(
+        ctx.session,
+        owner=ctx.user,
+        params=PageParams(page=1, page_size=data.limit),
+        sorting=SortParams(sort_by="created_at", order="desc"),
+        subject_id=data.subject_id,
+        tag=tag,
+        created_from=created_from,
+        created_to=created_to,
+    )
+    items = page.items
+    if len(data.tags) > 1:
+        wanted = set(data.tags)
+        items = [item for item in items if wanted.issubset(set(item.tags or []))]
+    briefs = [_to_brief(item) for item in items]
+    return ListNotesOut(
+        total=page.total, filtered_total=len(briefs), items=briefs
+    )
+
+
+def _to_brief(item: NoteSummary) -> NoteBrief:
+    return NoteBrief(
+        note_id=item.id,
+        title=item.title,
+        subject_id=item.subject_id,
+        tags=item.tags,
+        folder=item.folder,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+SPEC = ToolSpec(
+    name="list_notes",
+    description=(
+        "用途：按时间范围/标签/学科列出本人笔记的元数据，用于「上周写了哪些笔记」。"
+        "参数 start_date/end_date 为 ISO 日期（含当天），tags 最多 10 个，limit 取 1–50。"
+        "只返回标题、标签、文件夹与时间，不返回正文；需要正文时改用 search_notes。"
+        "多个标签时先按第一个标签分页再在内存过滤，filtered_total 可能小于 total。"
+    ),
+    input_model=ListNotesIn,
+    output_model=ListNotesOut,
+    handler=list_notes,
+)
