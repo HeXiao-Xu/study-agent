@@ -3,7 +3,7 @@
 > 任务卡：`docs/AI协作开发实施计划.md` §S6-5。产出 `views/agent/TaskList.vue`、`TaskDetail.vue`。
 > 前置：S6-2 三个 Agent 接口、S6-3 学习导图页。S6-4 不做（用户决定）。
 > 范围：任务列表（分页/筛选/自动刷新）、任务详情（步骤时间线/折叠输出/失败高亮/确认弹窗）、后端 `GET /agent/tasks` 分页列表。
-> 状态：**待用户确认**（2026-11-17）。确认后按本 spec 写 `docs/plan/s6-5-task-pages.md`，plan 确认后才写码。
+> 状态：**已确认**（2026-11-17）。实现按 `docs/plan/s6-5-task-pages.md` 执行。
 
 ## 1. 目标与非目标
 

@@ -905,3 +905,15 @@
   - 错误口径：days=0 422、`mistake_paper` 422、teacher 403。
   - 验收环境问题：一个 10:58 启动的旧 ARQ worker 仍在跑，抢到任务 6 并因旧注册表报「未知任务类型：agent.run」；杀掉旧 worker 后重跑任务 7 成功。属验收环境污染，不是产品缺陷，任务 6 已清理为 failed 并记录原因。证据见 `.sdd/s6-3/acceptance-evidence.md`。
 - 已知边界：7 天真实数据缺口；最多 3 个知识点子图；LLM 降级无语义结论；导图不可历史检索；Mermaid 包体积大；PNG 字体依赖浏览器；`mistake_paper` 不做。
+
+## D-068 Agent 任务中心（S6-5）
+
+- 背景：S6-2/S6-3 已有按 id 查询、S6-3 有学习导图专用页，但没有历史任务列表、没有步骤时间线，演示时看不到「一步步执行」。本卡交付 `TaskList`/`TaskDetail` 与列表接口。
+- 决策 1（列表接口）：新增 `GET /agent/tasks` 分页列表（仅 student 本人，`PageData[AgentTaskOut]`，`status/task_type` 筛选，`page_size` 1–100 默认 10，`created_at DESC, id DESC`）。前端不能靠 localStorage 拼历史；接口复用 `page_params/sort_params/paginate_query/apply_sort`，不做新表/新列。
+- 决策 2（导航）：用「Agent 任务」替换 S6-3 的「学习导图」导航项，导航保持 14 项；`/agent/mindmap` 路由保留，由列表/详情「生成学习导图」「查看学习导图」进入。避免 15 项侧栏与两个入口语义重叠。
+- 决策 3（轮询而非 SSE）：任务卡允许轮询/SSE；本轮不新增后端流式接口。列表 2 s、详情 1 s，仅存在 pending/running 时轮询，终态/等待确认/卸载即停。代价是长任务有重复 GET，S7-2 压测再评估。
+- 决策 4（步骤时间线）：自绘垂直时间线（不引额外组件）；每步显示 step_no/状态/工具/耗时/thought；入参出参用原生 `<details>` 折叠，error 步默认展开并红框；`transition-group` 做淡入上移，运行中且用户接近底部时自动滚到最新步骤。`state_json` 不展示。
+- 决策 5（失败与确认）：失败页只给「展开错误步骤 + 重新创建/返回列表」，不提供原地重试（无重跑接口，留 S6-6）；`waiting_confirm` 弹窗只支持通过/拒绝 + 备注（≤500 字），`edits` 不在 UI 暴露（S6-4 不做）。
+- 决策 6（类型收口）：`AgentTaskDetail.result` 从只认 weekly 改为联合类型 `WeeklyMindmapResult | DemoAgentResult | Record<string,unknown> | null`，新增 `asWeeklyMindmapResult` 守卫；S6-3 导图页同步改用守卫，行为不变。
+- 验证：后端 `pytest -q` → **1569 passed, 5 warnings**（S6-3 基线 1564 + 5 条列表/服务测试）；前端 **383 passed / 65 files**，`npm run build` 退出 0。真实 HTTP：user 18 列表 9 个任务；`status=failed`、`task_type=weekly_mindmap` 过滤正确；`page_size=2` 两页 `[7,6]`/`[5,4]` 不重复；teacher 403、非法 status 422。Chrome 1440×900：列表 9 行；任务 5 详情 10 步 + 导图链接；任务 11 失败 11 步、8 个 error 行、错误输出默认展开、建议可见；任务 8 确认通过 → succeeded；慢任务 12 步骤数 `1→3→6` 递增；无横向溢出、console error 0。**验收中抓到并修掉** S6-2 真实缺陷：`observe` 失败分支返回了新的空 dict，`step_count` 未推进，重试时 `agent_steps(task_id, step_no)` 撞唯一键，任务被误判「任务执行失败」；改为返回同一个 update 并补 step_no 连续回归测试。修复前任务 9 失败（3 步）；修复后任务 11 正确跑满 3 次尝试（11 步）并给出重试上限错误。证据见 `.sdd/s6-5/acceptance-evidence.md`。
+- 已知边界：轮询有重复请求；无取消/原地重跑；结果 JSON 截断 4000 字；导航入口替换；确认仅通过/拒绝 + 备注。

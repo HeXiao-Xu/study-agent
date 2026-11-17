@@ -6,7 +6,8 @@
 ## 当前状态
 
 - 阶段：阶段 0/1/2 已完成；阶段 3（RAG 问答上线，M2）S3-1～S3-9 已交付（`m2-rag-done` tag 待用户验收）；**阶段 4（错题与知识图谱，M3）S4-1～S4-8 全部完成**（本地 tag `m3-mistake-graph-done`，等用户 push 时带 `--tags`）；**阶段 5：S5-1 组卷内核 + S5-2 组卷 API/预览页 + S5-3 PDF 导出 + S5-4 在线作答 + S5-5 复习调度 + S5-6 学习报告/周报 + S5-7 前端复习/报告/练习页已交付**（`papers`/`answers`/`review_items` 表、组卷 4 接口 + 我的试卷列表接口 + 导出接口 + 作答 3 接口 + 复习 5 接口 + 报告 2 接口、`/papers/generate`、`/papers`、`/papers/:id/take`、`/review`、`/reports`、`/practice` 页面；本地 tag `m4-practice-done`，等用户 push 时带 `--tags`）
-- 最近完成（S6-3）：周笔记导图（任务 A）—— `weekly_mindmap` 任务类型（动态规划：list_notes → 最多 3 个知识点子图 → LLM 聚类 → make_mindmap → finalize）、`weekly_mindmap_v1.md` Prompt、`list_notes` 补 preview/kp_ids/kp_names、结果写 `agent_tasks.result_json`（摘要/引用/degraded）、前端「学习导图」页 + Mermaid 渲染 + Canvas 导出 PNG。后端 **1564 passed, 5 warnings**（S6-2 基线 1543 + 21 条新测试）；前端 **370 passed / 62 files**，`npm run build` 退出 0。真实 30 天 4 篇笔记 10 步成功、LLM 未降级、4 条引用；7 天真实库无笔记只验证空态（不造假）；Chrome 导出 PNG 220 KB。详见 D-067 与 `.sdd/s6-3/acceptance-evidence.md`
+- 最近完成（S6-5）：Agent 任务中心—— 新增 `GET /agent/tasks` 分页列表（本人、status/task_type 筛选、created_at+id 排序）、`TaskList.vue`（筛选/分页/2 s 自动刷新）、`TaskDetail.vue`（1 s 轮询、步骤时间线、入参出参折叠、error 步红框默认展开、失败建议、确认弹窗）；导航「Agent 任务」替换「学习导图」入口（路由保留）。后端 **1569 passed, 5 warnings**（S6-3 基线 1564 + 5 条）；前端 **383 passed / 65 files**，build 0；Chrome 列表 9 行、任务 5 十步详情、任务 11 失败 11 步高亮、任务 8 确认通过、慢任务步骤 `1→3→6` 递增。**验收中抓到并修掉** S6-2 失败重试 `step_count` 未推进导致 `agent_steps` 唯一键冲突的缺陷。详见 D-068 与 `.sdd/s6-5/acceptance-evidence.md`
+- 上一完成（S6-3）：周笔记导图（任务 A）—— `weekly_mindmap` 任务类型（动态规划：list_notes → 最多 3 个知识点子图 → LLM 聚类 → make_mindmap → finalize）、`weekly_mindmap_v1.md` Prompt、`list_notes` 补 preview/kp_ids/kp_names、结果写 `agent_tasks.result_json`（摘要/引用/degraded）、前端「学习导图」页 + Mermaid 渲染 + Canvas 导出 PNG。后端 **1564 passed, 5 warnings**（S6-2 基线 1543 + 21 条新测试）；前端 **370 passed / 62 files**，`npm run build` 退出 0。真实 30 天 4 篇笔记 10 步成功、LLM 未降级、4 条引用；7 天真实库无笔记只验证空态（不造假）；Chrome 导出 PNG 220 KB。详见 D-067 与 `.sdd/s6-3/acceptance-evidence.md`
 - 上一完成（S6-2）：LangGraph 状态机 + 步骤持久化（`ai/agents/{state,engine}.py` 六节点图、`agent_tasks`/`agent_steps` 表 + 迁移 `0018_s6_2`、`services/agent_service.py`、`tasks/agent_run.py`、`api/v1/agent.py` 三接口、`demo` 任务类型；`state_json` 挂起快照支持确认恢复，工具失败重试 ≤2、token 预算、最大步数 12、逐节点写步骤）。后端 **1543 passed, 5 warnings**（S6-1 基线 1514 + 29 条新测试）；真实 ARQ：3 步 demo 8 条步骤、确认挂起 6 条→恢复 8 条且工具不重跑、拒绝 failed；DB 3 任务/22 步骤。详见 D-066 与 `.sdd/s6-2/acceptance-evidence.md`
 - 上一完成（S6-1）：Agent 工具集（`ai/agents/tools/` 11 个工具 + 统一注册表/`invoke_tool` + OpenAI function schema `backend/data/agent_tools.json` + `scripts/agent_tools.py` CLI）；新增 `mastery_service.mastery_details`、`QuestionFilters` 多 kp/难度/近期排除、`MistakeFilters.kp_ids` 三处向后兼容增量；Prompt `agent_gen_questions_v1.md`；工具全部只读（生成题/复习计划只出草稿）。后端 **1514 passed, 5 warnings**（S5-7 基线 1458 + 56 条新测试；另修一条日期写死的周报测试）。真实验收见 D-065 与 `.sdd/s6-1/acceptance-evidence.md`
 - 上一完成（S5-7）：前端复习/报告/练习页（新增 `views/review/Today.vue` + `useReviewProgress.ts`、`views/reports/Index.vue` + `useReportCharts.ts` + `exportReportImage.ts`、`views/practice/PracticeHome.vue`、`api/review.ts`/`api/reports.ts` 与对应类型；路由 `/review`、`/reports`、`/practice`，`/plan` 重定向 `/review`，导航 12 项（新增「我的试卷」后为 13 项）；复用 S5-5/S5-6 接口，不改后端、不加依赖；**不做手机适配**（用户确认，任务卡 H5 项本轮不满足）；前端 **338 passed / 56 files**，`npm run build` 退出 0
@@ -54,7 +55,7 @@
 - 小修（2026-11-05，S4-1 题库列表可读性）：删掉无意义的「ID」列（详情面板头部本来就有 `题目 #47`），题干列前加归属徽标——自己导入的蓝 `我的`、别人导入的灰 `他人`（真机 55 题：34 我的 / 21 他人，与 `created_by` 分布一致）；「来源」列名改为「答案来源」（它显示的是 `verified`：`卷面` / `AI/无`，原列名与含义不符）。前端 **260 passed / 43 files**，`npm run build` 退出 0（D-053）
 - 小修（2026-11-05，S4-1/S4-2 列表公式显示）：题干里的 `$…$` 以前在列表里裸露（`$\log_a 5>\log_a 7$`），现在三处列表（题库审题页、错题列表、错题选题弹窗）统一走 `components/common/MathText.vue` + `utils/mathText.ts`（KaTeX 行内渲染、非公式片段 HTML 转义、写坏的公式退化成原文、列表 CSS 两行截断不切公式）；新增 13 条纯函数/组件用例 + 2 条列表回归断言，前端 **258 passed / 43 files**，`npm run build` 退出 0（D-052）
 - 已知限制（2026-11-05 实测，决定**不修**）：43 道解答题里 34 道没挂知识点。查过原因：不是漏跑，是 LLM 判「候选里没有够像的」；考纲 108 个知识点本身缺条目（无定积分、无乘法公式），这 34 道又多是短算式题。试算「取向量最接近的一律挂上」的结果：top1 余弦中位 0.552，且 top1-top2 差距普遍 <0.02（排名不稳定），抽看 12 条约 4 对 8 错——错标签会污染掌握度/看板 TOP10/复习推荐且用户难发现，因此**保留空标签**；若以后要救，口径是「cos≥0.55 且 gap≥0.02 才自动挂 + 标 inferred + 人工快捷入口」，见 D-054
-- 下一步：阶段 6 S6-5 前端任务进度页（任务列表/详情/时间线，等任务卡/用户确认）；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
+- 下一步：阶段 6 S6-6 可靠性加固（工具/超时/预算/参数/非 JSON 失败场景与重跑幂等，等任务卡/用户确认）；老师/家长查看学生看板本卡未做，建议另开卡；跨会话交接见 [docs/HANDOFF-S3.md](HANDOFF-S3.md)
 - 已知阻塞：无。`m1-framework-done` 暂未打 tag：任务卡要求库内有 20 篇真实笔记 + 1 份试卷，当前仅有 4 篇原有笔记
 
 ## 任务清单
@@ -128,7 +129,7 @@
 - [x] S6-2 LangGraph 状态机 + 步骤持久化 ★
 - [x] S6-3 任务 A：周笔记整理 + 思维导图
 - [ ] S6-4 任务 B：错题组卷（人工确认）——用户 2026-11-17 决定不做：组卷已由 S5-1/S5-2 实现，`mistake_paper` 不注册
-- [ ] S6-5 前端任务进度页
+- [x] S6-5 前端任务进度页
 - [ ] S6-6 可靠性加固
 
 ### 阶段 7：调优上线（M6–M7）

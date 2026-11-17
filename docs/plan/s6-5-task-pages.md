@@ -561,14 +561,14 @@ git commit -m "feat(s6-5): Agent 任务详情页、步骤时间线与确认弹�
 - Modify: `AGENTS.md` §9.6
 - Create: `.sdd/s6-5/acceptance-evidence.md` + 截图
 
-- [ ] **Step 1: 文档**
+- [x] **Step 1: 文档**
 
 - `AGENT_TASKS_UI.md`：列表/详情交互、轮询口径、确认流程、失败态、导航替换、边界。
 - D-068：列表接口新增、导航替换、轮询而非 SSE、确认弹窗字段、验收数字。
 - PROGRESS：S6-5 完成、下一步 S6-6、导航文案。
 - AGENTS §9.6 追加任务页锚点。
 
-- [ ] **Step 2: 全量测试**
+- [x] **Step 2: 全量测试**
 
 ```bash
 cd backend && ../.venv/Scripts/python.exe -m pytest -q
@@ -577,7 +577,7 @@ cd ../web && npm run test:run && npm run build
 
 记录精确数字（后端 S6-3 基线 1564，前端 370/62）。
 
-- [ ] **Step 3: 真实后端验收**
+- [x] **Step 3: 真实后端验收**
 
 启动 worker/uvicorn 后：
 
@@ -590,7 +590,7 @@ GET /api/v1/agent/tasks?page=2&page_size=2
 
 断言 total/items/翻页不重复；teacher 403、非法 status 422。
 
-- [ ] **Step 4: 真实 Chrome 验收**
+- [x] **Step 4: 真实 Chrome 验收**
 
 - `/agent/tasks`：列表行、状态颜色、筛选、分页；新建 demo 任务观察行 pending→succeeded（2 s 自动刷新）。
 - 打开 weekly 任务 5：10 步时间线、折叠入参/出参、摘要/引用、导图链接。
@@ -599,7 +599,7 @@ GET /api/v1/agent/tasks?page=2&page_size=2
 - 步骤逐条出现：新建 demo 3 步任务后在详情页记录步骤数 0→2→4→…（截图/文字）；console error 0、无横向溢出。
 - 截图 `.sdd/s6-5/task-list.png`、`task-detail.png`、`task-failed.png`、`task-confirm.png`。
 
-- [ ] **Step 5: 证据与提交**
+- [x] **Step 5: 证据与提交**
 
 `.sdd/s6-5/acceptance-evidence.md` 记录 pytest/vitest/build、HTTP 响应摘要、Chrome 结果与失败修复。
 
