@@ -461,7 +461,7 @@ git commit -m "feat(s6-1): 工具基座与 calculator/make_mindmap"
 - Produces: `QuestionFilters(kp_ids: list[int]|None=None, difficulty: int|None=None, exclude_user_id: int|None=None, exclude_done_since: datetime|None=None)`
 - Produces: `MistakeFilters(kp_ids: list[int]|None=None)`
 
-- [ ] **Step 1: 写 service 增量失败测试**
+- [x] **Step 1: 写 service 增量失败测试**
 
 ```python
 """S6-1 工具所需的 service 增量：可编译 SQL + 掌握度批量折算。"""
@@ -540,12 +540,12 @@ def test_mastery_details_marks_assessed_and_missing(monkeypatch):
     assert states[1].mastery_t is None
 ```
 
-- [ ] **Step 2: 运行并确认失败**
+- [x] **Step 2: 运行并确认失败**
 
 Run: `cd backend && python -m pytest tests/test_agent_tools_service_support.py -q`
 Expected: FAIL（字段/函数不存在）
 
-- [ ] **Step 3: 实现 `mastery_details`**
+- [x] **Step 3: 实现 `mastery_details`**
 
 在 `mastery_service.py` 末尾追加：
 
@@ -648,7 +648,7 @@ def mastery_details(
     return states
 ```
 
-- [ ] **Step 4: 实现 `QuestionFilters` / `build_questions_query` 增量**
+- [x] **Step 4: 实现 `QuestionFilters` / `build_questions_query` 增量**
 
 `QuestionFilters` 追加字段；`build_questions_query` 在 `kp_id` 分支后追加：
 
@@ -676,7 +676,7 @@ def mastery_details(
 
 并在文件头补 `from sqlalchemy import func`（若已 import select/exists，补齐）。
 
-- [ ] **Step 5: 实现 `MistakeFilters.kp_ids`**
+- [x] **Step 5: 实现 `MistakeFilters.kp_ids`**
 
 ```python
     if filters.kp_ids:
@@ -698,12 +698,12 @@ def mastery_details(
 
 文件头补 `from sqlalchemy import or_`（若未导入）。
 
-- [ ] **Step 6: 跑新增测试 + 既有 service/API 回归**
+- [x] **Step 6: 跑新增测试 + 既有 service/API 回归**
 
 Run: `cd backend && python -m pytest tests/test_agent_tools_service_support.py tests/test_question_service.py tests/test_mistakes_api.py tests/test_mastery_service.py -q`
 Expected: PASS（既有测试不改一行仍绿）
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/services backend/tests/test_agent_tools_service_support.py

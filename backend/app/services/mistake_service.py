@@ -13,7 +13,7 @@ from fastapi import UploadFile
 from fastapi_pagination import Params
 from fastapi_pagination.ext.sqlalchemy import paginate as paginate_sa
 from pydantic import ValidationError
-from sqlalchemy import Select, exists, func, select
+from sqlalchemy import Select, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,6 +74,8 @@ class MistakeFilters:
     kp_id: int | None = None
     created_from: datetime | None = None
     created_to: datetime | None = None
+    # S6-1 Agent 工具增量：一次筛多个知识点
+    kp_ids: list[int] | None = None
 
 
 # --------------------------------------------------------------------------
@@ -558,6 +560,22 @@ def build_mistakes_query(*, user_id: int, filters: MistakeFilters) -> Select:
                 MistakeAnalysis.kp_ids.contains([filters.kp_id]),
             )
         )
+    if filters.kp_ids:
+        # 多个 kp 用 OR：命中题目挂载的知识点或诊断结论里的知识点任一即可。
+        question_hit = exists().where(
+            QuestionKp.question_id == Mistake.question_id,
+            QuestionKp.kp_id.in_(filters.kp_ids),
+        )
+        analysis_hit = exists().where(
+            MistakeAnalysis.mistake_id == Mistake.id,
+            or_(
+                *[
+                    MistakeAnalysis.kp_ids.contains([int(kp_id)])
+                    for kp_id in filters.kp_ids
+                ]
+            ),
+        )
+        stmt = stmt.where(question_hit | analysis_hit)
     if filters.created_from is not None:
         stmt = stmt.where(Mistake.created_at >= filters.created_from)
     if filters.created_to is not None:

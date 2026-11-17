@@ -347,3 +347,108 @@ def mastery_values(
             float(mastery), float(stability), days=days
         )
     return values
+
+
+@dataclass(frozen=True, slots=True)
+class KpMasteryState:
+    """知识点 + 本人掌握度的只读快照（S6-1 工具用）。
+
+    与 `MasteryOut` 的差别：包含未评估知识点（`assessed=False`、`mastery_t=None`），
+    供 Agent 区分「没学过」与「学了但掌握度低」。
+    """
+
+    kp_id: int
+    kp_name: str
+    subject_id: int
+    exam_weight: float | None
+    mastery_t: float | None
+    assessed: bool
+    attempts: int
+    stability: float
+    last_practice_at: datetime | None
+    due_at: datetime | None
+
+
+def mastery_details(
+    session: Session,
+    *,
+    user_id: int,
+    kp_ids: Sequence[int],
+    now: datetime | None = None,
+) -> list[KpMasteryState]:
+    """批量取知识点 + 本人掌握度；两条 IN 查询，按入参 id 首次出现排序。"""
+    from app.models.knowledge_point import KnowledgePoint
+    from app.models.mastery import Mastery
+
+    order = list(dict.fromkeys(int(kp_id) for kp_id in kp_ids))
+    if not order:
+        return []
+    kp_rows = session.execute(
+        select(
+            KnowledgePoint.id,
+            KnowledgePoint.name,
+            KnowledgePoint.subject_id,
+            KnowledgePoint.exam_weight,
+        ).where(KnowledgePoint.id.in_(order))
+    ).all()
+    kp_map: dict[int, tuple[str, int, float | None]] = {
+        int(row[0]): (
+            str(row[1]),
+            int(row[2]),
+            float(row[3]) if row[3] is not None else None,
+        )
+        for row in kp_rows
+    }
+    mastery_rows = session.execute(
+        select(
+            Mastery.kp_id,
+            Mastery.mastery,
+            Mastery.stability,
+            Mastery.last_practice_at,
+            Mastery.attempts,
+            Mastery.due_at,
+        ).where(Mastery.user_id == user_id, Mastery.kp_id.in_(order))
+    ).all()
+    mastery_map = {int(row[0]): row for row in mastery_rows}
+    moment = now or datetime.now(timezone.utc)
+    states: list[KpMasteryState] = []
+    for kp_id in order:
+        if kp_id not in kp_map:
+            continue
+        name, subject_id, exam_weight = kp_map[kp_id]
+        row = mastery_map.get(kp_id)
+        if row is None:
+            states.append(
+                KpMasteryState(
+                    kp_id=kp_id,
+                    kp_name=name,
+                    subject_id=subject_id,
+                    exam_weight=exam_weight,
+                    mastery_t=None,
+                    assessed=False,
+                    attempts=0,
+                    stability=1.0,
+                    last_practice_at=None,
+                    due_at=None,
+                )
+            )
+            continue
+        _, mastery, stability, last_practice_at, attempts, due_at = row
+        days = 0.0
+        if last_practice_at is not None:
+            days = max(0.0, (moment - last_practice_at).total_seconds() / 86400.0)
+        states.append(
+            KpMasteryState(
+                kp_id=kp_id,
+                kp_name=name,
+                subject_id=subject_id,
+                exam_weight=exam_weight,
+                mastery_t=decayed_mastery(float(mastery), float(stability), days=days),
+                assessed=True,
+                attempts=int(attempts),
+                stability=float(stability),
+                last_practice_at=last_practice_at,
+                due_at=due_at,
+            )
+        )
+    return states

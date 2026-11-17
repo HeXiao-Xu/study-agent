@@ -11,10 +11,11 @@ import re
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import NoReturn
 
-from sqlalchemy import Select, exists, inspect, select, text
+from sqlalchemy import Select, exists, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -686,6 +687,11 @@ class QuestionFilters:
     verified: bool | None = None
     keyword: str | None = None
     source_file_id: int | None = None
+    # S6-1 Agent 工具增量：多知识点、难度、排除本人近期做过的题
+    kp_ids: list[int] | None = None
+    difficulty: int | None = None
+    exclude_user_id: int | None = None
+    exclude_done_since: datetime | None = None
 
 
 SORTABLE = {
@@ -727,6 +733,26 @@ def build_questions_query(*, filters: QuestionFilters) -> Select:
                 QuestionKp.question_id == Question.id, QuestionKp.kp_id == filters.kp_id
             )
         )
+    if filters.kp_ids:
+        stmt = stmt.where(
+            exists().where(
+                QuestionKp.question_id == Question.id,
+                QuestionKp.kp_id.in_(filters.kp_ids),
+            )
+        )
+    if filters.difficulty is not None:
+        stmt = stmt.where(Question.difficulty == filters.difficulty)
+    if filters.exclude_user_id is not None and filters.exclude_done_since is not None:
+        # 与 S5-1 组卷的「近期做过」口径一致：max(last_review_at, created_at)。
+        from app.models.mistake import Mistake
+
+        done_since = exists().where(
+            Mistake.user_id == filters.exclude_user_id,
+            Mistake.question_id == Question.id,
+            func.greatest(Mistake.last_review_at, Mistake.created_at)
+            >= filters.exclude_done_since,
+        )
+        stmt = stmt.where(~done_since)
     return stmt
 
 
