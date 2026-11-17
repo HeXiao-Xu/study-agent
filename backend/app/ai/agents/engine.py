@@ -37,6 +37,18 @@ class AgentStepLimitError(Exception):
     """步骤数达到上限；由 service 把任务置 failed。"""
 
 
+@dataclass(frozen=True)
+class PlanExtension:
+    """observe 成功后由任务定义追加的后续步骤（S6-3）。
+
+    `token_cost` 是本次扩展（如 LLM 聚类）消耗的 token，由 observe 累加到任务。
+    """
+
+    steps: list[PlanStep] = field(default_factory=list)
+    token_cost: int = 0
+    thought: str | None = None
+
+
 class StepRecorder(Protocol):
     def record(
         self,
@@ -60,6 +72,8 @@ class AgentTaskSpec(Protocol):
     def validate_input(cls, raw: dict[str, Any]) -> dict[str, Any]: ...
 
     def build_plan(self, state: AgentState) -> list[PlanStep]: ...
+
+    def extend_plan(self, state: AgentState) -> PlanExtension: ...
 
     def finalize(self, state: AgentState) -> dict[str, Any]: ...
 
@@ -271,11 +285,22 @@ class AgentEngine:
             "last_error": None,
             "retry_count": 0,
         }
-        hit = self._budget_hit(state, update)
+        prospective = {**state, **update}
+        extension = self.spec.extend_plan(prospective)
+        if extension.steps:
+            plan.extend(extension.steps)
+            update["plan"] = list(plan)
+            prospective["plan"] = update["plan"]
+        if extension.token_cost:
+            update["token_cost"] = (
+                int(prospective.get("token_cost") or 0) + extension.token_cost
+            )
+            prospective["token_cost"] = update["token_cost"]
+        hit = self._budget_hit(prospective, update)
         self._record(
             state,
             update,
-            thought=f"步骤 {index + 1} 成功，产物已收集",
+            thought=extension.thought or f"步骤 {index + 1} 成功，产物已收集",
             status="error" if hit else "ok",
         )
         return update

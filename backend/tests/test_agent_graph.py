@@ -165,3 +165,7 @@ def test_confirm_reject_fails():
     final = AgentEngine(spec, _ctx(recorder, _echo)).run(suspended)
     assert final["status"] == "failed"
     assert final["error"] == "用户拒绝确认"
+
+def test_demo_spec_has_empty_extend_plan():
+    spec = DemoTaskSpec({"steps": [{"tool": "calculator", "input": {}}]})
+    assert spec.extend_plan({}).steps == []

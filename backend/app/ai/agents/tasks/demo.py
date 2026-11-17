@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.ai.agents.engine import PlanExtension
 from app.ai.agents.state import AgentState
 from app.ai.agents.tools import TOOLS
 from app.core.exceptions import InvalidParamError
@@ -68,6 +69,9 @@ class DemoTaskSpec:
             }
             for step in self.task_input.get("steps") or []
         ]
+
+    def extend_plan(self, state: AgentState) -> PlanExtension:
+        return PlanExtension()
 
     def finalize(self, state: AgentState) -> dict[str, Any]:
         return {
