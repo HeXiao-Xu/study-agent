@@ -1,6 +1,8 @@
 """S5-6 周报：Prompt 渲染、数字校验重试、失败包裹、空数据分支。"""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.ai.llm import LLMClient, LLMError, LLMMessage, LLMResponse
@@ -187,9 +189,10 @@ def test_generate_weekly_passes_period_to_adapter(monkeypatch):
 
     monkeypatch.setattr(weekly_report, "generate_weekly_report", fake_generate)
     report_service.generate_weekly(session=object(), user_id=50)
+    today = datetime.now(timezone.utc).date()
     assert captured["stats"]["period"] == {
-        "from": "2026-11-08",
-        "to": "2026-11-14",
+        "from": (today - timedelta(days=6)).isoformat(),
+        "to": today.isoformat(),
         "days": 7,
     }
 
