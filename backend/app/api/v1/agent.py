@@ -113,6 +113,24 @@ def get_agent_task(
 
 
 @router.post(
+    "/tasks/{task_id}/retry",
+    status_code=202,
+    response_model=Envelope[AgentTaskOut],
+    summary="重跑失败的 Agent 任务",
+)
+def retry_agent_task(
+    task_id: int,
+    current_user: User = Depends(require_role("student")),
+    session: Session = Depends(get_db),
+    queue: TaskQueue = Depends(get_task_queue),
+) -> Envelope[AgentTaskOut]:
+    task = agent_service.retry_agent_task(
+        session, task_id=task_id, viewer=current_user, queue=queue
+    )
+    return Envelope(trace_id=get_trace_id(), data=AgentTaskOut.model_validate(task))
+
+
+@router.post(
     "/tasks/{task_id}/confirm",
     status_code=202,
     response_model=Envelope[AgentTaskOut],

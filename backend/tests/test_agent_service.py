@@ -31,11 +31,14 @@ class FakeSession:
         if getattr(obj, "id", None) is None:
             obj.id = 71
 
-    def get(self, model, pk):  # noqa: ANN001, ANN201
+    def get(self, model, pk, **kwargs):  # noqa: ANN001, ANN201
         if model is AgentTask and self.task and self.task.id == pk:
             return self.task
         if model is User:
             return self.user
+        return None
+
+    def execute(self, statement):  # noqa: ANN001
         return None
 
 
@@ -190,3 +193,35 @@ def test_list_agent_tasks_scopes_user_and_sort(monkeypatch):
     assert "agent_tasks.task_type =" in sql
     assert "ORDER BY agent_tasks.created_at DESC" in sql
     assert "agent_tasks.id DESC" in sql
+
+
+def test_retry_resets_failed_task(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        agent_service.task_service, "create_task", lambda *a, **k: captured.update(k)
+    )
+    task = _task("failed")
+    task.state_json = {"step_count": 11}
+    task.result_json = {"artifacts": {}}
+    task.error = "old"
+    task.steps_count = 11
+    task.token_cost = 5
+    session = FakeSession(task)
+    agent_service.retry_agent_task(
+        session, task_id=71, viewer=_owner(), queue=FakeQueue()
+    )
+    assert task.status == "pending"
+    assert task.state_json is None and task.result_json is None
+    assert task.error is None
+    assert task.steps_count == 0 and task.token_cost == 0
+    assert captured["payload"] == {"agent_task_id": 71}
+
+
+def test_retry_non_failed_conflict():
+    with pytest.raises(ConflictError):
+        agent_service.retry_agent_task(
+            FakeSession(_task("succeeded")),
+            task_id=71,
+            viewer=_owner(),
+            queue=FakeQueue(),
+        )

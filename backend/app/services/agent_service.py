@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ai.agents.constants import TASK_RUN_AGENT
@@ -259,6 +259,52 @@ def _partial_result(state: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def retry_agent_task(
+    session: Session,
+    *,
+    task_id: int,
+    viewer: User,
+    queue: TaskQueue,
+) -> AgentTask:
+    """失败任务重跑：清空旧步骤与状态，从头入队（S6-6）。"""
+    task = session.get(AgentTask, task_id, with_for_update=True)
+    if task is None:
+        raise NotFoundError("任务不存在")
+    if task.user_id != viewer.id:
+        raise ForbiddenError("无权访问该任务")
+    if task.status != STATUS_FAILED:
+        raise ConflictError("只有失败任务可以重跑")
+    previous_error = task.error
+    session.execute(delete(AgentStep).where(AgentStep.task_id == task.id))
+    task.state_json = None
+    task.result_json = None
+    task.error = None
+    task.steps_count = 0
+    task.token_cost = 0
+    task.started_at = None
+    task.finished_at = None
+    task.status = "pending"
+    session.commit()
+    logger.info(
+        "agent_task_retry task_id=%s previous_error=%s", task.id, previous_error
+    )
+    try:
+        task_service.create_task(
+            session,
+            owner=viewer,
+            name=TASK_RUN_AGENT,
+            payload={"agent_task_id": task.id},
+            queue=queue,
+        )
+    except Exception:
+        task.status = STATUS_FAILED
+        task.error = "任务入队失败"
+        task.finished_at = _now()
+        session.commit()
+        raise
+    return task
+
+
 def _mark_failed(
     session: Session,
     task: AgentTask,
@@ -361,6 +407,7 @@ __all__ = [
     "create_agent_task",
     "get_agent_task",
     "list_agent_tasks",
+    "retry_agent_task",
     "confirm_agent_task",
     "run_agent_task",
 ]

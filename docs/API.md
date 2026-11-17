@@ -1151,6 +1151,16 @@
   - `weekly_mindmap` 空窗口：`note_count=0`、`mermaid=""`，前端显示固定空态；LLM 聚类失败时 `degraded=true`，导图按知识点降级。
 - 错误：404/40400、403/40300
 
+### POST /api/v1/agent/tasks/{id}/retry（S6-6）
+- 权限：student（仅本人；他人 403/40300，不存在 404/40400）
+- 类型：异步（**202**；清空旧步骤并重新入 ARQ）
+- 前置：任务状态必须为 `failed`，否则 409/40900「只有失败任务可以重跑」
+- 入参：无
+- 行为：删除该任务全部 `agent_steps`，重置 `state_json/result_json/error/steps_count/token_cost/started_at/finished_at`，`status=pending` 后重新入队；并发/重复重跑只有第一次 202，其余 409
+- 出参：`Envelope[AgentTaskOut]`（status=pending）
+- 错误：404/40400、403/40300、409/40900、500/50000（入队失败时任务置 failed）
+- 注意：重跑**不保留上一次步骤日志**（从头写 1..N），需要历史时另做 attempt 维度/归档
+
 ### POST /api/v1/agent/tasks/{id}/confirm
 - 权限：student（仅本人）
 - 类型：异步（**202**；写确认决策并重新入 ARQ）

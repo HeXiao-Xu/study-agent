@@ -275,7 +275,7 @@ git commit -m "feat(s6-6): 工具参数校验不执行与写操作 allow_write �
 - Produces: `retry_agent_task(session, *, task_id, viewer, queue) -> AgentTask`
 - Produces: `POST /api/v1/agent/tasks/{id}/retry`（202）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """S6-6 失败任务重跑：202/403/404/409。"""
@@ -387,12 +387,12 @@ def test_retry_non_failed_conflict():
 
 > FakeSession.get 需接受 `with_for_update` 关键字；当前实现签名可改为 `def get(self, model, pk, **kwargs)`。`session.execute(delete...)` 需 fake 实现返回 None。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_retry_api.py -q`
 Expected: FAIL（404）
 
-- [ ] **Step 3: 实现 service/API**
+- [x] **Step 3: 实现 service/API**
 
 - service：
   ```python
@@ -428,12 +428,12 @@ Expected: FAIL（404）
 - API：`@router.post("/tasks/{task_id}/retry", status_code=202, response_model=Envelope[AgentTaskOut])`，student，调用 service。
 - API.md 补契约（仅 failed；清空旧步骤；202；409）。
 
-- [ ] **Step 4: 跑测试**
+- [x] **Step 4: 跑测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_retry_api.py tests/test_agent_service.py tests/test_agent_list_api.py -q`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/agent_service.py backend/app/api/v1/agent.py \
