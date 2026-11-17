@@ -3,7 +3,7 @@
 > 任务卡：`docs/AI协作开发实施计划.md` §S6-2。产出 `ai/agents/graph.py`、`agent_tasks`/`agent_steps` 表、`api/v1/agent.py`。
 > 方案依据：`docs/个性化学习智能体-毕业设计完整方案.md` §6.7（State / 节点 / 条件路由 / 最大步数 12 / 步骤日志）。
 > 前置：S6-1 的 11 个工具与 `invoke_tool` 已交付（D-065）。
-> 状态：**待用户确认**（2026-11-17）。确认后按本 spec 写 `docs/plan/s6-2-agent-engine.md`，plan 确认后才写码。
+> 状态：**已确认**（2026-11-17）。实现按 `docs/plan/s6-2-agent-engine.md` 执行。
 > 范围：状态机引擎 + 步骤/状态持久化 + 三个 Agent API + demo 任务类型 + 挂起/恢复。**不写** weekly_mindmap / mistake_paper 的真实编排（S6-3/S6-4）。
 
 ## 1. 目标与非目标

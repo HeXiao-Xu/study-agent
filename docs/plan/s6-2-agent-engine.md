@@ -910,7 +910,7 @@ git commit -m "feat(s6-2): Agent 任务三个 API"
 - Modify: `AGENTS.md` §9.6
 - Create: `.sdd/s6-2/acceptance-evidence.md`
 
-- [ ] **Step 1: 配置与依赖**
+- [x] **Step 1: 配置与依赖**
 
 - `requirements.txt` 追加 `langgraph==1.2.22`（放在 Agent 段注释下）。
 - `Settings` 加：
@@ -926,11 +926,11 @@ git commit -m "feat(s6-2): Agent 任务三个 API"
   AGENT_TOKEN_BUDGET=20000
   ```
 
-- [ ] **Step 2: 写 `docs/AGENT_ENGINE.md`**
+- [x] **Step 2: 写 `docs/AGENT_ENGINE.md`**
 
 内容：图结构（Mermaid 或文本）、State 字段、六个节点职责、重试/预算/步数口径、`agent_steps` 列与状态、demo 输入示例、三个 API curl 示例、挂起/恢复时序、已知边界（token 统计、崩溃重跑、edits 不执行）。
 
-- [ ] **Step 3: 追加 D-066、更新 PROGRESS/AGENTS**
+- [x] **Step 3: 追加 D-066、更新 PROGRESS/AGENTS**
 
 - D-066：记录 LangGraph 版本与依赖、demo 范围、`state_json`/`created_at` 增列、步数/预算/重试口径、ARQ 异步确认、验收数字与边界。
 - PROGRESS：阶段 6 加 S6-2 完成、任务清单 `[x]`、下一步 S6-3、验收数字。
@@ -939,12 +939,12 @@ git commit -m "feat(s6-2): Agent 任务三个 API"
   - Agent 状态机样例：backend/app/ai/agents/{state,engine}.py + tasks/demo.py + services/agent_service.py + tasks/agent_run.py + api/v1/agent.py（LangGraph StateGraph 六节点；每节点写 agent_steps + state_json；挂起/确认恢复；见 D-066）
   ```
 
-- [ ] **Step 4: 全量测试**
+- [x] **Step 4: 全量测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest -q`
 Expected: 全绿；记录精确数字（S6-1 基线 1514 passed, 5 warnings）。
 
-- [ ] **Step 5: 真实 ARQ 验收**
+- [x] **Step 5: 真实 ARQ 验收**
 
 1) `cd backend && ../.venv/Scripts/python.exe -m alembic upgrade head`
 2) 启动 Redis（若未启动）、ARQ worker：
@@ -963,11 +963,11 @@ Expected: 全绿；记录精确数字（S6-1 基线 1514 passed, 5 warnings）�
    - 越权 GET/confirm 403、非 waiting_confirm 409、未知类型 422。
 5) 记录每步耗时、tok（demo 为 0）、失败与修复。
 
-- [ ] **Step 6: 写验收证据**
+- [x] **Step 6: 写验收证据**
 
 `.sdd/s6-2/acceptance-evidence.md`：pytest 数字、迁移 head、真实 HTTP 请求/响应摘要、步骤行数、挂起/恢复时序、未做项。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/requirements.txt backend/app/core/config.py .env.example docs AGENTS.md

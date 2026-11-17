@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     review_timezone: str = "Asia/Shanghai"
     review_daily_minutes: int = Field(default=35, ge=10, le=120)
 
+    # --- Agent 状态机（S6-2）---
+    agent_max_steps: int = Field(default=12, ge=1, le=50)
+    agent_token_budget: int = Field(default=20000, ge=100)
+
     # --- 异步任务（S2-7，ARQ Worker）---
     task_max_tries: int = 3
     task_retry_base_seconds: float = 2.0

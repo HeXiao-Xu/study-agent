@@ -868,3 +868,22 @@
 - 决策 9（测试策略）：每个工具一个测试文件，全部 fake session + monkeypatch service / fake LLM，不连库不发网络；`generate_questions` 断言 `scene="gen"` 与 `max_tokens=3500`；`get_kp_subgraph` 的 BFS 单独纯函数测试；filters 用 PostgreSQL dialect 编译断言 SQL 含新条件且默认 SQL 不变。
 - 验证：后端 `pytest -q` → **1514 passed, 5 warnings**（S5-7 基线 1458 + 56 条新工具/服务/ schema 测试；另修一条把日期写死为 2026-11-14 的周报测试，改为按当天滚动 7 天计算）。`backend/data/agent_tools.json` 11 条 function。真实库逐个调用：`calculator` 2**10=1024；`make_mindmap` 2 节点 mindmap；`list_notes`（user 18）total=4/本页 3；`list_mistakes`（user 50）total=38；`get_mastery` 3 个 kp 的 `M_t` 0.173/0.309/0.186；`get_kp_subgraph` kp117 depth2 → 41 节点/96 边；`search_questions` kp117 默认排除 14 天为 0 条（关闭排除后 4 条，其中已验证题排前）；`create_review_plan` 3 项/18 分钟/首日 2026-11-18；`export_paper_pdf` 试卷 13（8 题/51 分）；`search_notes`（user 18）3 命中/677 ms；`generate_questions` 真实 LLM 3 题/attempts=1/21.4 s/1227 tokens/约 0.0021 元。**验收中修掉**：`get_kp_subgraph` 测试的 fake 不接受位置参数、Prompt 示例多写一个 `]`；未发现产品逻辑缺陷。证据见 `.sdd/s6-1/acceptance-evidence.md`。
 - 已知边界：工具无 HTTP 接口（S6-2 才接 API）；`get_kp_subgraph` 全学科 snapshot；`generate_questions` 与变式题共用 `gen` 场景，用量统计无法区分；`export_paper_pdf` 不真正渲染；`create_review_plan` 与 `review_items` 真实清单有口径差；`list_notes` 多标签时先按第一个标签分页再内存过滤（`filtered_total` 可能小于 `total`）；CLI 的日志走 stdout，脚本消费 JSON 需过滤；真实库 user 50 没有笔记，笔记工具用 user 18（test1）验收。
+
+## D-066 Agent 状态机与步骤持久化（S6-2）
+
+- 背景：S6-1 只有 11 个工具，没有编排、没有可回放日志，也不是「Agent」。本卡要交付 LangGraph 状态机、`agent_tasks/agent_steps`、三个 API 与挂起/恢复；真实任务 A/B 仍留 S6-3/S6-4。
+- 决策 1（框架与版本）：用户批准安装 `langgraph==1.2.22`（2026-11-14 当前稳定版，Python ≥3.10；实测带入 langchain-core 1.8.1、langgraph-checkpoint 4.3.2 等传递依赖）。只用 `StateGraph` 组图，不用 LangChain AgentExecutor，也不装 `langgraph-checkpoint-postgres`——挂起快照写自有 `state_json`，不建 LangGraph 自己的 checkpoint 表。
+- 决策 2（任务类型范围）：S6-2 只注册 `demo`（输入即工具计划，1–5 步）；`weekly_mindmap`/`mistake_paper` 在 S6-3/S6-4 实现 `AgentTaskSpec` 后注册。未知类型统一 422/42200「任务类型尚未启用：x」，不伪装成功。
+- 决策 3（图与步数口径）：六节点 `plan→act→observe→(reflect→act)*→confirm→finalize`；**最大步数 12 按 `agent_steps` 行数计**（plan/act/observe/reflect/confirm/finalize 每次执行都算 1 行）。3 步成功 = 8 行；需确认 +1；确认恢复再 +2。demo 限 1–5 步，需确认时建议 ≤4 步（否则加到 12 行会被上限终止）。
+- 决策 4（重试/预算）：单工具失败最多再重试 2 次（共 3 次尝试）；`reflect` 递增 `retry_count`，用尽写 `fatal_error` 并 `finalize` 失败。token 预算默认 20000（`AGENT_TOKEN_BUDGET`），`plan`/`observe` 后检查，超限终止并保留已产出 artifacts；S6-1 工具不回报 token，预算只统计任务定义显式 `ctx.add_tokens` 的量（S6-3/S6-4 必须自行累加）。工具异常统一收敛为「本步失败」，不向 ARQ 抛（避免 runner 重复执行），堆栈只进日志。
+- 决策 5（持久化）：`agent_steps` 每节点一行（`step_no` 唯一、`status ∈ ok/error/waiting_confirm`），`agent_tasks.state_json` 保存完整图状态，两者**同一事务**写入；handler 逐节点 commit（S2-8 之外第二个允许 handler 自行 commit 的场景，且不提交 async_tasks），换取 GET 轮询实时进度。`agent_tasks` 增列 `state_json`/`created_at`（迁移 `0018_s6_2`），没有改动 `agent_steps` 既有列。
+- 决策 6（异步确认）：`POST /agent/tasks` 与 `POST /agent/tasks/{id}/confirm` 都是 **202 + ARQ `agent.run`**；GET 同步轮询。确认任务必须 `waiting_confirm`（否则 409），写 `confirm_decision{approved,comment,edits}` + `resume_from=confirm` 后重新入队；`plan` 节点检测 resume 直接跳过，从 `confirm` 续跑，已完成工具不重跑。拒绝（approved=false）最终 `failed` + `error="用户拒绝确认"`。`edits` 只存不执行，S6-4 消费。
+- 决策 7（崩溃恢复）：`status=running` 且已有 `state_json` 时置 `resume_from=resume`，`plan` 跳过并从 `current_index` 续跑；极端情况下 act 成功但 observe 未提交会重跑一次只读工具（S6-1 工具只读，可接受；写工具由 S6-4 确认节点保护）。
+- 决策 8（API 与权限）：三个接口只允许 student；GET/confirm 仅本人（他人 403/40300，不存在 404/40400）；未知类型/非法输入/未知工具/越界 422；非 waiting_confirm 409。`API.md §10` 由占位改为定稿，S6-2 明确只开放 demo。
+- 决策 9（模块边界）：`ai/agents/engine.py` 不 import service/API，通过 `RunContext(session,user,recorder,tool_invoker,now)` 注入；`services/agent_service.py` 是唯一业务入口；`tasks/agent_run.py` 只做 ARQ handler；`TASK_RUN_AGENT` 常量放 `ai/agents/constants.py` 打破 service↔tasks 循环导入。
+- 验证：后端 `pytest -q` → **1543 passed, 5 warnings**（S6-1 基线 1514 + 29 条 S6-2 测试）。真库 `alembic upgrade head` → `0018_s6_2`，两表 13/9 列与约束齐全。真实 ARQ + uvicorn（8001）：
+  - 3 步 demo（calculator/make_mindmap/list_mistakes）→ 202 → `succeeded`，**8 条 steps**（1 plan + 3×act/observe + finalize），act 行含 tool/input/output/latency（list_mistakes 22 ms），result 有 3 个 artifacts；
+  - 2 步 `require_confirm=true` → `waiting_confirm` 6 条 steps（含中间产物）；confirm approved → 202 → `succeeded` **8 条 steps**，2 个 act 各只执行一次，新增「人工确认通过」「任务完成」两行；
+  - 同类型任务 confirm rejected → `failed` + `error=用户拒绝确认`（6 条 steps）；
+  - 他人 GET 403/40300、重复 confirm 409、未知类型/非法工具 422；DB 实测 3 个任务 / 22 条步骤。
+- 已知边界：token 预算统计不全；并发双执行无行锁/租约；`agent_steps` 无时间戳；任务列表/取消/SSE 未做；`edits` 不执行；崩溃重跑可能重复一次只读工具。
