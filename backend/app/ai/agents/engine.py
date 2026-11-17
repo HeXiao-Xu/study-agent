@@ -253,13 +253,14 @@ class AgentEngine:
         index = int(state.get("current_index") or 0)
         tool = str(plan[index]["tool"]) if index < len(plan) else "unknown"
         if state.get("last_error"):
+            update: dict[str, Any] = {}
             self._record(
                 state,
-                {},
+                update,
                 thought=f"步骤 {index + 1} 失败，准备重试或终止",
                 status="error",
             )
-            return {}
+            return update
         output = state.get("last_output") or {}
         artifacts = dict(state.get("artifacts") or {})
         artifacts[f"step_{index + 1}"] = {

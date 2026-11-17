@@ -103,6 +103,10 @@ def test_tool_failure_retries_twice_then_succeeds():
     assert final["status"] == "succeeded"
     assert [s["status"] for s in recorder.steps].count("error") == 4
     assert any("重试" in (s["thought"] or "") for s in recorder.steps)
+    # 失败路径也必须推进 step_count，否则 agent_steps 会撞唯一键（真机验收发现）
+    assert [s["step_no"] for s in recorder.steps] == list(
+        range(1, len(recorder.steps) + 1)
+    )
 
 
 def test_tool_failure_exhausts_retries():
