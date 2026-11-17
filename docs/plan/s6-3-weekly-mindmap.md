@@ -278,7 +278,7 @@ git commit -m "feat(s6-3): list_notes 补 preview 与知识点"
 - Produces: `ClusterContext(days, notes, subgraphs)`、`ClusterResult/ClusterBranch`、`ClusterError`
 - Produces: `render_cluster_prompt(context) -> str`、`generate_cluster(context, *, llm_client=None, max_retries=2) -> tuple[ClusterResult, int]`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """S6-3 聚类适配器：严格 JSON、引用校验、重试与 token。"""
@@ -345,12 +345,12 @@ def test_generate_cluster_filters_invalid_citations_and_kp():
         wm.generate_cluster(_context(), llm_client=llm)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_weekly_cluster.py -q`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 写 Prompt**
+- [x] **Step 3: 写 Prompt**
 
 `weekly_mindmap_v1.md`：角色（学习总结）、输入变量 `{{ days }}` `{{ notes_json }}` `{{ subgraphs_json }}`、严格 JSON schema（`title/branches/kp_id/title/conclusion/note_ids/children`）、要求：
 - 只用输入笔记与知识点；`note_ids` 必须来自输入；
@@ -358,7 +358,7 @@ Expected: FAIL（模块不存在）
 - 只输出 JSON，不要 Markdown 围栏/解释；
 - 不要编造笔记 id、知识点 id 或数字。
 
-- [ ] **Step 4: 实现聚类适配器**
+- [x] **Step 4: 实现聚类适配器**
 
 - `ClusterBranch`/`ClusterResult` Pydantic（extra=forbid、长度上限、branches 1–8）。
 - `render_cluster_prompt`：Jinja2 StrictUndefined；`notes_json`/`subgraphs_json` 用 `json.dumps(ensure_ascii=False)`。
@@ -380,12 +380,12 @@ Expected: FAIL（模块不存在）
 - `sanitize_branches`：`note_ids` 取交集、去重；`kp_id` 不在候选置 null；`children` 去空截断；分支标题/结论 strip。
 - `get_llm_client` 与 `loads_lenient_json` 在模块级导入，测试可 monkeypatch。
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `cd backend && ../.venv/Scripts/python.exe -m pytest tests/test_agent_weekly_cluster.py tests/test_variant_json_repair.py -q`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/ai/prompts/weekly_mindmap_v1.md backend/app/ai/agents/tasks/weekly_mindmap.py \
