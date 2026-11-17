@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from app.ai.agents.tools import (
     calculator,
+    create_review_plan,
+    export_paper_pdf,
+    generate_questions,
     get_kp_subgraph,
     get_mastery,
     list_mistakes,
@@ -19,7 +22,10 @@ _TOOL_MODULES = (
     list_mistakes,
     get_mastery,
     search_questions,
+    generate_questions,
     make_mindmap,
+    create_review_plan,
+    export_paper_pdf,
     calculator,
 )
 

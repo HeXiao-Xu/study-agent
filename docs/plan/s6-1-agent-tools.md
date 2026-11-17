@@ -900,7 +900,7 @@ git commit -m "feat(s6-1): 六个只读 Agent 工具"
 - Consumes: `ai.gen.variant_generator.GeneratedVariant`（复用严格字段/题型↔选项校验）、`ai.gen.json_repair.loads_lenient_json`、`ai.llm.get_llm_client`
 - Produces: `generate_questions.generate_question_drafts(context, *, llm_client=None, max_retries=2) -> tuple[list[GeneratedVariant], int]`；`generate_questions.generate_questions(ctx, data) -> GenerateQuestionsOut`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """S6-1 generate_questions：严格 JSON、重试、只出草稿。"""
@@ -974,16 +974,16 @@ def test_generate_questions_rejects_bad_option_shape(monkeypatch):
 
 > 实现里 `generate_questions(ctx, data, *, llm_client=None)` 多一个仅测试用的关键字参数；注册表 handler 用 lambda 适配（`lambda ctx, data: generate_questions(ctx, data)`），避免把 `llm_client` 暴露给 S6-2。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && python -m pytest tests/test_agent_tool_generate_questions.py -q`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 写 Prompt `backend/app/ai/prompts/agent_gen_questions_v1.md`**
+- [x] **Step 3: 写 Prompt `backend/app/ai/prompts/agent_gen_questions_v1.md`**
 
 必须包含：角色（高中数学命题）、输入变量 `{{subject_name}}` `{{kp_name}}` `{{difficulty}}` `{{difficulty_label}}` `{{qtype}}` `{{count}}` `{{question_shape}}`；严格 JSON 结构示例；LaTeX 反斜杠双写；`analysis_md` 10–200 字；「不要输出 Markdown 代码围栏/解释/多余字段」；单选/多选必须 ≥2 个唯一 key，填空/解答 `options=null`。
 
-- [ ] **Step 4: 实现适配器与工具**
+- [x] **Step 4: 实现适配器与工具**
 
 关键代码：
 
@@ -1028,12 +1028,12 @@ def generate_question_drafts(context, *, llm_client=None, max_retries=MAX_RETRIE
 
 工具 handler：`session.get(KnowledgePoint)` / `session.get(Subject)`，不存在 → `NotFoundError("知识点不存在")`；`GenerationContext(kp_name, subject_name, difficulty, qtype, count, difficulty_label, question_shape)`；映射 `GeneratedVariant` → 出参（`options` 转 `[{key,text}]`）。
 
-- [ ] **Step 5: 跑测试 + Prompt 渲染边界**
+- [x] **Step 5: 跑测试 + Prompt 渲染边界**
 
 Run: `cd backend && python -m pytest tests/test_agent_tool_generate_questions.py tests/test_variant_generator.py -q`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/ai/prompts/agent_gen_questions_v1.md \
@@ -1057,7 +1057,7 @@ git commit -m "feat(s6-1): generate_questions 工具与命题 Prompt"
 - Consumes: `mastery_service.mastery_details`；`review_service.local_bounds/estimated_minutes/review_priority/review_interval_days/overdue_ratio`；`paper_plan_service.get_paper`
 - Produces: `create_review_plan.create_review_plan(ctx, data) -> ReviewPlanOut`（不写库）；`export_paper_pdf.export_paper_pdf(ctx, data) -> ExportPaperPdfOut`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `test_agent_tool_create_review_plan.py`：
 
@@ -1131,12 +1131,12 @@ def test_export_paper_pdf_not_found(monkeypatch):
         tool.export_paper_pdf(_ctx(), tool.ExportPaperPdfIn(paper_id=404))
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && python -m pytest tests/test_agent_tool_create_review_plan.py tests/test_agent_tool_export_paper_pdf.py -q`
 Expected: FAIL
 
-- [ ] **Step 3: 实现 `create_review_plan.py`**
+- [x] **Step 3: 实现 `create_review_plan.py`**
 
 - `_day_dates(now, days)`：用 `review_service.local_bounds(now, ZoneInfo("Asia/Shanghai"))` 取本地日 → 从「明天」起 `days` 个 `date`。
 - 排序：`assessed` 先按 `mastery_t` 升序，未评估排后按 `kp_id`；`index % days` 分天。
@@ -1144,14 +1144,14 @@ Expected: FAIL
 - `reason`：已评估 → `f"掌握度 {mastery_t:.2f}，建议优先复习"`；未评估 → `"尚未评估，建议先做一次练习"`。
 - `by_day` 汇总；不写库、不 commit。
 
-- [ ] **Step 4: 实现 `export_paper_pdf.py`**
+- [x] **Step 4: 实现 `export_paper_pdf.py`**
 
 - `get_paper = paper_plan_service.get_paper`（测试 monkeypatch 的名字）。
 - `detail = get_paper(ctx.session, user_id=ctx.user.id, paper_id=data.paper_id)`。
 - `filename = f"试卷-{paper_id}-{'题干卷' if variant=='questions' else '答案卷'}.pdf"`；`download_url = f"/api/v1/papers/{paper_id}/export.pdf?variant={variant}"`。
 - 出参 `question_count=len(detail.items)`、`total_score=detail.total_score`、`title=detail.title`。
 
-- [ ] **Step 5: 补齐 registry 为 11 个（方案顺序）**
+- [x] **Step 5: 补齐 registry 为 11 个（方案顺序）**
 
 ```python
 _TOOL_MODULES = (
@@ -1161,12 +1161,12 @@ _TOOL_MODULES = (
 )
 ```
 
-- [ ] **Step 6: 跑测试 + 更新 registry 断言**
+- [x] **Step 6: 跑测试 + 更新 registry 断言**
 
 Run: `cd backend && python -m pytest tests/test_agent_tool_create_review_plan.py tests/test_agent_tool_export_paper_pdf.py tests/test_agent_tools_registry.py -q`
 Expected: PASS（registry 期望 11 个工具，顺序与方案一致）
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/ai/agents/tools backend/tests/test_agent_tool_*.py
@@ -1189,7 +1189,7 @@ git commit -m "feat(s6-1): 复习计划与试卷导出工具，注册表补齐 1
 - Produces: `schema_export.build_export_payload() -> dict`、`schema_export.dumps_payload(payload) -> str`（`ensure_ascii=False, indent=2` + 末尾换行）
 - Produces: `scripts/export_agent_tools.py --out <path>`（默认 `backend/data/agent_tools.json`）；`scripts/agent_tools.py list|schema|call`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 """S6-1 schema 导出：11 条 OpenAI function + 仓库文件不漂移。"""
@@ -1225,12 +1225,12 @@ def test_committed_schema_file_matches_generator():
     assert path.read_text(encoding="utf-8") == dumps_payload(build_export_payload())
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd backend && python -m pytest tests/test_agent_tools_schema_export.py -q`
 Expected: FAIL（模块/文件不存在）
 
-- [ ] **Step 3: 实现 `schema_export.py` 与 `__init__.py`**
+- [x] **Step 3: 实现 `schema_export.py` 与 `__init__.py`**
 
 ```python
 # schema_export.py
@@ -1256,7 +1256,7 @@ def dumps_payload(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 ```
 
-- [ ] **Step 4: 写导出脚本并生成文件**
+- [x] **Step 4: 写导出脚本并生成文件**
 
 ```python
 # scripts/export_agent_tools.py
@@ -1287,14 +1287,14 @@ if __name__ == "__main__":
 Run: `cd backend && python ../scripts/export_agent_tools.py`
 Expected: 打印已写入，生成 `backend/data/agent_tools.json`
 
-- [ ] **Step 5: 写 CLI `scripts/agent_tools.py`**
+- [x] **Step 5: 写 CLI `scripts/agent_tools.py`**
 
 子命令：
 - `list`：打印 `name — description 第一句`；
 - `schema`：打印 `dumps_payload(build_export_payload())`；
 - `call --user-id 50 <tool> '<json>'`：`with new_session() as session:` → `session.get(User, user_id)`（不存在退出 2）→ `ToolContext(session, user)` → `invoke_tool` → `print(out.model_dump_json(indent=2))`；`AppError` 打印 `code/message` 退出 1。
 
-- [ ] **Step 6: 跑 schema 测试 + CLI 冒烟**
+- [x] **Step 6: 跑 schema 测试 + CLI 冒烟**
 
 Run:
 ```bash
@@ -1304,7 +1304,7 @@ python scripts/agent_tools.py call --user-id 50 calculator '{"expression":"1/3"}
 ```
 Expected: 测试 PASS；list 11 行；calculator 输出 `"text": "0.333333333333"`。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add backend/app/ai/agents/tools backend/data/agent_tools.json scripts/export_agent_tools.py \

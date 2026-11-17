@@ -27,7 +27,7 @@ def _ctx() -> ToolContext:
     return ToolContext(session=_FakeSession(), user=_User())  # type: ignore[arg-type]
 
 
-def test_registry_has_eight_tools_after_read_layer():
+def test_registry_has_eleven_tools_in_scheme_order():
     assert TOOL_ORDER == [
         "search_notes",
         "list_notes",
@@ -35,10 +35,14 @@ def test_registry_has_eight_tools_after_read_layer():
         "list_mistakes",
         "get_mastery",
         "search_questions",
+        "generate_questions",
         "make_mindmap",
+        "create_review_plan",
+        "export_paper_pdf",
         "calculator",
     ]
     assert set(TOOLS) == set(TOOL_ORDER)
+    assert all(spec.write is False for spec in TOOLS.values())
 
 
 def test_invoke_unknown_tool_raises_404():
