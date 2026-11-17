@@ -54,7 +54,16 @@
       <p class="suggestion">
         建议：展开下方红色错误步骤，查看工具入参与出参；修复后返回列表重新创建任务。
       </p>
+      <p class="suggestion">重跑会清空旧步骤并从头执行。</p>
       <div class="actions">
+        <el-button
+          type="warning"
+          :loading="retrying"
+          data-testid="retry"
+          @click="retryTask"
+        >
+          重跑任务
+        </el-button>
         <el-button type="primary" @click="newMindmap">重新创建学习导图</el-button>
         <el-button @click="back">返回列表</el-button>
       </div>
@@ -167,7 +176,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { confirmAgentTask, getAgentTask } from '@/api/agent'
+import { confirmAgentTask, getAgentTask, retryAgentTask } from '@/api/agent'
 import {
   asWeeklyMindmapResult,
   type AgentStep,
@@ -186,6 +195,7 @@ const dialogVisible = ref(false)
 const approved = ref(true)
 const comment = ref('')
 const submitting = ref(false)
+const retrying = ref(false)
 const timelineRef = ref<HTMLElement | null>(null)
 let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -286,6 +296,18 @@ async function submitConfirm(): Promise<void> {
     error.value = exc instanceof Error ? exc.message : '确认失败'
   } finally {
     submitting.value = false
+  }
+}
+
+async function retryTask(): Promise<void> {
+  retrying.value = true
+  try {
+    await retryAgentTask(taskId.value)
+    await load()
+  } catch (exc) {
+    error.value = exc instanceof Error ? exc.message : '重跑失败'
+  } finally {
+    retrying.value = false
   }
 }
 

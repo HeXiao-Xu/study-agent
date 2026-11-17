@@ -6,7 +6,13 @@ import type { AgentTaskDetail, AgentTaskPage, AgentTaskSummary } from '@/types/a
 const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock('@/api/http', () => ({ default: http, API_PREFIX: '/api/v1' }))
 
-import { confirmAgentTask, createAgentTask, getAgentTask, listAgentTasks } from './agent'
+import {
+  confirmAgentTask,
+  createAgentTask,
+  getAgentTask,
+  listAgentTasks,
+  retryAgentTask,
+} from './agent'
 
 function envelope<T>(data: T) {
   const body: ApiEnvelope<T> = { code: 0, message: 'ok', trace_id: 't', data }
@@ -59,6 +65,15 @@ describe('agent api', () => {
       approved: true,
       comment: '可以',
     })
+  })
+
+
+  it('retries a failed task', async () => {
+    http.post.mockResolvedValue(
+      envelope<AgentTaskSummary>({ id: 11, status: 'pending' } as AgentTaskSummary),
+    )
+    await retryAgentTask(11)
+    expect(http.post).toHaveBeenCalledWith('/api/v1/agent/tasks/11/retry')
   })
 
   it('gets task detail by id', async () => {

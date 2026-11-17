@@ -7,6 +7,7 @@ import type { AgentStep, AgentTaskDetail } from '@/types/agent'
 const api = vi.hoisted(() => ({
   getAgentTask: vi.fn(),
   confirmAgentTask: vi.fn(),
+  retryAgentTask: vi.fn(),
 }))
 vi.mock('@/api/agent', () => api)
 
@@ -77,6 +78,8 @@ beforeEach(() => {
   api.getAgentTask.mockReset()
   api.getAgentTask.mockResolvedValue(detail())
   api.confirmAgentTask.mockReset()
+  api.retryAgentTask.mockReset()
+  api.retryAgentTask.mockResolvedValue({ id: 5, status: 'pending' })
   api.confirmAgentTask.mockResolvedValue({ id: 5, status: 'pending' })
   push.mockClear()
 })
@@ -161,5 +164,16 @@ describe('TaskDetail', () => {
     await vi.advanceTimersByTimeAsync(3000)
     await flushPromises()
     expect(api.getAgentTask).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers retry on a failed task', async () => {
+    api.getAgentTask.mockResolvedValue(
+      detail({ status: 'failed', error: '工具连续失败', result: null, steps: [] }),
+    )
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-testid="retry"]').trigger('click')
+    await flushPromises()
+    expect(api.retryAgentTask).toHaveBeenCalledWith(5)
   })
 })

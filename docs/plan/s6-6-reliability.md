@@ -456,7 +456,7 @@ git commit -m "feat(s6-6): 失败任务重跑接口（清空旧步骤、幂等�
 - Produces: `retryAgentTask(id): Promise<AgentTaskSummary>`
 - Produces: 失败详情「重跑任务」按钮
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `agent.spec.ts` 补：
 
@@ -483,12 +483,12 @@ it('offers retry on failed tasks', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd web && npm run test:run -- src/api/agent.spec.ts src/views/agent/TaskDetail.spec.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - `api/agent.ts` 加 `retryAgentTask`。
 - `TaskDetail.vue` failed alert 区域加：
@@ -500,13 +500,13 @@ Expected: FAIL
   `retryTask`：`retrying=true`；`await retryAgentTask(taskId)`；`await load()`；catch 写页内 error；finally false。
 - 注释说明重跑会清空旧步骤、从头执行（UI 提示文案「重跑会清空旧步骤并重新执行」）。
 
-- [ ] **Step 4: 跑测试 + 构建**
+- [x] **Step 4: 跑测试 + 构建**
 
 Run: `cd web && npm run test:run -- src/api/agent.spec.ts src/views/agent/TaskDetail.spec.ts`
 Run: `cd web && npm run build`
 Expected: PASS / build 0
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add web/src/api/agent.ts web/src/api/agent.spec.ts web/src/views/agent/TaskDetail.vue \

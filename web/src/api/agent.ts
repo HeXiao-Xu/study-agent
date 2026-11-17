@@ -52,6 +52,13 @@ export async function getAgentTask(id: number): Promise<AgentTaskDetail> {
   return resp.data.data
 }
 
+export async function retryAgentTask(id: number): Promise<AgentTaskSummary> {
+  const resp = await http.post<ApiEnvelope<AgentTaskSummary>>(
+    `${API_PREFIX}/agent/tasks/${id}/retry`,
+  )
+  return resp.data.data
+}
+
 export async function confirmAgentTask(
   id: number,
   decision: AgentConfirmDecision,
