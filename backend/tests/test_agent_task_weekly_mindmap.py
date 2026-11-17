@@ -253,3 +253,9 @@ def test_weekly_accepts_token_budget_but_rejects_too_small():
     assert data["token_budget"] == 100
     with pytest.raises(InvalidParamError):
         WeeklyMindmapTaskSpec.validate_input({"days": 7, "token_budget": 99})
+
+
+def test_weekly_validation_message_is_chinese():
+    with pytest.raises(InvalidParamError) as exc:
+        WeeklyMindmapTaskSpec.validate_input({"days": 0})
+    assert "数值" in str(exc.value)

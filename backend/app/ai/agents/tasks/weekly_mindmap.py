@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.ai.agents.engine import PlanExtension
 from app.ai.gen.json_repair import loads_lenient_json
 from app.ai.llm import LLMClient, LLMMessage, get_llm_client
+from app.ai.agents.tools.base import format_validation_error
 from app.core.exceptions import InvalidParamError
 
 logger = logging.getLogger(__name__)
@@ -180,7 +181,7 @@ class WeeklyMindmapTaskSpec:
         try:
             return WeeklyInput.model_validate(raw).model_dump()
         except ValidationError as exc:
-            message = str(exc.errors()[0].get("msg", "任务输入不合法"))
+            message = format_validation_error(exc)
             raise InvalidParamError(f"任务输入不合法：{message}") from exc
 
     # ------------------------------------------------------------- 规划

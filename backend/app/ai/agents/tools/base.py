@@ -94,6 +94,11 @@ def _first_error(exc: ValidationError) -> str:
     return _INPUT_TYPE_MESSAGES.get(str(error.get("type", "")), "参数格式不正确")
 
 
+def format_validation_error(exc: ValidationError) -> str:
+    """把 Pydantic 校验错误转成简短中文（任务输入/工具入参共用）。"""
+    return _first_error(exc)
+
+
 def invoke_tool(name: str, ctx: ToolContext, payload: dict[str, Any]) -> ToolOutput:
     """按工具名校验入参并调用；S6-2 的 act 节点只依赖本入口。"""
     from app.ai.agents.tools.registry import TOOLS

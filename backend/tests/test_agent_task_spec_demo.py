@@ -48,3 +48,12 @@ def test_demo_validates_task_timeout_seconds():
             {"steps": [{"tool": "calculator", "input": {"expression": "1+1"}}],
              "task_timeout_seconds": 0}
         )
+
+
+def test_demo_validation_message_is_chinese():
+    with pytest.raises(InvalidParamError) as exc:
+        DemoTaskSpec.validate_input(
+            {"steps": [{"tool": "calculator", "input": {"expression": ""}}]}
+        )
+    assert "不能为空" in str(exc.value)
+    assert "String should" not in str(exc.value)

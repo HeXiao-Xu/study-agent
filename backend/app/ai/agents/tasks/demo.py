@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.ai.agents.engine import PlanExtension
 from app.ai.agents.state import AgentState
 from app.ai.agents.tools import TOOLS
+from app.ai.agents.tools.base import format_validation_error
 from app.core.exceptions import InvalidParamError
 
 MAX_STEPS = 5
@@ -47,7 +48,7 @@ class DemoTaskSpec:
         try:
             data = DemoInput.model_validate(raw)
         except ValidationError as exc:
-            message = str(exc.errors()[0].get("msg", "任务输入不合法"))
+            message = format_validation_error(exc)
             raise InvalidParamError(f"任务输入不合法：{message}") from exc
         for step in data.steps:
             spec = TOOLS.get(step.tool)
@@ -56,7 +57,7 @@ class DemoTaskSpec:
             try:
                 spec.input_model.model_validate(step.input)
             except ValidationError as exc:
-                message = str(exc.errors()[0].get("msg", "参数不合法"))
+                message = format_validation_error(exc)
                 raise InvalidParamError(
                     f"工具 {step.tool} 参数不合法：{message}"
                 ) from exc
