@@ -525,14 +525,14 @@ git commit -m "feat(s6-6): 任务详情失败重跑按钮"
 - Modify: `AGENTS.md` §9.6
 - Create: `.sdd/s6-6/acceptance-evidence.md` + 截图
 
-- [ ] **Step 1: 文档**
+- [x] **Step 1: 文档**
 
 - `AGENT_RELIABILITY.md`：失败分类与状态、超时/预算/限步口径、部分结果、重跑语义、写门禁、日志事件表、5 类场景复现命令、已知边界。
 - D-069：任务级超时、重跑清步骤、allow_write、日志、验收数字。
 - PROGRESS：S6-6 完成、下一步 S7-1、tag `m5-agent-done` 本地已打。
 - AGENTS §9.6 追加可靠性锚点。
 
-- [ ] **Step 2: 全量测试**
+- [x] **Step 2: 全量测试**
 
 ```bash
 cd backend && ../.venv/Scripts/python.exe -m pytest -q
@@ -541,7 +541,7 @@ cd ../web && npm run test:run && npm run build
 
 记录数字（S6-5 基线：后端 1569、前端 383/65）。
 
-- [ ] **Step 3: 5 类失败真实验收**
+- [x] **Step 3: 5 类失败真实验收**
 
 启动 worker/uvicorn 后（user 18）：
 
@@ -553,13 +553,13 @@ cd ../web && npm run test:run && npm run build
 6. **重跑**：POST `/agent/tasks/{failed_id}/retry` → 202；轮询再次 failed；步骤从 1 重新开始、数量与修复前一致；pending 时再次 retry → 409；Chrome 点「重跑任务」复现。
 7. 日志检索：`agent_tool_retry`/`agent_task_timeout`/`agent_budget_exhausted`/`agent_task_retry` 至少各 1 条。
 
-- [ ] **Step 4: 前端 Chrome**
+- [x] **Step 4: 前端 Chrome**
 
 - 失败详情点「重跑任务」→ 状态回排队中/生成中 → 轮询到 failed；步骤时间线从头开始；无 console error。
 - 超时/超预算任务详情能看到错误与已有结果（如 weekly 的 artifacts）。
 - 截图 `.sdd/s6-6/*.png`。
 
-- [ ] **Step 5: tag 与提交**
+- [x] **Step 5: tag 与提交**
 
 ```bash
 git tag m5-agent-done

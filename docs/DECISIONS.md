@@ -917,3 +917,16 @@
 - 决策 6（类型收口）：`AgentTaskDetail.result` 从只认 weekly 改为联合类型 `WeeklyMindmapResult | DemoAgentResult | Record<string,unknown> | null`，新增 `asWeeklyMindmapResult` 守卫；S6-3 导图页同步改用守卫，行为不变。
 - 验证：后端 `pytest -q` → **1569 passed, 5 warnings**（S6-3 基线 1564 + 5 条列表/服务测试）；前端 **383 passed / 65 files**，`npm run build` 退出 0。真实 HTTP：user 18 列表 9 个任务；`status=failed`、`task_type=weekly_mindmap` 过滤正确；`page_size=2` 两页 `[7,6]`/`[5,4]` 不重复；teacher 403、非法 status 422。Chrome 1440×900：列表 9 行；任务 5 详情 10 步 + 导图链接；任务 11 失败 11 步、8 个 error 行、错误输出默认展开、建议可见；任务 8 确认通过 → succeeded；慢任务 12 步骤数 `1→3→6` 递增；无横向溢出、console error 0。**验收中抓到并修掉** S6-2 真实缺陷：`observe` 失败分支返回了新的空 dict，`step_count` 未推进，重试时 `agent_steps(task_id, step_no)` 撞唯一键，任务被误判「任务执行失败」；改为返回同一个 update 并补 step_no 连续回归测试。修复前任务 9 失败（3 步）；修复后任务 11 正确跑满 3 次尝试（11 步）并给出重试上限错误。证据见 `.sdd/s6-5/acceptance-evidence.md`。
 - 已知边界：轮询有重复请求；无取消/原地重跑；结果 JSON 截断 4000 字；导航入口替换；确认仅通过/拒绝 + 备注。
+
+## D-069 Agent 可靠性加固（S6-6）
+
+- 背景：S6-2~S6-5 已有重试/预算/限步的骨架，但没有任务级超时、没有重跑入口、写操作只有文档约束；任务卡要求 5 类失败全部优雅处理且有日志。
+- 决策 1（任务级超时）：新增 `AGENT_TASK_TIMEOUT_SECONDS`（默认 600s，`deadline_at` 存 state_json，恢复沿用）；每个节点前检查，超时抛 `AgentTaskTimeoutError`，任务 failed 并保留最后已提交的 artifacts/citations。工具 `TimeoutError` 单独归类为可重试失败（`agent_tool_timeout`）。不做每工具子线程硬超时：现有工具共用请求 Session，跨线程有数据一致性风险；工具自身 HTTP 超时仍由 LLM/Embedding 适配器兜底。
+- 决策 2（部分结果）：service 的 `DbStepRecorder.last_state` 保存最后已提交快照；超时/限步/意外异常时用它写 `result_json`，满足「超出预算/超时终止并返回已有产物」。预算本身由引擎 finalize 保留 artifacts/citations，不变。
+- 决策 3（重跑）：新增 `POST /agent/tasks/{id}/retry`（202）。仅 failed 可重跑；`SELECT ... FOR UPDATE` 串行化；删除该任务全部 `agent_steps`，重置 state/result/error/计数后重新入队。重复/并发重跑第二次 409。旧步骤不保留（需要历史时另加 attempt/归档表，本轮不加表）。
+- 决策 4（写门禁）：`ToolContext.allow_write` 默认 False；`invoke_tool` 对 `ToolSpec.write=True` 且未授权直接 403/40300 且 handler 不执行。当前 11 个工具全只读，行为不变；未来写工具必须确认后显式放行，并仍受 confirm 节点保护。
+- 决策 5（参数校验）：`invoke_tool` 校验失败 handler 必不执行并记 `agent_tool_input_invalid`；demo/weekly 创建期也做工具 schema 校验。顺手修掉创建期英文 Pydantic 文案，统一走 `format_validation_error` 输出中文（如「不能为空」）。
+- 决策 6（日志）：引擎/服务补 `agent_tool_failed`、`agent_tool_timeout`、`agent_tool_retry`、`agent_tool_retry_exhausted`、`agent_budget_exhausted`、`agent_task_timeout`、`agent_step_limit`、`agent_task_retry`、`agent_tool_write_blocked`；只记工具/步骤/错误码，不记正文/Prompt/Key。
+- 决策 7（验收方式）：工具报错/超时/超预算/重跑用真实 ARQ + HTTP；参数非法用真实 422 + handler 不执行单测；LLM 非 JSON 用 fake LLM 单测（无法安全地让真实 LLM 必错）。demo 支持 `task_timeout_seconds`、weekly 支持 `token_budget`，让真实超时/超预算场景可复现。
+- 验证：后端 `pytest -q` → **1582 passed, 5 warnings**（S6-5 基线 1569 + 13 条）；前端 **385 passed / 65 files**，`npm run build` 退出 0。真实 ARQ/HTTP：工具报错 3 次尝试/11 步/40400×3；超时任务 2 步 failed「任务执行超时」；超预算 weekly LLM 2294 token 后 failed、artifacts step_1/2 保留；参数非法 422/42200；重跑 202→第二次 409→步骤 1..11 再次 failed；worker 日志实见 `agent_tool_failed/agent_tool_retry/agent_tool_retry_exhausted/agent_task_timeout/agent_budget_exhausted`，uvicorn 日志实见 `agent_task_retry`。Chrome：超时/超预算详情、失败页「重跑任务」→ 再次 failed（11 步），无横向溢出、console error 0。证据见 `.sdd/s6-6/acceptance-evidence.md`；本地 tag `m5-agent-done`。
+- 已知边界：任务超时不打断当前工具；重跑丢旧步骤历史；token 预算对工具内 LLM 用量是近似；写门禁只覆盖工具层；参数非法在创建期 422，不进 agent_steps。

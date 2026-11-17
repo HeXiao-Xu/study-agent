@@ -165,6 +165,7 @@ eval/{datasets,configs,results}
 - Agent 状态机样例：backend/app/ai/agents/{state,engine,constants}.py + tasks/demo.py + backend/app/services/agent_service.py + tasks/agent_run.py + api/v1/agent.py（LangGraph `StateGraph` 六节点 plan→act→observe→reflect→confirm→finalize；`RunContext` 注入 session/user/recorder/工具调用器；每节点写 `agent_steps` + `agent_tasks.state_json` 同事务；最大步数 12 按步骤行数、工具重试 ≤2、token 预算；`waiting_confirm` 用 state_json 挂起、confirm 202 重新入队恢复；见 D-066）
 - 周导图任务样例：backend/app/ai/agents/tasks/weekly_mindmap.py + ai/prompts/weekly_mindmap_v1.md + web/src/views/agent/WeeklyMindmap.vue + mermaid.ts + exportMindmap.ts（`extend_plan` 动态追加步骤：list_notes → ≤3 个 get_kp_subgraph → LLM 聚类 → make_mindmap；LLM 失败降级为知识点结构树并 `degraded=true`；结果只写 `agent_tasks.result_json`；前端 `mermaid htmlLabels:false` 防 Canvas tainted，SVG→Canvas→PNG；见 D-067）
 - Agent 任务页样例：web/src/views/agent/TaskList.vue + TaskDetail.vue + status.ts + api/agent.ts 的 list/confirm + backend/app/api/v1/agent.py 的 `GET /agent/tasks`（列表 2 s/详情 1 s 轮询、仅 pending/running；步骤时间线用 `<details>` 折叠、error 步红框默认展开；失败只给重新创建；waiting_confirm 弹窗通过/拒绝+备注；导航「Agent 任务」替换「学习导图」入口；见 D-068）
+- Agent 可靠性样例：backend/app/ai/agents/engine.py 的 deadline/`AgentTaskTimeoutError`/预算/限步日志 + services/agent_service.py 的 `retry_agent_task`/部分结果 + api/v1/agent.py 的 `POST /agent/tasks/{id}/retry` + tools/base.py 的 `allow_write` 门禁（任务级超时不打断工具；重跑清空 agent_steps 后从头写；超时/限步用 recorder.last_state 保留产物；见 D-069）
 - 规则：写新代码先照锚点文件的样式；觉得锚点过时 → 先提出来改锚点，再写新码
 
 ## 10. 任务执行协议（功能先 spec 后 plan，再写码）
