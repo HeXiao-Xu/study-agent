@@ -183,7 +183,7 @@ watch(openGroups, (groups) => {
 }
 
 .nav-group-head.has-active {
-  color: var(--app-text);
+  color: var(--app-primary);
   background: var(--app-primary-soft);
   box-shadow: 0 4px 14px rgba(23, 37, 84, 0.42);
 }
@@ -229,7 +229,7 @@ watch(openGroups, (groups) => {
   font-weight: 500;
   background: transparent;
   border-left-color: transparent;
-  box-shadow: 0 1px 4px rgba(47, 73, 184, 0.12);
+  box-shadow: 0 1px 4px rgba(59, 91, 219, 0.30);
 }
 
 .sidebar-foot {
