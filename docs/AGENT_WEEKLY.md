@@ -56,7 +56,7 @@ finalize：summary_md + citations + degraded → agent_tasks.result_json
 
 - 无 taskId：选天数（默认 7）→「生成导图」→ POST → 跳转任务 URL。
 - 有 taskId：1 秒轮询 GET；运行中显示状态与步骤数。
-- 成功：摘要、引用标签、Mermaid SVG；`note_count=0` 显示空态；`degraded` 显示降级提示。
+- 成功：摘要用 `MdPreview` 渲染 Markdown、引用标签、Mermaid SVG；`note_count=0` 显示空态；`degraded` 显示降级提示。
 - Mermaid 渲染失败：显示 `fallback_text` 结构树，不白屏。
 - 「导出 PNG」：SVG → Canvas（2×、白底）→ PNG，文件名 `学习导图-{taskId}-{date}.png`。
 - Mermaid 初始化 `htmlLabels:false`：避免 `foreignObject` 让 Canvas 被标记为 tainted，导致导出失败（验收中实际踩到并修复）。
