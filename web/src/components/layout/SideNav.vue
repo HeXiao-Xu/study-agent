@@ -184,8 +184,7 @@ watch(openGroups, (groups) => {
 
 .nav-group-head.has-active {
   color: var(--app-text);
-  background: var(--app-primary-soft);
-  box-shadow: 0 4px 14px rgba(59, 91, 219, 0.42);
+  background: #dbe4ff;
 }
 
 .chevron {
@@ -227,9 +226,8 @@ watch(openGroups, (groups) => {
 .nav-link.active {
   color: var(--app-text);
   font-weight: 500;
-  background: transparent;
+  background: var(--app-primary-soft);
   border-left-color: transparent;
-  box-shadow: 0 4px 14px rgba(59, 91, 219, 0.42);
 }
 
 .sidebar-foot {
