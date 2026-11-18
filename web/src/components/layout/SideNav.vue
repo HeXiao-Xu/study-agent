@@ -165,9 +165,9 @@ watch(openGroups, (groups) => {
   width: 100%;
   padding: 8px 12px;
   color: var(--app-text-tertiary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   background: none;
   border: none;
   border-radius: var(--app-radius-sm);
@@ -183,7 +183,9 @@ watch(openGroups, (groups) => {
 }
 
 .nav-group-head.has-active {
-  color: var(--app-primary);
+  color: var(--app-text);
+  background: var(--app-primary-soft);
+  box-shadow: 0 2px 8px rgba(23, 92, 211, 0.14);
 }
 
 .chevron {
@@ -225,8 +227,8 @@ watch(openGroups, (groups) => {
 .nav-link.active {
   color: var(--app-primary);
   font-weight: 500;
-  background: var(--app-primary-soft);
-  border-left-color: var(--app-primary);
+  background: transparent;
+  border-left-color: transparent;
 }
 
 .sidebar-foot {
