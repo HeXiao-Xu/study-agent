@@ -73,7 +73,13 @@
               </span>
             </div>
           </template>
-          <pre class="summary" data-testid="summary">{{ result.summary_md }}</pre>
+          <MdPreview
+            class="summary-md"
+            :model-value="result.summary_md"
+            :no-mermaid="true"
+            preview-theme="github"
+            data-testid="summary"
+          />
           <div v-if="result.citations.length" class="citations">
             <span class="citations-label">引用：</span>
             <el-tag
@@ -132,6 +138,7 @@
 
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
+import { MdPreview } from 'md-editor-v3'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -140,6 +147,9 @@ import { asWeeklyMindmapResult, type AgentTaskDetail } from '@/types/agent'
 
 import { downloadSvgAsPng, mindmapFileName } from './exportMindmap'
 import { renderMermaid } from './mermaid'
+
+import 'katex/dist/katex.min.css'
+import 'md-editor-v3/lib/preview.css'
 
 const route = useRoute()
 const router = useRouter()

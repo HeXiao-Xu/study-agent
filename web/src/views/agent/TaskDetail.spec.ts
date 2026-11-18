@@ -3,6 +3,13 @@ import ElementPlus from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentStep, AgentTaskDetail } from '@/types/agent'
+vi.mock('md-editor-v3', () => ({
+  MdPreview: {
+    props: ['modelValue'],
+    template: '<div class="md-preview-mock">{{ modelValue }}</div>',
+  },
+}))
+
 
 const api = vi.hoisted(() => ({
   getAgentTask: vi.fn(),
@@ -99,6 +106,7 @@ describe('TaskDetail', () => {
     expect(wrapper.get('[data-testid="mindmap-link"]').attributes('href')).toBe(
       '/agent/mindmap/5',
     )
+    expect(wrapper.find('.md-preview-mock').exists()).toBe(true)
     expect(wrapper.text()).toContain('复习了定义法')
     expect(wrapper.text()).toContain('笔记 #54')
   })

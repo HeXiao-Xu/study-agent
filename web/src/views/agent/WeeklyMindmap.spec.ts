@@ -3,6 +3,13 @@ import ElementPlus from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentTaskDetail } from '@/types/agent'
+vi.mock('md-editor-v3', () => ({
+  MdPreview: {
+    props: ['modelValue'],
+    template: '<div class="md-preview-mock">{{ modelValue }}</div>',
+  },
+}))
+
 
 const routeState = vi.hoisted(() => ({ params: {} as Record<string, string | undefined> }))
 const replace = vi.hoisted(() => vi.fn(async () => undefined))
@@ -75,6 +82,7 @@ describe('WeeklyMindmap', () => {
     const wrapper = mountPage()
     await flushPromises()
     expect(api.getAgentTask).toHaveBeenCalledWith(4)
+    expect(wrapper.find('.md-preview-mock').exists()).toBe(true)
     expect(wrapper.get('[data-testid="summary"]').text()).toContain('复习了定义法')
     expect(mermaid.renderMermaid).toHaveBeenCalled()
     expect(wrapper.find('[data-testid="mindmap-svg"]').exists()).toBe(true)

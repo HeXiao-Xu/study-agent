@@ -85,7 +85,13 @@
         title="LLM 聚类失败，已按知识点降级为结构树"
         data-testid="degraded"
       />
-      <pre class="summary" data-testid="summary">{{ weekly.summary_md }}</pre>
+      <MdPreview
+        class="summary-md"
+        :model-value="weekly.summary_md"
+        :no-mermaid="true"
+        preview-theme="github"
+        data-testid="summary"
+      />
       <div class="citations">
         <span class="muted">引用：</span>
         <el-tag
@@ -173,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import { MdPreview } from 'md-editor-v3'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -184,6 +191,9 @@ import {
 } from '@/types/agent'
 
 import { statusLabel, statusType } from './status'
+
+import 'katex/dist/katex.min.css'
+import 'md-editor-v3/lib/preview.css'
 
 const route = useRoute()
 const router = useRouter()
