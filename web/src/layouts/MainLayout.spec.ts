@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { useAuthStore } from '@/stores/auth'
+import { NAV_GROUPS } from './nav'
 import type { UserOut } from '@/types/auth'
 import MainLayout from './MainLayout.vue'
 
@@ -28,7 +29,18 @@ const teacher: UserOut = {
 
 const Dummy = { template: '<div class="dummy-page" />' }
 
-async function mountLayout(path = '/notes', role: UserOut['role'] = 'student') {
+async function mountLayout(
+  path = '/notes',
+  role: UserOut['role'] = 'student',
+  options: { openAll?: boolean } = {},
+) {
+  const { openAll = true } = options
+  if (openAll) {
+    localStorage.setItem(
+      'study-agent-nav-open-groups',
+      JSON.stringify(NAV_GROUPS.map((group) => group.name)),
+    )
+  }
   const pinia = createPinia()
   setActivePinia(pinia)
   const router = createRouter({
@@ -90,8 +102,9 @@ describe('MainLayout', () => {
     const { wrapper } = await mountLayout()
     const links = wrapper.findAll('[data-testid="nav-link"]')
     expect(links[0]!.text()).toBe('笔记')
-    expect(links[3]!.text()).toBe('题库')
-    expect(links[4]!.text()).toBe('组卷')
+    expect(links[3]!.text()).toBe('图谱')
+    expect(links[4]!.text()).toBe('题库')
+    expect(links[5]!.text()).toBe('组卷')
     expect(links[0]!.find('.nav-index').exists()).toBe(false)
     expect(links.map((link) => link.text())).not.toContain('01')
   })
@@ -123,4 +136,35 @@ describe('MainLayout', () => {
     expect(wrapper.text()).toContain('测试用户_1')
     expect(wrapper.text()).toContain('学生')
   })
+
+  it('groups navigation and only opens the active group by default', async () => {
+    const { wrapper } = await mountLayout('/notes', 'student', { openAll: false })
+    expect(wrapper.findAll('[data-testid^="nav-group-"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(4)
+    expect(wrapper.text()).toContain('知识空间')
+    expect(wrapper.text()).toContain('测评与考试')
+    expect(wrapper.text()).toContain('复盘与反馈')
+    expect(wrapper.text()).toContain('AI 助手')
+    expect(wrapper.get('[data-testid="nav-group-knowledge"]').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[data-testid="nav-group-assessment"]').attributes('aria-expanded')).toBe('false')
+  })
+
+  it('expands and collapses a group by clicking its title', async () => {
+    const { wrapper } = await mountLayout('/notes', 'student', { openAll: false })
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(4)
+    await wrapper.get('[data-testid="nav-group-assessment"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(8)
+    expect(wrapper.get('[data-testid="nav-group-assessment"]').attributes('aria-expanded')).toBe('true')
+    await wrapper.get('[data-testid="nav-group-assessment"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="nav-link"]')).toHaveLength(4)
+    expect(wrapper.get('[data-testid="nav-group-assessment"]').attributes('aria-expanded')).toBe('false')
+  })
+
+  it('auto-opens the group of the current route', async () => {
+    const { wrapper } = await mountLayout('/qa', 'student', { openAll: false })
+    expect(wrapper.get('[data-testid="nav-group-assistant"]').attributes('aria-expanded')).toBe('true')
+    const active = wrapper.find('[data-testid="nav-link"][aria-current="page"]')
+    expect(active.text()).toContain('智能问答')
+  })
+
 })
