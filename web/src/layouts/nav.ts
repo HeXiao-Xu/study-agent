@@ -14,7 +14,7 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     name: 'knowledge',
-    title: '知识空间',
+    title: '知识中心',
     items: [
       { label: '笔记', name: 'notes', path: '/notes' },
       { label: '文件', name: 'files', path: '/files' },
@@ -24,7 +24,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     name: 'assessment',
-    title: '测评与考试',
+    title: '试题训练',
     items: [
       { label: '题库', name: 'questions', path: '/questions' },
       { label: '组卷', name: 'papers', path: '/papers/generate' },
@@ -34,7 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     name: 'review',
-    title: '复盘与反馈',
+    title: '复习总结',
     items: [
       { label: '错题本', name: 'mistakes', path: '/mistakes' },
       { label: '复习', name: 'review', path: '/review' },
@@ -44,7 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     name: 'assistant',
-    title: 'AI 助手',
+    title: '智能助手',
     items: [
       { label: '智能问答', name: 'qa', path: '/qa' },
       { label: 'Agent 任务', name: 'agent-tasks', path: '/agent/tasks' },

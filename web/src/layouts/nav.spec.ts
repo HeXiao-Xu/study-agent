@@ -14,10 +14,10 @@ describe('NAV_ITEMS', () => {
 
   it('groups every item once, in order', () => {
     expect(NAV_GROUPS.map((group) => group.title)).toEqual([
-      '知识空间',
-      '测评与考试',
-      '复盘与反馈',
-      'AI 助手',
+      '知识中心',
+      '试题训练',
+      '复习总结',
+      '智能助手',
     ])
     expect(NAV_GROUPS.map((group) => group.items.length)).toEqual([4, 4, 4, 2])
     expect(NAV_GROUPS.flatMap((group) => group.items)).toEqual(NAV_ITEMS)
